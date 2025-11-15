@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.84-alpine AS builder
+FROM rust:1.91-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache musl-dev openssl-dev
@@ -23,7 +23,7 @@ COPY clippy.toml rustfmt.toml ./
 RUN cargo build --release
 
 # Runtime stage
-FROM alpine:3.21
+FROM alpine:3.22
 
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates libgcc
