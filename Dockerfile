@@ -2,15 +2,22 @@
 FROM rust:1.83-alpine AS builder
 
 # Install build dependencies
-RUN apk add --no-cache musl-dev
+RUN apk add --no-cache musl-dev openssl-dev
 
 WORKDIR /app
 
 # Copy manifests
 COPY Cargo.toml Cargo.lock ./
 
-# Copy source code
+# Create dummy src to cache dependencies
+RUN mkdir src && \
+    echo "fn main() {}" > src/main.rs && \
+    cargo build --release && \
+    rm -rf src target/release/deps/mikrotik* target/release/mikrotik*
+
+# Copy actual source code
 COPY src ./src
+COPY clippy.toml rustfmt.toml ./
 
 # Build for release
 RUN cargo build --release
@@ -19,7 +26,7 @@ RUN cargo build --release
 FROM alpine:3.21
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates libgcc
 
 # Create non-root user
 RUN addgroup -g 1000 mikrotik && \
