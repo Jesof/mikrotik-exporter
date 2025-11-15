@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mikrotik-exporter-config
+  namespace: monitoring
+data:
+  SERVER_ADDR: "0.0.0.0:9090"

@@ -1,0 +1,13 @@
+target/
+.git/
+.gitignore
+*.md
+LICENSE
+CODE_REVIEW.md
+tests/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store

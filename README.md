@@ -41,6 +41,33 @@ Prometheus exporter для сбора метрик с MikroTik роутеров 
 
 ## Установка
 
+### Docker
+
+```bash
+docker pull ghcr.io/jesof/mikrotik-exporter:latest
+
+docker run -p 9090:9090 \
+  -e ROUTERS_CONFIG='[{"name":"main","address":"192.168.88.1:8728","username":"admin","password":"password"}]' \
+  ghcr.io/jesof/mikrotik-exporter:latest
+```
+
+### Kubernetes
+
+См. [DEPLOYMENT.md](DEPLOYMENT.md) для подробной инструкции по развертыванию в Kubernetes.
+
+Быстрый старт:
+
+```bash
+# Применить все манифесты
+kubectl apply -k k8s/
+
+# Или поэтапно
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/secret.yaml
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+```
+
 ### Из исходников
 
 ```bash
@@ -108,6 +135,30 @@ scrape_configs:
 ```
 
 Если `COLLECTION_INTERVAL_SECONDS` больше чем `scrape_interval`, часть скрапов отдаст те же значения (интервалы можно синхронизировать).
+
+## Grafana Dashboard
+
+Готовый dashboard для Grafana доступен в `grafana/dashboard.json`.
+
+**Импорт:**
+
+1. Откройте Grafana → Dashboards → Import
+2. Загрузите файл `grafana/dashboard.json`
+3. Выберите Prometheus datasource
+4. Нажмите Import
+
+**Dashboard включает:**
+
+- Системная информация роутера (версия, модель)
+- Загрузка CPU и использование памяти
+- Uptime системы
+- Статус сбора метрик
+- Графики трафика по интерфейсам (RX/TX)
+- Графики пакетов (RX/TX)
+- Ошибки на интерфейсах
+- Таблица статусов интерфейсов
+
+См. [DEPLOYMENT.md](DEPLOYMENT.md#импорт-dashboard-в-grafana) для альтернативных способов импорта.
 
 ## Требования к MikroTik
 

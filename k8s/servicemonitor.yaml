@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mikrotik-exporter
+  namespace: monitoring
+  labels:
+    app: mikrotik-exporter
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: mikrotik-exporter
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    scheme: http
