@@ -27,3 +27,42 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/metrics", get(handlers::metrics_handler))
         .with_state(state)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{Config, RouterConfig};
+    use crate::metrics::MetricsRegistry;
+
+    #[test]
+    fn test_create_router() {
+        let config = Config {
+            server_addr: "127.0.0.1:9090".to_string(),
+            routers: vec![RouterConfig {
+                name: "test-router".to_string(),
+                address: "192.168.1.1".to_string(),
+                username: "admin".to_string(),
+                password: "password".to_string(),
+            }],
+            collection_interval_secs: 30,
+        };
+
+        let metrics = MetricsRegistry::new();
+        let app_state = Arc::new(AppState { config, metrics });
+        
+        let _router = create_router(app_state);
+        // If we get here without panicking, the router was created successfully
+    }
+
+    #[test]
+    fn test_app_state_creation() {
+        let config = Config::default();
+        let metrics = MetricsRegistry::new();
+        
+        let state = AppState { config, metrics };
+        
+        assert_eq!(state.config.server_addr, "0.0.0.0:9090");
+        assert_eq!(state.config.collection_interval_secs, 30);
+    }
+}
+

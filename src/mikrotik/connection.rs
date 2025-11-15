@@ -320,3 +320,138 @@ pub(super) fn parse_interfaces(sentences: &[HashMap<String, String>]) -> Vec<Int
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_encode_length_small() {
+        assert_eq!(encode_length(0), vec![0]);
+        assert_eq!(encode_length(1), vec![1]);
+        assert_eq!(encode_length(127), vec![127]);
+    }
+
+    #[test]
+    fn test_encode_length_medium() {
+        assert_eq!(encode_length(128), vec![0x80, 0x80]);
+        assert_eq!(encode_length(256), vec![0x81, 0x00]);
+        assert_eq!(encode_length(0x3FFF), vec![0xBF, 0xFF]);
+    }
+
+    #[test]
+    fn test_encode_length_large() {
+        assert_eq!(encode_length(0x4000), vec![0xC0, 0x40, 0x00]);
+        assert_eq!(encode_length(0x1F_FFFF), vec![0xDF, 0xFF, 0xFF]);
+    }
+
+    #[test]
+    fn test_parse_system_complete() {
+        let mut data = HashMap::new();
+        data.insert("version".to_string(), "7.10".to_string());
+        data.insert("uptime".to_string(), "1w2d3h4m5s".to_string());
+        data.insert("cpu-load".to_string(), "25".to_string());
+        data.insert("free-memory".to_string(), "524288000".to_string());
+        data.insert("total-memory".to_string(), "1073741824".to_string());
+        data.insert("board-name".to_string(), "RB750Gr3".to_string());
+
+        let result = parse_system(&[data]);
+
+        assert_eq!(result.version, "7.10");
+        assert_eq!(result.uptime, "1w2d3h4m5s");
+        assert_eq!(result.cpu_load, 25);
+        assert_eq!(result.free_memory, 524288000);
+        assert_eq!(result.total_memory, 1073741824);
+        assert_eq!(result.board_name, "RB750Gr3");
+    }
+
+    #[test]
+    fn test_parse_system_empty() {
+        let result = parse_system(&[]);
+        assert_eq!(result.version, "unknown");
+        assert_eq!(result.uptime, "0s");
+        assert_eq!(result.cpu_load, 0);
+        assert_eq!(result.board_name, "unknown");
+    }
+
+    #[test]
+    fn test_parse_system_partial() {
+        let mut data = HashMap::new();
+        data.insert("version".to_string(), "7.10".to_string());
+
+        let result = parse_system(&[data]);
+
+        assert_eq!(result.version, "7.10");
+        assert_eq!(result.uptime, "0s");
+        assert_eq!(result.cpu_load, 0);
+    }
+
+    #[test]
+    fn test_parse_interfaces_complete() {
+        let mut iface1 = HashMap::new();
+        iface1.insert("name".to_string(), "ether1".to_string());
+        iface1.insert("rx-byte".to_string(), "1000".to_string());
+        iface1.insert("tx-byte".to_string(), "2000".to_string());
+        iface1.insert("rx-packet".to_string(), "10".to_string());
+        iface1.insert("tx-packet".to_string(), "20".to_string());
+        iface1.insert("rx-error".to_string(), "0".to_string());
+        iface1.insert("tx-error".to_string(), "0".to_string());
+        iface1.insert("running".to_string(), "true".to_string());
+
+        let result = parse_interfaces(&[iface1]);
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].name, "ether1");
+        assert_eq!(result[0].rx_bytes, 1000);
+        assert_eq!(result[0].tx_bytes, 2000);
+        assert!(result[0].running);
+    }
+
+    #[test]
+    fn test_parse_interfaces_multiple() {
+        let mut iface1 = HashMap::new();
+        iface1.insert("name".to_string(), "ether1".to_string());
+        iface1.insert("running".to_string(), "true".to_string());
+
+        let mut iface2 = HashMap::new();
+        iface2.insert("name".to_string(), "ether2".to_string());
+        iface2.insert("running".to_string(), "false".to_string());
+
+        let result = parse_interfaces(&[iface1, iface2]);
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].name, "ether1");
+        assert!(result[0].running);
+        assert_eq!(result[1].name, "ether2");
+        assert!(!result[1].running);
+    }
+
+    #[test]
+    fn test_parse_interfaces_missing_values() {
+        let mut iface = HashMap::new();
+        iface.insert("name".to_string(), "ether1".to_string());
+
+        let result = parse_interfaces(&[iface]);
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].name, "ether1");
+        assert_eq!(result[0].rx_bytes, 0);
+        assert_eq!(result[0].tx_bytes, 0);
+        assert!(!result[0].running);
+    }
+
+    #[test]
+    fn test_parse_interfaces_empty() {
+        let result = parse_interfaces(&[]);
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_interfaces_no_name() {
+        let mut data = HashMap::new();
+        data.insert("rx-byte".to_string(), "1000".to_string());
+
+        let result = parse_interfaces(&[data]);
+        assert_eq!(result.len(), 0);
+    }
+}

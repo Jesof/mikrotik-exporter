@@ -100,3 +100,48 @@ impl MikroTikClient {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mikrotik_client_creation() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: "192.168.1.1:8728".to_string(),
+            username: "admin".to_string(),
+            password: "password".to_string(),
+        };
+        
+        let pool = Arc::new(ConnectionPool::new());
+        let client = MikroTikClient::with_pool(config.clone(), pool);
+        
+        assert_eq!(client.config.name, "test-router");
+        assert_eq!(client.config.address, "192.168.1.1:8728");
+    }
+
+    #[tokio::test]
+    async fn test_collect_metrics_returns_placeholder_on_error() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: "invalid:address".to_string(),
+            username: "admin".to_string(),
+            password: "password".to_string(),
+        };
+        
+        let pool = Arc::new(ConnectionPool::new());
+        let client = MikroTikClient::with_pool(config, pool);
+        
+        // This should fail to connect but return placeholder data
+        let result = client.collect_metrics().await;
+        assert!(result.is_ok());
+        
+        let metrics = result.unwrap();
+        assert_eq!(metrics.router_name, "test-router");
+        assert_eq!(metrics.interfaces.len(), 0);
+        assert_eq!(metrics.system.version, "unknown");
+        assert_eq!(metrics.system.uptime, "0s");
+    }
+}
+

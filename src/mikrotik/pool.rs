@@ -174,18 +174,16 @@ impl ConnectionPool {
     pub(super) async fn record_success(&self, addr: &str, username: &str) {
         let key = format!("{addr}:{username}");
         let mut states = self.connection_states.lock().await;
-        if let Some(state) = states.get_mut(&key) {
-            state.record_success();
-        }
+        let state = states.entry(key).or_insert_with(ConnectionState::new);
+        state.record_success();
     }
 
     /// Record failed operation
     pub(super) async fn record_error(&self, addr: &str, username: &str) {
         let key = format!("{addr}:{username}");
         let mut states = self.connection_states.lock().await;
-        if let Some(state) = states.get_mut(&key) {
-            state.record_error();
-        }
+        let state = states.entry(key).or_insert_with(ConnectionState::new);
+        state.record_error();
     }
 
     /// Get connection state for metrics
@@ -236,5 +234,162 @@ impl ConnectionPool {
             }
             should_keep
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_connection_state_new() {
+        let state = ConnectionState::new();
+        assert_eq!(state.consecutive_errors, 0);
+        assert!(state.last_error_time.is_none());
+        assert!(state.last_success_time.is_none());
+    }
+
+    #[test]
+    fn test_connection_state_record_success() {
+        let mut state = ConnectionState::new();
+        state.consecutive_errors = 5;
+
+        state.record_success();
+
+        assert_eq!(state.consecutive_errors, 0);
+        assert!(state.last_success_time.is_some());
+    }
+
+    #[test]
+    fn test_connection_state_record_error() {
+        let mut state = ConnectionState::new();
+
+        state.record_error();
+        assert_eq!(state.consecutive_errors, 1);
+        assert!(state.last_error_time.is_some());
+
+        state.record_error();
+        assert_eq!(state.consecutive_errors, 2);
+    }
+
+    #[test]
+    fn test_connection_state_backoff_delay() {
+        let mut state = ConnectionState::new();
+
+        // 0 errors -> 2^0 = 1 second
+        assert_eq!(state.backoff_delay(), Duration::from_secs(1));
+
+        // After 1 error -> 2^1 = 2 seconds
+        state.record_error();
+        assert_eq!(state.backoff_delay(), Duration::from_secs(2));
+
+        // After 2 errors -> 2^2 = 4 seconds
+        state.record_error();
+        assert_eq!(state.backoff_delay(), Duration::from_secs(4));
+
+        // After 3 errors -> 2^3 = 8 seconds
+        state.record_error();
+        assert_eq!(state.backoff_delay(), Duration::from_secs(8));
+
+        // After 8 errors -> 2^8 = 256 seconds (max power before capping)
+        for _ in 0..5 {
+            state.record_error();
+        }
+        assert_eq!(state.consecutive_errors, 8);
+        assert_eq!(state.backoff_delay(), Duration::from_secs(256));
+
+        // After 9+ errors -> still 2^8 = 256 due to min(8) in formula
+        state.record_error();
+        assert_eq!(state.consecutive_errors, 9);
+        assert_eq!(state.backoff_delay(), Duration::from_secs(256));
+
+        // Even with many more errors, stays at 256
+        for _ in 0..10 {
+            state.record_error();
+        }
+        assert_eq!(state.backoff_delay(), Duration::from_secs(256));
+    }
+
+    #[test]
+    fn test_connection_state_should_skip_attempt() {
+        let mut state = ConnectionState::new();
+
+        // Less than 3 errors -> should not skip
+        assert!(!state.should_skip_attempt());
+
+        state.record_error();
+        assert!(!state.should_skip_attempt());
+
+        state.record_error();
+        assert!(!state.should_skip_attempt());
+
+        // 3 errors -> should skip (backoff)
+        state.record_error();
+        assert!(state.should_skip_attempt());
+    }
+
+    #[test]
+    fn test_connection_pool_new() {
+        let pool = ConnectionPool::new();
+        assert_eq!(pool.max_idle_time, Duration::from_secs(300));
+    }
+
+    #[test]
+    fn test_connection_pool_default() {
+        let pool = ConnectionPool::default();
+        assert_eq!(pool.max_idle_time, Duration::from_secs(300));
+    }
+
+    #[tokio::test]
+    async fn test_connection_pool_stats_empty() {
+        let pool = ConnectionPool::new();
+        let (total, active) = pool.get_pool_stats().await;
+        assert_eq!(total, 0);
+        assert_eq!(active, 0);
+    }
+
+    #[tokio::test]
+    async fn test_record_success() {
+        let pool = ConnectionPool::new();
+        pool.record_success("192.168.1.1", "admin").await;
+
+        let states = pool.connection_states.lock().await;
+        let key = "192.168.1.1:admin";
+        assert!(states.contains_key(key));
+        assert_eq!(states[key].consecutive_errors, 0);
+    }
+
+    #[tokio::test]
+    async fn test_record_error() {
+        let pool = ConnectionPool::new();
+        pool.record_error("192.168.1.1", "admin").await;
+
+        let states = pool.connection_states.lock().await;
+        let key = "192.168.1.1:admin";
+        assert!(states.contains_key(key));
+        assert_eq!(states[key].consecutive_errors, 1);
+    }
+
+    #[tokio::test]
+    async fn test_get_connection_state() {
+        let pool = ConnectionPool::new();
+        pool.record_error("192.168.1.1", "admin").await;
+        pool.record_error("192.168.1.1", "admin").await;
+
+        let result = pool.get_connection_state("192.168.1.1", "admin").await;
+        assert!(result.is_some());
+
+        let (errors, has_success) = result.unwrap();
+        assert_eq!(errors, 2);
+        assert!(!has_success);
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_empty_pool() {
+        let pool = ConnectionPool::new();
+        pool.cleanup().await;
+
+        let (total, _) = pool.get_pool_stats().await;
+        assert_eq!(total, 0);
     }
 }
