@@ -5,13 +5,7 @@ use axum::{
 };
 use std::sync::Arc;
 
-use crate::config::Config;
-use crate::metrics::MetricsRegistry;
-
-pub struct AppState {
-    pub config: Config,
-    pub metrics: MetricsRegistry,
-}
+use crate::api::AppState;
 
 pub async fn metrics_handler(State(state): State<Arc<AppState>>) -> Response {
     tracing::debug!("/metrics encode cached scrape");

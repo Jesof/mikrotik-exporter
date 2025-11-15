@@ -11,6 +11,9 @@ Prometheus exporter для сбора метрик с MikroTik роутеров 
 - ✅ Health check endpoint
 - ✅ Периодический фоновой сбор метрик с кэшированием
 - ✅ Graceful shutdown (Ctrl+C) для корректного завершения фоновых задач
+- ✅ Модульная архитектура с переиспользуемой библиотекой (`lib.rs`)
+- ✅ Пул соединений с автоматической очисткой и управлением состоянием
+- ✅ Экспоненциальная задержка при повторных подключениях (backoff)
 
 ## Собираемые метрики
 
@@ -197,16 +200,32 @@ set api address=0.0.0.0/0 disabled=no port=8728
 
 ```text
 src/
-├── main.rs              # Точка входа
-├── config/mod.rs        # Конфигурация
+├── lib.rs               # Публичная библиотека крейта
+├── main.rs              # Точка входа приложения
+├── error.rs             # Типы ошибок
+├── collector.rs         # Оркестрация фонового сбора метрик
 ├── api/
-│   ├── mod.rs           # Router setup
+│   ├── mod.rs           # HTTP API setup
+│   ├── state.rs         # Общее состояние приложения (AppState)
 │   └── handlers/
+│       ├── mod.rs
 │       ├── health.rs    # Health check handler
-│       ├── metrics.rs   # Metrics handler
-│       └── mod.rs
-├── mikrotik/mod.rs      # Низкоуровневый RouterOS API клиент (login, print, парсинг)
-└── metrics/mod.rs       # Prometheus metrics registry
+│       └── metrics.rs   # Metrics handler
+├── config/
+│   ├── mod.rs           # Загрузка конфигурации
+│   └── tests.rs         # Тесты конфигурации
+├── metrics/
+│   ├── mod.rs           # Публичные экспорты
+│   ├── labels.rs        # Типы меток для Prometheus
+│   ├── parsers.rs       # Парсеры (uptime и др.)
+│   ├── registry.rs      # Prometheus метрики и реестр
+│   └── tests.rs         # Тесты метрик
+└── mikrotik/
+    ├── mod.rs           # Публичные экспорты
+    ├── types.rs         # Структуры данных (InterfaceStats, SystemResource)
+    ├── connection.rs    # Низкоуровневый RouterOS API (протокол, парсинг)
+    ├── pool.rs          # Пул соединений с управлением состоянием
+    └── client.rs        # Высокоуровневый клиент MikroTikClient
 ```
 
 ### Запуск тестов

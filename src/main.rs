@@ -1,8 +1,4 @@
-mod api;
-mod config;
-mod error;
-mod metrics;
-mod mikrotik;
+use mikrotik_exporter::*;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -10,11 +6,7 @@ use std::sync::Arc;
 use error::Result;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use config::Config;
-use metrics::MetricsRegistry;
-use mikrotik::MikroTikClient;
 use tokio::sync::watch;
-use tokio::task::JoinHandle;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -37,10 +29,10 @@ async fn main() -> Result<()> {
     }
 
     // Создаём реестр метрик
-    let metrics = MetricsRegistry::new();
+    let metrics = metrics::MetricsRegistry::new();
 
     // Создаём состояние приложения
-    let state = Arc::new(api::handlers::AppState {
+    let state = Arc::new(api::AppState {
         config: config.clone(),
         metrics,
     });
@@ -60,7 +52,7 @@ async fn main() -> Result<()> {
     });
 
     // Запускаем периодический сбор метрик в фоне
-    start_collection_loop(shutdown_rx.clone(), state.clone());
+    collector::start_collection_loop(shutdown_rx.clone(), state.clone());
 
     // Создание router
     let app = api::create_router(state);
@@ -94,117 +86,6 @@ async fn main() -> Result<()> {
         })?;
 
     Ok(())
-}
-
-fn start_collection_loop(
-    mut shutdown_rx: watch::Receiver<bool>,
-    state: Arc<api::handlers::AppState>,
-) -> JoinHandle<()> {
-    let interval = state.config.collection_interval_secs;
-    tracing::info!("Starting background collection loop every {}s", interval);
-
-    // Create shared connection pool for all routers
-    let pool = Arc::new(mikrotik::ConnectionPool::new());
-
-    // Start cleanup task for expired connections
-    let cleanup_pool = pool.clone();
-    let mut cleanup_shutdown = shutdown_rx.clone();
-    tokio::spawn(async move {
-        let mut cleanup_ticker = tokio::time::interval(std::time::Duration::from_secs(60));
-        loop {
-            tokio::select! {
-                _ = cleanup_ticker.tick() => {
-                    cleanup_pool.cleanup().await;
-                },
-                _ = cleanup_shutdown.changed() => {
-                    if *cleanup_shutdown.borrow() {
-                        tracing::debug!("Stopping connection pool cleanup");
-                        break;
-                    }
-                }
-            }
-        }
-    });
-
-    tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval));
-        loop {
-            tokio::select! {
-                _ = ticker.tick() => {},
-                _ = shutdown_rx.changed() => {
-                    if *shutdown_rx.borrow() {
-                        tracing::info!("Stopping collection loop");
-                        break;
-                    }
-                }
-            }
-            for router in &state.config.routers {
-                let client = MikroTikClient::with_pool(router.clone(), pool.clone());
-                let metrics_ref = state.metrics.clone();
-                let router_name = router.name.clone();
-                let router_label = metrics::RouterLabels {
-                    router: router_name.clone(),
-                };
-                let pool_ref = pool.clone();
-                let router_config = router.clone();
-                tokio::spawn(async move {
-                    let start = std::time::Instant::now();
-                    match client.collect_metrics().await {
-                        Ok(m) => {
-                            let duration = start.elapsed().as_secs_f64();
-                            metrics_ref.update_metrics(&m).await;
-                            metrics_ref.record_scrape_success(&router_label);
-                            metrics_ref.record_scrape_duration(&router_label, duration);
-
-                            // Update connection error count
-                            if let Some((errors, _)) = pool_ref
-                                .get_connection_state(
-                                    &router_config.address,
-                                    &router_config.username,
-                                )
-                                .await
-                            {
-                                metrics_ref.update_connection_errors(&router_label, errors);
-                            }
-
-                            tracing::debug!(
-                                "Collected metrics for router {} in {:.3}s",
-                                router_name,
-                                duration
-                            );
-                        }
-                        Err(e) => {
-                            let duration = start.elapsed().as_secs_f64();
-                            metrics_ref.record_scrape_error(&router_label);
-                            metrics_ref.record_scrape_duration(&router_label, duration);
-
-                            // Update connection error count
-                            if let Some((errors, _)) = pool_ref
-                                .get_connection_state(
-                                    &router_config.address,
-                                    &router_config.username,
-                                )
-                                .await
-                            {
-                                metrics_ref.update_connection_errors(&router_label, errors);
-                            }
-
-                            tracing::warn!(
-                                "Failed to collect metrics for {} in {:.3}s: {}",
-                                router_name,
-                                duration,
-                                e
-                            );
-                        }
-                    }
-                });
-            }
-
-            // Update pool statistics after all routers processed
-            let (total, active) = pool.get_pool_stats().await;
-            state.metrics.update_pool_stats(total, active);
-        }
-    })
 }
 
 fn setup_tracing() {
