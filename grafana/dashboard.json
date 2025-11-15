@@ -708,7 +708,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_bytes{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "expr": "rate(mikrotik_interface_rx_bytes_total{router=\"$router\",interface=~\"$interface\"}[5m])",
           "legendFormat": "{{interface}} RX",
           "range": true,
           "refId": "A"
@@ -803,7 +803,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_bytes{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "expr": "rate(mikrotik_interface_tx_bytes_total{router=\"$router\",interface=~\"$interface\"}[5m])",
           "legendFormat": "{{interface}} TX",
           "range": true,
           "refId": "A"
@@ -898,7 +898,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_packets{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "expr": "rate(mikrotik_interface_rx_packets_total{router=\"$router\",interface=~\"$interface\"}[5m])",
           "legendFormat": "{{interface}} RX",
           "range": true,
           "refId": "A"
@@ -993,7 +993,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_packets{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "expr": "rate(mikrotik_interface_tx_packets_total{router=\"$router\",interface=~\"$interface\"}[5m])",
           "legendFormat": "{{interface}} TX",
           "range": true,
           "refId": "A"
@@ -1091,7 +1091,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_errors{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "expr": "rate(mikrotik_interface_rx_errors_total{router=\"$router\",interface=~\"$interface\"}[5m])",
           "legendFormat": "{{interface}} RX Errors",
           "range": true,
           "refId": "A"
@@ -1102,7 +1102,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_errors{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "expr": "rate(mikrotik_interface_tx_errors_total{router=\"$router\",interface=~\"$interface\"}[5m])",
           "legendFormat": "{{interface}} TX Errors",
           "range": true,
           "refId": "B"
@@ -1737,7 +1737,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(mikrotik_interface_rx_bytes{router=\"$router\"}, interface)",
+        "definition": "label_values(mikrotik_interface_rx_bytes_total{router=\"$router\"}, interface)",
         "hide": 0,
         "includeAll": true,
         "label": "Interface",
@@ -1746,7 +1746,7 @@
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(mikrotik_interface_rx_bytes{router=\"$router\"}, interface)",
+          "query": "label_values(mikrotik_interface_rx_bytes_total{router=\"$router\"}, interface)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
