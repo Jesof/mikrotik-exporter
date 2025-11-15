@@ -1,19 +1,19 @@
-//! Error types for the application
+//! Error types for MikroTik Exporter application
 
 use thiserror::Error;
 
-/// Application error type
+/// Main application error type
 #[derive(Debug, Error)]
 pub enum AppError {
     /// Configuration error
     #[error("Configuration error: {0}")]
     Config(String),
 
-    /// Network/IO error
+    /// Network or IO error
     #[error("IO error")]
     Io(#[from] std::io::Error),
 
-    /// `RouterOS` API error
+    /// RouterOS API error
     #[error("RouterOS error: {0}")]
     RouterOs(String),
 
@@ -32,5 +32,5 @@ impl From<Box<dyn std::error::Error + Send + Sync>> for AppError {
     }
 }
 
-/// Type alias for `Result` with `AppError`
+/// Convenient alias for Result with application error
 pub type Result<T> = std::result::Result<T, AppError>;

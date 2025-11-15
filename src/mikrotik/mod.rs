@@ -1,14 +1,18 @@
-//! `MikroTik` `RouterOS` API client module
+//! RouterOS API client module for MikroTik
 //!
-//! This module provides functionality to connect to `MikroTik` routers via the `RouterOS` API,
-//! authenticate, and collect system and interface metrics.
+//! Implements connection to MikroTik routers via RouterOS API,
+//! authentication, and collection of system/interface metrics.
 
 mod client;
 mod connection;
 mod pool;
 mod types;
 
-// Re-export public types and functions
+/// Client for MikroTik RouterOS API
 pub use client::MikroTikClient;
+
+/// Connection pool for routers
 pub use pool::ConnectionPool;
+
+/// Types for router metrics and statistics
 pub use types::{InterfaceStats, RouterMetrics, SystemResource};

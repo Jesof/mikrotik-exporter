@@ -1,6 +1,6 @@
-//! Metrics collection orchestration
+//! Metrics collection orchestration module for MikroTik routers
 //!
-//! This module manages the background collection of metrics from MikroTik routers.
+//! Starts background metrics collection, manages connection pool and cleanup.
 
 mod cleanup;
 
@@ -14,8 +14,8 @@ use crate::mikrotik::{ConnectionPool, MikroTikClient};
 
 /// Starts the background metrics collection loop
 ///
-/// This function spawns a task that periodically collects metrics from all configured routers.
-/// It also starts a cleanup task for the connection pool.
+/// Periodically collects metrics from all configured MikroTik routers.
+/// Also starts the connection pool cleanup task.
 pub fn start_collection_loop(
     mut shutdown_rx: watch::Receiver<bool>,
     config: Arc<Config>,

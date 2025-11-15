@@ -1,7 +1,7 @@
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use serde::{Deserialize, Serialize};
 
-/// Структура ответа health check endpoint
+/// Health check endpoint response structure
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HealthResponse {
     pub status: String,
@@ -10,8 +10,8 @@ pub struct HealthResponse {
 
 /// GET /health
 ///
-/// Простой health check endpoint для мониторинга состояния сервиса.
-/// Возвращает статус "ok" и версию приложения.
+/// Simple health check endpoint for monitoring service status.
+/// Returns "ok" status and application version.
 pub async fn health_check() -> impl IntoResponse {
     let response = HealthResponse {
         status: "ok".to_string(),

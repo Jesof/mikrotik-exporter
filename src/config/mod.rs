@@ -1,6 +1,6 @@
-//! Configuration module
+//! Configuration module for MikroTik Exporter application
 //!
-//! Handles loading and parsing application configuration from environment variables.
+//! Loads and parses configuration from environment variables and JSON.
 
 use serde::Deserialize;
 
@@ -20,7 +20,7 @@ pub mod env_vars {
     pub const ROUTERS_CONFIG: &str = "ROUTERS_CONFIG";
 }
 
-/// Конфигурация одного `MikroTik` роутера
+/// Configuration for a single MikroTik router
 #[derive(Debug, Clone, Deserialize)]
 pub struct RouterConfig {
     pub name: String,
@@ -29,7 +29,7 @@ pub struct RouterConfig {
     pub password: String,
 }
 
-/// Конфигурация приложения
+/// Application-wide configuration
 #[derive(Debug, Clone)]
 pub struct Config {
     pub server_addr: String,
@@ -48,20 +48,21 @@ impl Default for Config {
 }
 
 impl Config {
+    /// Loads configuration from environment variables
     pub fn from_env() -> Self {
         dotenvy::dotenv().ok();
 
         let server_addr = std::env::var(env_vars::SERVER_ADDR)
             .unwrap_or_else(|_| defaults::SERVER_ADDR.to_string());
 
-        // Загружаем конфигурацию роутеров из JSON
+        // Load routers configuration from JSON
         let routers = if let Ok(config_json) = std::env::var(env_vars::ROUTERS_CONFIG) {
             serde_json::from_str(&config_json).unwrap_or_else(|e| {
                 tracing::warn!("Failed to parse ROUTERS_CONFIG: {}. Using empty list.", e);
                 vec![]
             })
         } else {
-            // Fallback: используем старые переменные окружения для одного роутера
+            // Fallback: use legacy environment variables for single router
             let address = std::env::var("ROUTEROS_ADDRESS").ok();
             let username = std::env::var("ROUTEROS_USERNAME")
                 .unwrap_or_else(|_| defaults::ROUTEROS_USERNAME.to_string());

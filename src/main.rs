@@ -1,3 +1,13 @@
+//! Main entry point for MikroTik Exporter
+//!
+//! Initializes configuration, logging, metrics collection, and HTTP API.
+//! - Loads environment variables
+//! - Sets up logging
+//! - Reads router configuration
+//! - Starts background metrics collection
+//! - Waits for shutdown signal
+//! - Runs HTTP server for Prometheus
+
 use mikrotik_exporter::{api, collector, config::Config, error::Result, metrics};
 
 use std::net::SocketAddr;
@@ -8,16 +18,16 @@ use tokio::sync::watch;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Загружаем .env файл
+    // Load .env file
     dotenvy::dotenv().ok();
 
-    // Инициализация логирования
+    // Initialize logging
     setup_tracing();
 
-    // Инициализируем конфигурацию до создания токио рантайма
+    // Initialize configuration before creating Tokio runtime
     let config = Config::from_env();
 
-    // Логируем информацию о конфигурации
+    // Log configuration info
     tracing::info!(
         "Loaded configuration for {} router(s)",
         config.routers.len()
@@ -26,19 +36,19 @@ async fn main() -> Result<()> {
         tracing::info!("  - Router '{}' at {}", router.name, router.address);
     }
 
-    // Создаём реестр метрик
+    // Create metrics registry
     let metrics = metrics::MetricsRegistry::new();
 
-    // Создаём состояние приложения
+    // Create application state
     let state = Arc::new(api::AppState {
         config: config.clone(),
         metrics: metrics.clone(),
     });
 
-    // Канал завершения (graceful shutdown)
+    // Graceful shutdown channel
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
-    // Ожидание Ctrl+C
+    // Wait for Ctrl+C
     tokio::spawn({
         let shutdown_tx = shutdown_tx.clone();
         async move {
@@ -49,10 +59,10 @@ async fn main() -> Result<()> {
         }
     });
 
-    // Запускаем периодический сбор метрик в фоне
+    // Start periodic background metrics collection
     collector::start_collection_loop(shutdown_rx.clone(), Arc::new(config.clone()), metrics);
 
-    // Создание router
+    // Create the router
     let app = api::create_router(state);
 
     let addr: SocketAddr = config.server_addr.parse().map_err(|e| {
@@ -60,7 +70,7 @@ async fn main() -> Result<()> {
         e
     })?;
 
-    // Настройка адреса для прослушивания
+    // Setup address for listening
     let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
         tracing::error!("Failed to bind address: {}", e);
         e
@@ -71,7 +81,7 @@ async fn main() -> Result<()> {
     tracing::info!("  - GET /health  - Health check");
     tracing::info!("  - GET /metrics - Prometheus metrics");
 
-    // Запуск сервера с graceful shutdown
+    // Start server with graceful shutdown
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {
             let _ = shutdown_rx.clone().changed().await;
@@ -87,8 +97,8 @@ async fn main() -> Result<()> {
 }
 
 fn setup_tracing() {
-    // Используем EnvFilter::from_default_env() для правильной обработки RUST_LOG
-    // Если RUST_LOG не установлена, используем "info" по умолчанию
+    // Use EnvFilter::from_default_env() for proper RUST_LOG handling
+    // If RUST_LOG is not set, use "info" by default
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
 
