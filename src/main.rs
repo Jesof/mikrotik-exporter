@@ -145,20 +145,64 @@ fn start_collection_loop(
                 let router_label = metrics::RouterLabels {
                     router: router_name.clone(),
                 };
+                let pool_ref = pool.clone();
+                let router_config = router.clone();
                 tokio::spawn(async move {
+                    let start = std::time::Instant::now();
                     match client.collect_metrics().await {
                         Ok(m) => {
+                            let duration = start.elapsed().as_secs_f64();
                             metrics_ref.update_metrics(&m).await;
                             metrics_ref.record_scrape_success(&router_label);
-                            tracing::debug!("Collected metrics for router {}", router_name);
+                            metrics_ref.record_scrape_duration(&router_label, duration);
+
+                            // Update connection error count
+                            if let Some((errors, _)) = pool_ref
+                                .get_connection_state(
+                                    &router_config.address,
+                                    &router_config.username,
+                                )
+                                .await
+                            {
+                                metrics_ref.update_connection_errors(&router_label, errors);
+                            }
+
+                            tracing::debug!(
+                                "Collected metrics for router {} in {:.3}s",
+                                router_name,
+                                duration
+                            );
                         }
                         Err(e) => {
+                            let duration = start.elapsed().as_secs_f64();
                             metrics_ref.record_scrape_error(&router_label);
-                            tracing::warn!("Failed to collect metrics for {}: {}", router_name, e);
+                            metrics_ref.record_scrape_duration(&router_label, duration);
+
+                            // Update connection error count
+                            if let Some((errors, _)) = pool_ref
+                                .get_connection_state(
+                                    &router_config.address,
+                                    &router_config.username,
+                                )
+                                .await
+                            {
+                                metrics_ref.update_connection_errors(&router_label, errors);
+                            }
+
+                            tracing::warn!(
+                                "Failed to collect metrics for {} in {:.3}s: {}",
+                                router_name,
+                                duration,
+                                e
+                            );
                         }
                     }
                 });
             }
+
+            // Update pool statistics after all routers processed
+            let (total, active) = pool.get_pool_stats().await;
+            state.metrics.update_pool_stats(total, active);
         }
     })
 }

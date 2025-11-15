@@ -53,6 +53,13 @@ pub struct MetricsRegistry {
     // scrape status counters
     scrape_success: Family<RouterLabels, Counter>,
     scrape_errors: Family<RouterLabels, Counter>,
+    // scrape timing metrics
+    scrape_duration_seconds: Family<RouterLabels, Gauge>,
+    scrape_last_success_timestamp_seconds: Family<RouterLabels, Gauge>,
+    connection_consecutive_errors: Family<RouterLabels, Gauge>,
+    // connection pool metrics
+    connection_pool_size: Gauge,
+    connection_pool_active: Gauge,
     // previous snapshot for counters
     prev_iface: Arc<Mutex<std::collections::HashMap<InterfaceLabels, InterfaceSnapshot>>>,
 }
@@ -146,6 +153,36 @@ impl MetricsRegistry {
             "Failed scrape cycles per router",
             scrape_errors.clone(),
         );
+        let scrape_duration_seconds = Family::<RouterLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_scrape_duration_milliseconds",
+            "Duration of last scrape in milliseconds",
+            scrape_duration_seconds.clone(),
+        );
+        let scrape_last_success_timestamp_seconds = Family::<RouterLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_scrape_last_success_timestamp_seconds",
+            "Unix timestamp of last successful scrape",
+            scrape_last_success_timestamp_seconds.clone(),
+        );
+        let connection_consecutive_errors = Family::<RouterLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_connection_consecutive_errors",
+            "Number of consecutive connection errors",
+            connection_consecutive_errors.clone(),
+        );
+        let connection_pool_size = Gauge::default();
+        registry.register(
+            "mikrotik_connection_pool_size",
+            "Total number of connections in pool",
+            connection_pool_size.clone(),
+        );
+        let connection_pool_active = Gauge::default();
+        registry.register(
+            "mikrotik_connection_pool_active",
+            "Number of active connections in pool",
+            connection_pool_active.clone(),
+        );
 
         Self {
             registry: Arc::new(Mutex::new(registry)),
@@ -163,6 +200,11 @@ impl MetricsRegistry {
             system_uptime_seconds,
             scrape_success,
             scrape_errors,
+            scrape_duration_seconds,
+            scrape_last_success_timestamp_seconds,
+            connection_consecutive_errors,
+            connection_pool_size,
+            connection_pool_active,
             prev_iface: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
@@ -259,10 +301,37 @@ impl MetricsRegistry {
 
     pub fn record_scrape_success(&self, labels: &RouterLabels) {
         self.scrape_success.get_or_create(labels).inc();
+        // Record timestamp of successful scrape
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.scrape_last_success_timestamp_seconds
+            .get_or_create(labels)
+            .set(now as i64);
     }
 
     pub fn record_scrape_error(&self, labels: &RouterLabels) {
         self.scrape_errors.get_or_create(labels).inc();
+    }
+
+    pub fn record_scrape_duration(&self, labels: &RouterLabels, duration_secs: f64) {
+        // Store as milliseconds for better precision (will be interpreted as fractional seconds)
+        let millis = (duration_secs * 1000.0).round() as i64;
+        self.scrape_duration_seconds
+            .get_or_create(labels)
+            .set(millis);
+    }
+
+    pub fn update_connection_errors(&self, labels: &RouterLabels, consecutive_errors: u32) {
+        self.connection_consecutive_errors
+            .get_or_create(labels)
+            .set(consecutive_errors as i64);
+    }
+
+    pub fn update_pool_stats(&self, total: usize, active: usize) {
+        self.connection_pool_size.set(total as i64);
+        self.connection_pool_active.set(active as i64);
     }
 }
 
