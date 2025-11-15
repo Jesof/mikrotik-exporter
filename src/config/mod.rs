@@ -7,14 +7,14 @@ use serde::Deserialize;
 #[cfg(test)]
 mod tests;
 
-/// Значения по умолчанию для конфигурации
+/// Default configuration values
 pub mod defaults {
     pub const SERVER_ADDR: &str = "0.0.0.0:9090";
     pub const ROUTEROS_USERNAME: &str = "admin";
     pub const ROUTEROS_PASSWORD: &str = "";
 }
 
-/// Переменные окружения
+/// Environment variable names used by the application
 pub mod env_vars {
     pub const SERVER_ADDR: &str = "SERVER_ADDR";
     pub const ROUTERS_CONFIG: &str = "ROUTERS_CONFIG";

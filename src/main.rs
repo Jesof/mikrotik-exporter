@@ -1,9 +1,7 @@
-use mikrotik_exporter::*;
+use mikrotik_exporter::{api, collector, config::Config, error::Result, metrics};
 
 use std::net::SocketAddr;
 use std::sync::Arc;
-
-use error::Result;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use tokio::sync::watch;
@@ -34,7 +32,7 @@ async fn main() -> Result<()> {
     // Создаём состояние приложения
     let state = Arc::new(api::AppState {
         config: config.clone(),
-        metrics,
+        metrics: metrics.clone(),
     });
 
     // Канал завершения (graceful shutdown)
@@ -52,7 +50,7 @@ async fn main() -> Result<()> {
     });
 
     // Запускаем периодический сбор метрик в фоне
-    collector::start_collection_loop(shutdown_rx.clone(), state.clone());
+    collector::start_collection_loop(shutdown_rx.clone(), Arc::new(config.clone()), metrics);
 
     // Создание router
     let app = api::create_router(state);

@@ -2,12 +2,14 @@
 //!
 //! This module manages the background collection of metrics from MikroTik routers.
 
+mod cleanup;
+
 use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
-use crate::api::AppState;
-use crate::metrics::RouterLabels;
+use crate::config::Config;
+use crate::metrics::{MetricsRegistry, RouterLabels};
 use crate::mikrotik::{ConnectionPool, MikroTikClient};
 
 /// Starts the background metrics collection loop
@@ -16,16 +18,17 @@ use crate::mikrotik::{ConnectionPool, MikroTikClient};
 /// It also starts a cleanup task for the connection pool.
 pub fn start_collection_loop(
     mut shutdown_rx: watch::Receiver<bool>,
-    state: Arc<AppState>,
+    config: Arc<Config>,
+    metrics: MetricsRegistry,
 ) -> JoinHandle<()> {
-    let interval = state.config.collection_interval_secs;
+    let interval = config.collection_interval_secs;
     tracing::info!("Starting background collection loop every {}s", interval);
 
     // Create shared connection pool for all routers
     let pool = Arc::new(ConnectionPool::new());
 
     // Start cleanup task for expired connections
-    start_pool_cleanup_task(pool.clone(), shutdown_rx.clone());
+    cleanup::start_pool_cleanup_task(pool.clone(), shutdown_rx.clone());
 
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval));
@@ -41,9 +44,9 @@ pub fn start_collection_loop(
             }
 
             // Collect metrics from all routers
-            for router in &state.config.routers {
+            for router in &config.routers {
                 let client = MikroTikClient::with_pool(router.clone(), pool.clone());
-                let metrics_ref = state.metrics.clone();
+                let metrics_ref = metrics.clone();
                 let router_name = router.name.clone();
                 let router_label = RouterLabels {
                     router: router_name.clone(),
@@ -106,27 +109,7 @@ pub fn start_collection_loop(
 
             // Update pool statistics after all routers processed
             let (total, active) = pool.get_pool_stats().await;
-            state.metrics.update_pool_stats(total, active);
+            metrics.update_pool_stats(total, active);
         }
     })
-}
-
-/// Starts a background task to clean up expired connections
-fn start_pool_cleanup_task(pool: Arc<ConnectionPool>, mut shutdown_rx: watch::Receiver<bool>) {
-    tokio::spawn(async move {
-        let mut cleanup_ticker = tokio::time::interval(std::time::Duration::from_secs(60));
-        loop {
-            tokio::select! {
-                _ = cleanup_ticker.tick() => {
-                    pool.cleanup().await;
-                },
-                _ = shutdown_rx.changed() => {
-                    if *shutdown_rx.borrow() {
-                        tracing::debug!("Stopping connection pool cleanup");
-                        break;
-                    }
-                }
-            }
-        }
-    });
 }

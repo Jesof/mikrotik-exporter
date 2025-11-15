@@ -2,8 +2,8 @@
 
 #[cfg(test)]
 mod test {
-    use crate::metrics::parsers::parse_uptime_to_seconds;
     use crate::metrics::labels::{InterfaceLabels, RouterLabels};
+    use crate::metrics::parsers::parse_uptime_to_seconds;
 
     #[test]
     fn test_parse_uptime_hhmmss() {

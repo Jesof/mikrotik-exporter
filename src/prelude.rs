@@ -1,0 +1,18 @@
+//! Prelude module for convenient imports
+//!
+//! This module re-exports commonly used types and traits for convenient use.
+//! Users of the library can import everything they need with:
+//!
+//! ```rust
+//! use mikrotik_exporter::prelude::*;
+//! ```
+
+// Core types
+pub use crate::config::{Config, RouterConfig};
+pub use crate::error::{AppError, Result};
+
+// Metrics types
+pub use crate::metrics::{InterfaceLabels, MetricsRegistry, RouterLabels, SystemInfoLabels};
+
+// MikroTik client
+pub use crate::mikrotik::{InterfaceStats, MikroTikClient, RouterMetrics, SystemResource};

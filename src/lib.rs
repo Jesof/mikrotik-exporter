@@ -9,6 +9,7 @@ pub mod config;
 pub mod error;
 pub mod metrics;
 pub mod mikrotik;
+pub mod prelude;
 
 // Re-export commonly used types
 pub use config::Config;

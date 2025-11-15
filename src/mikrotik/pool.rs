@@ -83,6 +83,9 @@ impl ConnectionPool {
     }
 
     /// Get or create a connection from the pool
+    ///
+    /// This method is internal (pub(super)) to the mikrotik module.
+    /// It implements connection pooling with exponential backoff for failed connections.
     pub(super) async fn get_connection(
         &self,
         addr: &str,

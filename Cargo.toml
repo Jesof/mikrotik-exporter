@@ -47,15 +47,18 @@ tracing-subscriber = { version = "0.3.20", features = [
     "time",
 ] }
 
+# Error handling
+thiserror = "2.0"
+
 # Environment variables
 dotenvy = "0.15.7"
 
 # Cryptography for RouterOS API
-md5 = "0.7"
+md5 = "0.8.0"
 hex = "0.4"
 
 # Prometheus metrics
-prometheus-client = "0.22.3"
+prometheus-client = "0.24.0"
 
 # Async utilities (minimal features to reduce compile time)
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
