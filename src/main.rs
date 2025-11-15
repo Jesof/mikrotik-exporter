@@ -102,6 +102,30 @@ fn start_collection_loop(
 ) -> JoinHandle<()> {
     let interval = state.config.collection_interval_secs;
     tracing::info!("Starting background collection loop every {}s", interval);
+
+    // Create shared connection pool for all routers
+    let pool = Arc::new(mikrotik::ConnectionPool::new());
+
+    // Start cleanup task for expired connections
+    let cleanup_pool = pool.clone();
+    let mut cleanup_shutdown = shutdown_rx.clone();
+    tokio::spawn(async move {
+        let mut cleanup_ticker = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            tokio::select! {
+                _ = cleanup_ticker.tick() => {
+                    cleanup_pool.cleanup().await;
+                },
+                _ = cleanup_shutdown.changed() => {
+                    if *cleanup_shutdown.borrow() {
+                        tracing::debug!("Stopping connection pool cleanup");
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval));
         loop {
@@ -115,7 +139,7 @@ fn start_collection_loop(
                 }
             }
             for router in &state.config.routers {
-                let client = MikroTikClient::new(router.clone());
+                let client = MikroTikClient::with_pool(router.clone(), pool.clone());
                 let metrics_ref = state.metrics.clone();
                 let router_name = router.name.clone();
                 let router_label = metrics::RouterLabels {

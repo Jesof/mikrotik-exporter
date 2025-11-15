@@ -6,10 +6,97 @@
 use crate::config::RouterConfig;
 use md5::compute as md5_compute;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+use tokio::sync::Mutex;
 use tokio::time::timeout;
+
+/// Connection pool for reusing RouterOS connections
+pub struct ConnectionPool {
+    connections: Arc<Mutex<HashMap<String, PooledConnection>>>,
+    max_idle_time: Duration,
+}
+
+struct PooledConnection {
+    connection: RouterOsConnection,
+    last_used: tokio::time::Instant,
+    in_use: bool,
+}
+
+impl ConnectionPool {
+    pub fn new() -> Self {
+        Self {
+            connections: Arc::new(Mutex::new(HashMap::new())),
+            max_idle_time: Duration::from_secs(300), // 5 minutes
+        }
+    }
+
+    /// Get or create a connection from the pool
+    async fn get_connection(
+        &self,
+        addr: &str,
+        username: &str,
+        password: &str,
+    ) -> Result<RouterOsConnection, Box<dyn std::error::Error + Send + Sync>> {
+        let key = format!("{}:{}", addr, username);
+
+        // Check if we have an available connection
+        {
+            let mut pool = self.connections.lock().await;
+            if let Some(pooled) = pool.get_mut(&key) {
+                if !pooled.in_use && pooled.last_used.elapsed() < self.max_idle_time {
+                    tracing::debug!("Reusing connection from pool for {}", addr);
+                    pooled.in_use = true;
+                    pooled.last_used = tokio::time::Instant::now();
+
+                    // Move connection out of pool temporarily
+                    let conn = pool.remove(&key).unwrap().connection;
+                    return Ok(conn);
+                } else if pooled.last_used.elapsed() >= self.max_idle_time {
+                    tracing::debug!("Connection expired for {}, removing", addr);
+                    pool.remove(&key);
+                }
+            }
+        }
+
+        // Create new connection
+        tracing::debug!("Creating new connection for {}", addr);
+        let mut conn = RouterOsConnection::connect(addr).await?;
+        conn.login(username, password).await?;
+
+        Ok(conn)
+    }
+
+    /// Release a connection back to the pool
+    async fn release_connection(&self, addr: &str, username: &str, conn: RouterOsConnection) {
+        let key = format!("{}:{}", addr, username);
+        let mut pool = self.connections.lock().await;
+
+        tracing::debug!("Returning connection to pool for {}", addr);
+        pool.insert(
+            key,
+            PooledConnection {
+                connection: conn,
+                last_used: tokio::time::Instant::now(),
+                in_use: false,
+            },
+        );
+    }
+
+    /// Clean up expired connections
+    pub async fn cleanup(&self) {
+        let mut pool = self.connections.lock().await;
+        pool.retain(|key, pooled| {
+            let should_keep = pooled.last_used.elapsed() < self.max_idle_time;
+            if !should_keep {
+                tracing::debug!("Cleaning up expired connection: {}", key);
+            }
+            should_keep
+        });
+    }
+}
 
 /// Statistics for a network interface
 #[derive(Debug, Clone)]
@@ -49,13 +136,14 @@ pub struct RouterMetrics {
 /// and collect system and interface metrics.
 pub struct MikroTikClient {
     config: RouterConfig,
+    pool: Arc<ConnectionPool>,
 }
 
 impl MikroTikClient {
-    /// Creates a new MikroTik client with the given configuration
+    /// Creates a new MikroTik client with a shared connection pool
     #[must_use]
-    pub fn new(config: RouterConfig) -> Self {
-        Self { config }
+    pub fn with_pool(config: RouterConfig, pool: Arc<ConnectionPool>) -> Self {
+        Self { config, pool }
     }
 
     /// Collects metrics from the router
@@ -92,12 +180,26 @@ impl MikroTikClient {
     async fn collect_real(
         &self,
     ) -> Result<RouterMetrics, Box<dyn std::error::Error + Send + Sync>> {
-        let mut conn = RouterOsConnection::connect(&self.config.address).await?;
-        conn.login(&self.config.username, &self.config.password)
+        // Get connection from pool
+        let mut conn = self
+            .pool
+            .get_connection(
+                &self.config.address,
+                &self.config.username,
+                &self.config.password,
+            )
             .await?;
 
-        let system_sentences = conn.command("/system/resource/print", &[]).await?;
-        let interfaces_sentences = conn.command("/interface/print", &[]).await?;
+        let system_result = conn.command("/system/resource/print", &[]).await;
+        let interfaces_result = conn.command("/interface/print", &[]).await;
+
+        // Always return connection to pool
+        self.pool
+            .release_connection(&self.config.address, &self.config.username, conn)
+            .await;
+
+        let system_sentences = system_result?;
+        let interfaces_sentences = interfaces_result?;
 
         let system = parse_system(&system_sentences);
         let interfaces = parse_interfaces(&interfaces_sentences);
