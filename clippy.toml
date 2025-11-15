@@ -1,0 +1,19 @@
+# Clippy configuration for best practices 2025
+
+# Lint levels - be strict
+msrv = "1.83.0"
+
+# Deny common issues
+warn-on-all-wildcard-imports = true
+
+# Cognitive complexity threshold
+cognitive-complexity-threshold = 15
+
+# Documentation requirements
+missing-docs-in-crate-items = false
+
+# Type complexity
+type-complexity-threshold = 250
+
+# Performance
+too-many-lines-threshold = 200

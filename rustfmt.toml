@@ -1,0 +1,22 @@
+# Rustfmt configuration for best practices 2025
+edition = "2024"
+
+# Line width and wrapping
+max_width = 100
+hard_tabs = false
+tab_spaces = 4
+
+# Imports
+reorder_imports = true
+
+# Code style
+use_field_init_shorthand = true
+use_try_shorthand = true
+force_explicit_abi = true
+
+# Formatting
+newline_style = "Unix"
+remove_nested_parens = true
+
+# Chains
+chain_width = 60
