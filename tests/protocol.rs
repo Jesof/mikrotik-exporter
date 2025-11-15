@@ -1,18 +1,19 @@
 // Тест кодирования длины по правилам RouterOS API (локальная копия логики)
 #[test]
 fn test_encode_length() {
+    #[allow(clippy::cast_possible_truncation, clippy::unreadable_literal)]
     fn encode_length(len: usize) -> Vec<u8> {
         if len < 0x80 {
             vec![len as u8]
         } else if len < 0x4000 {
             vec![((len >> 8) as u8) | 0x80, (len & 0xFF) as u8]
-        } else if len < 0x200000 {
+        } else if len < 0x0020_0000 {
             vec![
                 ((len >> 16) as u8) | 0xC0,
                 ((len >> 8) & 0xFF) as u8,
                 (len & 0xFF) as u8,
             ]
-        } else if len < 0x10000000 {
+        } else if len < 0x1000_0000 {
             vec![
                 ((len >> 24) as u8) | 0xE0,
                 ((len >> 16) & 0xFF) as u8,

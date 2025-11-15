@@ -10,7 +10,7 @@ pub enum AppError {
     Config(String),
     /// Network/IO error
     Io(std::io::Error),
-    /// RouterOS API error
+    /// `RouterOS` API error
     RouterOs(String),
     /// Metrics encoding error
     Metrics(String),
@@ -21,11 +21,11 @@ pub enum AppError {
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Config(msg) => write!(f, "Configuration error: {}", msg),
-            Self::Io(e) => write!(f, "IO error: {}", e),
-            Self::RouterOs(msg) => write!(f, "RouterOS error: {}", msg),
-            Self::Metrics(msg) => write!(f, "Metrics error: {}", msg),
-            Self::AddrParse(e) => write!(f, "Address parse error: {}", e),
+            Self::Config(msg) => write!(f, "Configuration error: {msg}"),
+            Self::Io(e) => write!(f, "IO error: {e}"),
+            Self::RouterOs(msg) => write!(f, "RouterOS error: {msg}"),
+            Self::Metrics(msg) => write!(f, "Metrics error: {msg}"),
+            Self::AddrParse(e) => write!(f, "Address parse error: {e}"),
         }
     }
 }

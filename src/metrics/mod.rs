@@ -30,7 +30,7 @@ pub struct SystemInfoLabels {
     pub board: String,
 }
 
-/// Snapshot of interface counters (rx_bytes, tx_bytes, rx_packets, tx_packets, rx_errors, tx_errors)
+/// Snapshot of interface counters (`rx_bytes`, `tx_bytes`, `rx_packets`, `tx_packets`, `rx_errors`, `tx_errors`)
 type InterfaceSnapshot = (u64, u64, u64, u64, u64, u64);
 
 #[derive(Clone)]
@@ -65,6 +65,7 @@ pub struct MetricsRegistry {
 }
 
 impl MetricsRegistry {
+    #[allow(clippy::similar_names)] // rx/tx naming pattern is intentional
     pub fn new() -> Self {
         let mut registry = Registry::default();
 
@@ -209,6 +210,7 @@ impl MetricsRegistry {
         }
     }
 
+    #[allow(clippy::similar_names)] // rx/tx naming pattern is intentional and clear
     pub async fn update_metrics(&self, metrics: &RouterMetrics) {
         {
             let mut prev = self.prev_iface.lock().await;
@@ -217,7 +219,7 @@ impl MetricsRegistry {
                     router: metrics.router_name.clone(),
                     interface: iface.name.clone(),
                 };
-                let (prx, ptx, prxp, ptxp, prxe, ptxe) = prev.get(&labels).cloned().unwrap_or((
+                let (prx, ptx, prxp, ptxp, prxe, ptxe) = prev.get(&labels).copied().unwrap_or((
                     iface.rx_bytes,
                     iface.tx_bytes,
                     iface.rx_packets,
@@ -252,7 +254,7 @@ impl MetricsRegistry {
                     .inc_by(dx_tx_errors);
                 self.interface_running
                     .get_or_create(&labels)
-                    .set(if iface.running { 1 } else { 0 });
+                    .set(i64::from(iface.running));
                 prev.insert(
                     labels,
                     (
@@ -270,20 +272,23 @@ impl MetricsRegistry {
         let router_label = RouterLabels {
             router: metrics.router_name.clone(),
         };
-        self.system_cpu_load
-            .get_or_create(&router_label)
-            .set(metrics.system.cpu_load as i64);
-        self.system_free_memory
-            .get_or_create(&router_label)
-            .set(metrics.system.free_memory as i64);
-        self.system_total_memory
-            .get_or_create(&router_label)
-            .set(metrics.system.total_memory as i64);
-        // parse uptime string to seconds
-        let uptime_secs = parse_uptime_to_seconds(&metrics.system.uptime);
-        self.system_uptime_seconds
-            .get_or_create(&router_label)
-            .set(uptime_secs as i64);
+        #[allow(clippy::cast_possible_wrap)]
+        {
+            self.system_cpu_load
+                .get_or_create(&router_label)
+                .set(metrics.system.cpu_load as i64);
+            self.system_free_memory
+                .get_or_create(&router_label)
+                .set(metrics.system.free_memory as i64);
+            self.system_total_memory
+                .get_or_create(&router_label)
+                .set(metrics.system.total_memory as i64);
+            // parse uptime string to seconds
+            let uptime_secs = parse_uptime_to_seconds(&metrics.system.uptime);
+            self.system_uptime_seconds
+                .get_or_create(&router_label)
+                .set(uptime_secs as i64);
+        }
         let info_labels = SystemInfoLabels {
             router: metrics.router_name.clone(),
             version: metrics.system.version.clone(),
@@ -306,6 +311,7 @@ impl MetricsRegistry {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
+        #[allow(clippy::cast_possible_wrap)]
         self.scrape_last_success_timestamp_seconds
             .get_or_create(labels)
             .set(now as i64);
@@ -317,6 +323,7 @@ impl MetricsRegistry {
 
     pub fn record_scrape_duration(&self, labels: &RouterLabels, duration_secs: f64) {
         // Store as milliseconds for better precision (will be interpreted as fractional seconds)
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
         let millis = (duration_secs * 1000.0).round() as i64;
         self.scrape_duration_seconds
             .get_or_create(labels)
@@ -326,12 +333,15 @@ impl MetricsRegistry {
     pub fn update_connection_errors(&self, labels: &RouterLabels, consecutive_errors: u32) {
         self.connection_consecutive_errors
             .get_or_create(labels)
-            .set(consecutive_errors as i64);
+            .set(i64::from(consecutive_errors));
     }
 
     pub fn update_pool_stats(&self, total: usize, active: usize) {
-        self.connection_pool_size.set(total as i64);
-        self.connection_pool_active.set(active as i64);
+        #[allow(clippy::cast_possible_wrap)]
+        {
+            self.connection_pool_size.set(total as i64);
+            self.connection_pool_active.set(active as i64);
+        }
     }
 }
 

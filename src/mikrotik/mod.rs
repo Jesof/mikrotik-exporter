@@ -1,6 +1,6 @@
-//! MikroTik RouterOS API client module
+//! `MikroTik` `RouterOS` API client module
 //!
-//! This module provides functionality to connect to MikroTik routers via the RouterOS API,
+//! This module provides functionality to connect to `MikroTik` routers via the `RouterOS` API,
 //! authenticate, and collect system and interface metrics.
 
 use crate::config::RouterConfig;
@@ -13,7 +13,7 @@ use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 
-/// Connection pool for reusing RouterOS connections
+/// Connection pool for reusing `RouterOS` connections
 pub struct ConnectionPool {
     connections: Arc<Mutex<HashMap<String, PooledConnection>>>,
     connection_states: Arc<Mutex<HashMap<String, ConnectionState>>>,
@@ -89,7 +89,7 @@ impl ConnectionPool {
         username: &str,
         password: &str,
     ) -> Result<RouterOsConnection, Box<dyn std::error::Error + Send + Sync>> {
-        let key = format!("{}:{}", addr, username);
+        let key = format!("{addr}:{username}");
 
         // Check connection state and apply backoff if needed
         {
@@ -169,7 +169,7 @@ impl ConnectionPool {
 
     /// Record successful operation
     async fn record_success(&self, addr: &str, username: &str) {
-        let key = format!("{}:{}", addr, username);
+        let key = format!("{addr}:{username}");
         let mut states = self.connection_states.lock().await;
         if let Some(state) = states.get_mut(&key) {
             state.record_success();
@@ -178,7 +178,7 @@ impl ConnectionPool {
 
     /// Record failed operation
     async fn record_error(&self, addr: &str, username: &str) {
-        let key = format!("{}:{}", addr, username);
+        let key = format!("{addr}:{username}");
         let mut states = self.connection_states.lock().await;
         if let Some(state) = states.get_mut(&key) {
             state.record_error();
@@ -187,7 +187,7 @@ impl ConnectionPool {
 
     /// Get connection state for metrics
     pub async fn get_connection_state(&self, addr: &str, username: &str) -> Option<(u32, bool)> {
-        let key = format!("{}:{}", addr, username);
+        let key = format!("{addr}:{username}");
         let states = self.connection_states.lock().await;
         states
             .get(&key)
@@ -204,7 +204,7 @@ impl ConnectionPool {
 
     /// Release a connection back to the pool
     async fn release_connection(&self, addr: &str, username: &str, conn: RouterOsConnection) {
-        let key = format!("{}:{}", addr, username);
+        let key = format!("{addr}:{username}");
         let mut pool = self.connections.lock().await;
 
         tracing::debug!("Returning connection to pool for {}", addr);
@@ -244,7 +244,7 @@ pub struct InterfaceStats {
     pub running: bool,
 }
 
-/// System resource information from a MikroTik router
+/// System resource information from a `MikroTik` router
 #[derive(Debug, Clone)]
 pub struct SystemResource {
     pub uptime: String,
@@ -263,9 +263,9 @@ pub struct RouterMetrics {
     pub system: SystemResource,
 }
 
-/// MikroTik RouterOS API client
+/// `MikroTik` `RouterOS` API client
 ///
-/// Provides methods to connect to MikroTik routers via RouterOS API
+/// Provides methods to connect to `MikroTik` routers via `RouterOS` API
 /// and collect system and interface metrics.
 pub struct MikroTikClient {
     config: RouterConfig,
@@ -273,7 +273,7 @@ pub struct MikroTikClient {
 }
 
 impl MikroTikClient {
-    /// Creates a new MikroTik client with a shared connection pool
+    /// Creates a new `MikroTik` client with a shared connection pool
     #[must_use]
     pub fn with_pool(config: RouterConfig, pool: Arc<ConnectionPool>) -> Self {
         Self { config, pool }
@@ -390,7 +390,7 @@ impl RouterOsConnection {
                     if s.contains_key("message") {
                         let msg = s.get("message").unwrap();
                         if msg.contains("failure") || msg.contains("invalid") {
-                            return Err(format!("Login failed: {}", msg).into());
+                            return Err(format!("Login failed: {msg}").into());
                         }
                         tracing::debug!("Login message: {}", msg);
                     }
@@ -448,7 +448,7 @@ impl RouterOsConnection {
         let mut words: Vec<String> = Vec::with_capacity(1 + args.len());
         words.push(path.to_string());
         for a in args {
-            words.push(a.to_string());
+            words.push((*a).to_string());
         }
         self.raw_command(words).await
     }
@@ -521,7 +521,7 @@ impl RouterOsConnection {
                     .get("message")
                     .cloned()
                     .unwrap_or_else(|| "trap".to_string());
-                return Err(format!("RouterOS trap: {}", msg).into());
+                return Err(format!("RouterOS trap: {msg}").into());
             }
             if word == "!re" {
                 if let Some(s) = current.take() {
@@ -535,7 +535,6 @@ impl RouterOsConnection {
                 if let Some((k, v)) = stripped.split_once('=') {
                     tgt.insert(k.to_string(), v.to_string());
                 }
-                continue;
             }
             // ignore other headers
         }
@@ -587,18 +586,20 @@ impl RouterOsConnection {
     }
 }
 
+// RouterOS protocol length encoding - intentional truncation is part of the wire format
+#[allow(clippy::cast_possible_truncation)]
 fn encode_length(len: usize) -> Vec<u8> {
     if len < 0x80 {
         vec![len as u8]
     } else if len < 0x4000 {
         vec![((len >> 8) as u8) | 0x80, (len & 0xFF) as u8]
-    } else if len < 0x200000 {
+    } else if len < 0x0020_0000 {
         vec![
             ((len >> 16) as u8) | 0xC0,
             ((len >> 8) & 0xFF) as u8,
             (len & 0xFF) as u8,
         ]
-    } else if len < 0x10000000 {
+    } else if len < 0x1000_0000 {
         vec![
             ((len >> 24) as u8) | 0xE0,
             ((len >> 16) & 0xFF) as u8,
@@ -660,7 +661,7 @@ fn parse_interfaces(sentences: &[HashMap<String, String>]) -> Vec<InterfaceStats
                 tx_packets: s.get("tx-packet").and_then(|v| v.parse().ok()).unwrap_or(0),
                 rx_errors: s.get("rx-error").and_then(|v| v.parse().ok()).unwrap_or(0),
                 tx_errors: s.get("tx-error").and_then(|v| v.parse().ok()).unwrap_or(0),
-                running: s.get("running").map(|v| v == "true").unwrap_or(false),
+                running: s.get("running").is_some_and(|v| v == "true"),
             });
         }
     }

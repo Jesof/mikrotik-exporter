@@ -20,7 +20,7 @@ pub mod env_vars {
     pub const ROUTERS_CONFIG: &str = "ROUTERS_CONFIG";
 }
 
-/// Конфигурация одного MikroTik роутера
+/// Конфигурация одного `MikroTik` роутера
 #[derive(Debug, Clone, Deserialize)]
 pub struct RouterConfig {
     pub name: String,
