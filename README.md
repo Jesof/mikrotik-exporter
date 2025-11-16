@@ -6,7 +6,7 @@ Prometheus exporter для сбора метрик с MikroTik роутеров 
 
 Этот проект реализует протокол MikroTik RouterOS API на основе публично документированной спецификации:
 
-- [MikroTik Wiki: API](https://wiki.mikrotik.com/wiki/Manual:API)
+- [MikroTik RouterOS API Documentation](https://help.mikrotik.com/docs/spaces/ROS/pages/47579160/API)
 
 Реализация протокола написана с нуля специально для этого проекта и не содержит кода, скопированного из других реализаций.
 

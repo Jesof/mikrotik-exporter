@@ -59,7 +59,7 @@ This project implements the MikroTik RouterOS API protocol based on the
 publicly documented specifications available in the official MikroTik
 documentation:
 
-- https://wiki.mikrotik.com/wiki/Manual:API
+- https://help.mikrotik.com/docs/spaces/ROS/pages/47579160/API
 
 The protocol implementation in src/mikrotik/connection.rs is an original work
 written specifically for this project and does not contain code copied from
