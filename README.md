@@ -1,5 +1,9 @@
 # MikroTik Prometheus Exporter
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/rust-2024-orange.svg)](https://www.rust-lang.org)
+[![GitHub release](https://img.shields.io/github/v/release/Jesof/mikrotik-exporter)](https://github.com/Jesof/mikrotik-exporter/releases)
+
 Prometheus exporter для сбора метрик с MikroTik роутеров через RouterOS API.
 
 ## Протокол
