@@ -59,9 +59,3 @@ hex = "0.4"
 
 # Prometheus metrics
 prometheus-client = "0.24.0"
-
-# Async utilities (minimal features to reduce compile time)
-futures-util = { version = "0.3", default-features = false, features = ["std"] }
-
-# HTTP utilities
-http-body-util = "0.1.2"

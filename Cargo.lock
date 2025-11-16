@@ -154,7 +154,6 @@ dependencies = [
  "futures-task",
  "pin-project-lite",
  "pin-utils",
- "slab",
 ]
 
 [[package]]
@@ -312,9 +311,7 @@ version = "0.1.1"
 dependencies = [
  "axum",
  "dotenvy",
- "futures-util",
  "hex",
- "http-body-util",
  "md5",
  "prometheus-client",
  "serde",
@@ -572,12 +569,6 @@ checksum = "b2a4719bff48cee6b39d12c020eeb490953ad2443b7055bd0b21fca26bd8c28b"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "slab"
-version = "0.4.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a2ae44ef20feb57a68b23d846850f861394c2e02dc425a50098ae8c90267589"
 
 [[package]]
 name = "smallvec"
