@@ -94,6 +94,8 @@ impl ConnectionPool {
     ) -> Result<RouterOsConnection, Box<dyn std::error::Error + Send + Sync>> {
         let key = format!("{addr}:{username}");
 
+        tracing::trace!("Requesting connection for key: {}", key);
+
         // Check connection state and apply backoff if needed
         {
             let mut states = self.connection_states.lock().await;
@@ -123,6 +125,7 @@ impl ConnectionPool {
             if let Some(pooled) = pool.get_mut(&key) {
                 if !pooled.in_use && pooled.last_used.elapsed() < self.max_idle_time {
                     tracing::debug!("Reusing connection from pool for {}", addr);
+                    tracing::trace!("Connection last used: {:?} ago", pooled.last_used.elapsed());
                     pooled.in_use = true;
                     pooled.last_used = tokio::time::Instant::now();
 
@@ -131,6 +134,11 @@ impl ConnectionPool {
                     return Ok(conn);
                 } else if pooled.last_used.elapsed() >= self.max_idle_time {
                     tracing::debug!("Connection expired for {}, removing", addr);
+                    tracing::trace!(
+                        "Connection age: {:?} (max: {:?})",
+                        pooled.last_used.elapsed(),
+                        self.max_idle_time
+                    );
                     pool.remove(&key);
                 }
             }
@@ -138,32 +146,46 @@ impl ConnectionPool {
 
         // Create new connection
         tracing::debug!("Creating new connection for {}", addr);
+        tracing::trace!("Pool key: {}", key);
         match RouterOsConnection::connect(addr).await {
             Ok(mut conn) => {
+                tracing::trace!("Connection established, attempting login");
                 match conn.login(username, password).await {
                     Ok(()) => {
+                        tracing::trace!("Login successful, connection ready");
                         // Record success
                         let mut states = self.connection_states.lock().await;
                         if let Some(state) = states.get_mut(&key) {
                             state.record_success();
+                            tracing::trace!("Connection state reset after successful login");
                         }
                         Ok(conn)
                     }
                     Err(e) => {
+                        tracing::trace!("Login failed: {}", e);
                         // Record error
                         let mut states = self.connection_states.lock().await;
                         if let Some(state) = states.get_mut(&key) {
                             state.record_error();
+                            tracing::trace!(
+                                "Login error recorded, consecutive errors: {}",
+                                state.consecutive_errors
+                            );
                         }
                         Err(e)
                     }
                 }
             }
             Err(e) => {
+                tracing::trace!("Connection failed: {}", e);
                 // Record connection error
                 let mut states = self.connection_states.lock().await;
                 if let Some(state) = states.get_mut(&key) {
                     state.record_error();
+                    tracing::trace!(
+                        "Connection error recorded, consecutive errors: {}",
+                        state.consecutive_errors
+                    );
                 }
                 Err(e)
             }

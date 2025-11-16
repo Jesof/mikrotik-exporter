@@ -18,7 +18,9 @@ impl RouterOsConnection {
     pub(super) async fn connect(
         addr: &str,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        tracing::trace!("Attempting TCP connection to: {}", addr);
         let stream = timeout(Duration::from_secs(5), TcpStream::connect(addr)).await??;
+        tracing::trace!("TCP connection established to: {}", addr);
         Ok(Self { stream })
     }
 
@@ -27,6 +29,7 @@ impl RouterOsConnection {
         username: &str,
         password: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        tracing::trace!("Attempting login for user: {}", username);
         // Try new login method first (RouterOS 6.43+)
         let login_result = self
             .raw_command(vec![
@@ -38,11 +41,16 @@ impl RouterOsConnection {
 
         match login_result {
             Ok(sentences) => {
+                tracing::trace!(
+                    "New login method response received, {} sentences",
+                    sentences.len()
+                );
                 // Check for error messages
                 for s in &sentences {
                     if s.contains_key("message") {
                         let msg = s.get("message").unwrap();
                         if msg.contains("failure") || msg.contains("invalid") {
+                            tracing::trace!("Login failed with message: {}", msg);
                             return Err(format!("Login failed: {msg}").into());
                         }
                         tracing::debug!("Login message: {}", msg);
@@ -57,6 +65,7 @@ impl RouterOsConnection {
         }
 
         // Fallback to legacy challenge-response method (pre-6.43)
+        tracing::trace!("Requesting challenge for legacy login");
         let sentences = self.raw_command(vec!["/login".to_string()]).await?;
         let mut challenge_hex = None;
         for s in sentences {
@@ -65,6 +74,7 @@ impl RouterOsConnection {
             }
         }
         let challenge_hex = challenge_hex.ok_or("No challenge 'ret' received")?;
+        tracing::trace!("Challenge received, length: {}", challenge_hex.len());
         let challenge = hex::decode(&challenge_hex)?;
 
         // Build MD5 hash of 0 + password + challenge
@@ -146,13 +156,16 @@ impl RouterOsConnection {
             if word.is_empty() {
                 continue;
             }
+            tracing::trace!("Received word: {}", word);
             if word == "!done" {
                 if let Some(s) = current.take() {
                     sentences.push(s);
                 }
+                tracing::trace!("Command complete, {} sentences received", sentences.len());
                 break;
             }
             if word == "!trap" {
+                tracing::trace!("Trap received, reading trap details");
                 // collect trap details
                 let mut trap = HashMap::new();
                 loop {

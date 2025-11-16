@@ -325,6 +325,16 @@ impl MetricsRegistry {
             self.connection_pool_active.set(active as i64);
         }
     }
+
+    /// Get scrape success count for health check
+    pub async fn get_scrape_success_count(&self, labels: &RouterLabels) -> u64 {
+        self.scrape_success.get_or_create(labels).get()
+    }
+
+    /// Get scrape error count for health check
+    pub async fn get_scrape_error_count(&self, labels: &RouterLabels) -> u64 {
+        self.scrape_errors.get_or_create(labels).get()
+    }
 }
 
 impl Default for MetricsRegistry {

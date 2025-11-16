@@ -129,4 +129,3 @@ mod tests {
         assert!(debug_str.contains("ether1"));
     }
 }
-

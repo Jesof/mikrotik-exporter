@@ -76,18 +76,16 @@ mod tests {
     fn test_router_metrics_creation() {
         let metrics = RouterMetrics {
             router_name: "main-router".to_string(),
-            interfaces: vec![
-                InterfaceStats {
-                    name: "ether1".to_string(),
-                    rx_bytes: 1000,
-                    tx_bytes: 2000,
-                    rx_packets: 10,
-                    tx_packets: 20,
-                    rx_errors: 0,
-                    tx_errors: 0,
-                    running: true,
-                },
-            ],
+            interfaces: vec![InterfaceStats {
+                name: "ether1".to_string(),
+                rx_bytes: 1000,
+                tx_bytes: 2000,
+                rx_packets: 10,
+                tx_packets: 20,
+                rx_errors: 0,
+                tx_errors: 0,
+                running: true,
+            }],
             system: SystemResource {
                 uptime: "1d".to_string(),
                 cpu_load: 10,
@@ -122,4 +120,3 @@ mod tests {
         assert_eq!(stats.rx_bytes, cloned.rx_bytes);
     }
 }
-
