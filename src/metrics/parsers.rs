@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
 //! Utility functions for metrics processing
 
 /// Parse MikroTik uptime string to seconds

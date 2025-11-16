@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
 //! Type definitions for MikroTik metrics
 
 /// Statistics for a network interface

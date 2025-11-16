@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
 //! Low-level RouterOS API connection handling
 
 use md5::compute as md5_compute;

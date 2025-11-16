@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
 //! Configuration module for MikroTik Exporter application
 //!
 //! Loads and parses configuration from environment variables and JSON.

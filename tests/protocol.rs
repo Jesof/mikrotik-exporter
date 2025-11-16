@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
 // Тест кодирования длины по правилам RouterOS API (локальная копия логики)
 #[test]
 fn test_encode_length() {

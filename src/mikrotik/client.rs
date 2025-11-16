@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
 //! High-level MikroTik client
 
 use crate::config::RouterConfig;

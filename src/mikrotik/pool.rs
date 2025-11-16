@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
 //! Connection pool for managing RouterOS connections
 
 use std::collections::HashMap;

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
 //! Prelude module for convenient imports
 //!
 //! This module re-exports commonly used types and traits for convenient use.

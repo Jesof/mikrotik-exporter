@@ -1,0 +1,72 @@
+MikroTik Prometheus Exporter
+Copyright (c) 2025 Jesof
+
+This project is licensed under the MIT License. See LICENSE file for details.
+
+================================================================================
+
+THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
+
+This project uses the following third-party libraries and components:
+
+1. Tokio (MIT License)
+
+   - https://github.com/tokio-rs/tokio
+   - Asynchronous runtime for Rust
+
+2. Axum (MIT License)
+
+   - https://github.com/tokio-rs/axum
+   - Web framework for Rust
+
+3. Prometheus Client (Apache-2.0 OR MIT)
+
+   - https://github.com/prometheus/client_rust
+   - Prometheus metrics library
+
+4. Serde (MIT OR Apache-2.0)
+
+   - https://github.com/serde-rs/serde
+   - Serialization framework
+
+5. Tracing (MIT License)
+
+   - https://github.com/tokio-rs/tracing
+   - Application-level tracing framework
+
+6. Thiserror (MIT OR Apache-2.0)
+
+   - https://github.com/dtolnay/thiserror
+   - Error handling library
+
+7. MD5 (Apache-2.0/MIT)
+
+   - https://github.com/RustCrypto/hashes
+   - MD5 hash implementation (used for RouterOS authentication)
+
+8. Dotenvy (MIT License)
+   - https://github.com/allan2/dotenvy
+   - .env file support
+
+For a complete list of dependencies and their licenses, run:
+cargo tree --prefix none --format "{p} {l}"
+
+================================================================================
+
+PROTOCOL IMPLEMENTATION
+
+This project implements the MikroTik RouterOS API protocol based on the
+publicly documented specifications available in the official MikroTik
+documentation:
+
+- https://wiki.mikrotik.com/wiki/Manual:API
+
+The protocol implementation in src/mikrotik/connection.rs is an original work
+written specifically for this project and does not contain code copied from
+other implementations.
+
+================================================================================
+
+All third-party software components are used in accordance with their
+respective licenses, which are compatible with the MIT License used by
+this project.

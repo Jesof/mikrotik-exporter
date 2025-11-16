@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
 //! Connection pool cleanup task
 //!
 //! This module provides internal functionality for cleaning up expired connections

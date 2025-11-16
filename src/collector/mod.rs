@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
 //! Metrics collection orchestration module for MikroTik routers
 //!
 //! Starts background metrics collection, manages connection pool and cleanup.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
 //! RouterOS API client module for MikroTik
 //!
 //! Implements connection to MikroTik routers via RouterOS API,

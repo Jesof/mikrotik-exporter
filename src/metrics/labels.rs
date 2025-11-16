@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
 //! Label types for Prometheus metrics
 
 use prometheus_client::encoding::EncodeLabelSet;

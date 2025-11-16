@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
 //! Metrics registry and update logic
 
 use crate::mikrotik::RouterMetrics;

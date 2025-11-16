@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
 //! Main entry point for MikroTik Exporter
 //!
 //! Initializes configuration, logging, metrics collection, and HTTP API.
