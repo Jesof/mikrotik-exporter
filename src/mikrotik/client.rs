@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use super::connection::{parse_interfaces, parse_system};
 use super::pool::ConnectionPool;
-use super::types::{RouterMetrics, SystemResource};
+use super::types::RouterMetrics;
 
 /// `MikroTik` `RouterOS` API client
 ///
@@ -29,11 +29,12 @@ impl MikroTikClient {
     /// Collects metrics from the router
     ///
     /// This method connects to the router, authenticates, and retrieves
-    /// system and interface statistics. Returns placeholder data on error.
+    /// system and interface statistics.
     ///
     /// # Errors
     ///
-    /// Returns an error if connection or authentication fails.
+    /// Returns an error if connection, authentication, or data retrieval fails.
+    /// On error, metrics are not updated, preserving the last successful values.
     pub async fn collect_metrics(
         &self,
     ) -> Result<RouterMetrics, Box<dyn std::error::Error + Send + Sync>> {
@@ -41,18 +42,7 @@ impl MikroTikClient {
             Ok(m) => Ok(m),
             Err(e) => {
                 tracing::error!("Router '{}' collection failed: {}", self.config.name, e);
-                Ok(RouterMetrics {
-                    router_name: self.config.name.clone(),
-                    interfaces: Vec::new(),
-                    system: SystemResource {
-                        uptime: "0s".to_string(),
-                        cpu_load: 0,
-                        free_memory: 0,
-                        total_memory: 0,
-                        version: "unknown".to_string(),
-                        board_name: "unknown".to_string(),
-                    },
-                })
+                Err(e)
             }
         }
     }
@@ -125,7 +115,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_collect_metrics_returns_placeholder_on_error() {
+    async fn test_collect_metrics_returns_error_on_failure() {
         let config = RouterConfig {
             name: "test-router".to_string(),
             address: "invalid:address".to_string(),
@@ -136,14 +126,8 @@ mod tests {
         let pool = Arc::new(ConnectionPool::new());
         let client = MikroTikClient::with_pool(config, pool);
 
-        // This should fail to connect but return placeholder data
+        // This should fail to connect and return an error
         let result = client.collect_metrics().await;
-        assert!(result.is_ok());
-
-        let metrics = result.unwrap();
-        assert_eq!(metrics.router_name, "test-router");
-        assert_eq!(metrics.interfaces.len(), 0);
-        assert_eq!(metrics.system.version, "unknown");
-        assert_eq!(metrics.system.uptime, "0s");
+        assert!(result.is_err());
     }
 }
