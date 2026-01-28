@@ -38,7 +38,7 @@ impl MikroTikClient {
     pub async fn collect_metrics(
         &self,
     ) -> Result<RouterMetrics, Box<dyn std::error::Error + Send + Sync>> {
-        use tokio::time::{timeout, Duration};
+        use tokio::time::{Duration, timeout};
 
         const COLLECTION_TIMEOUT: Duration = Duration::from_secs(30);
 

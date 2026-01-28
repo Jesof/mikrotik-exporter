@@ -50,7 +50,10 @@ impl RouterConfig {
 
         // Validate username is not empty
         if self.username.trim().is_empty() {
-            return Err(format!("Username cannot be empty for router '{}'", self.name));
+            return Err(format!(
+                "Username cannot be empty for router '{}'",
+                self.name
+            ));
         }
 
         Ok(())
