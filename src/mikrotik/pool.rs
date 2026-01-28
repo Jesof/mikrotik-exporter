@@ -10,6 +10,17 @@ use tokio::sync::Mutex;
 
 use super::connection::RouterOsConnection;
 
+/// Connection pool configuration constants
+mod timeouts {
+    use std::time::Duration;
+
+    /// Maximum idle time before connection is closed (5 minutes)
+    pub const POOL_IDLE_TIMEOUT: Duration = Duration::from_secs(300);
+
+    /// Maximum backoff duration (5 minutes)
+    pub const MAX_BACKOFF: Duration = Duration::from_secs(300);
+}
+
 /// Connection pool for reusing `RouterOS` connections
 pub struct ConnectionPool {
     connections: Arc<Mutex<HashMap<String, PooledConnection>>>,
@@ -20,7 +31,6 @@ pub struct ConnectionPool {
 struct PooledConnection {
     connection: RouterOsConnection,
     last_used: tokio::time::Instant,
-    in_use: bool,
 }
 
 /// Tracks connection health and error state
@@ -53,13 +63,21 @@ impl ConnectionState {
     fn backoff_delay(&self) -> Duration {
         // Exponential backoff: 2^n seconds, max 5 minutes
         let base_delay = 2u64.pow(self.consecutive_errors.min(8));
-        Duration::from_secs(base_delay.min(300))
+        let max_secs = timeouts::MAX_BACKOFF.as_secs();
+        Duration::from_secs(base_delay.min(max_secs))
     }
 
     fn should_skip_attempt(&self) -> bool {
         // Skip if we've had many consecutive errors and not enough time has passed
         if self.consecutive_errors < 3 {
             return false;
+        }
+
+        // After 10 consecutive errors, require 1 hour wait
+        if self.consecutive_errors >= 10 {
+            if let Some(last_error) = self.last_error_time {
+                return last_error.elapsed() < Duration::from_secs(3600);
+            }
         }
 
         if let Some(last_error) = self.last_error_time {
@@ -81,7 +99,7 @@ impl ConnectionPool {
         Self {
             connections: Arc::new(Mutex::new(HashMap::new())),
             connection_states: Arc::new(Mutex::new(HashMap::new())),
-            max_idle_time: Duration::from_secs(300), // 5 minutes
+            max_idle_time: timeouts::POOL_IDLE_TIMEOUT,
         }
     }
 
@@ -125,24 +143,20 @@ impl ConnectionPool {
         // Check if we have an available connection
         {
             let mut pool = self.connections.lock().await;
-            if let Some(pooled) = pool.get_mut(&key) {
-                if !pooled.in_use && pooled.last_used.elapsed() < self.max_idle_time {
+            if let Some(mut pooled) = pool.remove(&key) {
+                if pooled.last_used.elapsed() < self.max_idle_time {
                     tracing::debug!("Reusing connection from pool for {}", addr);
                     tracing::trace!("Connection last used: {:?} ago", pooled.last_used.elapsed());
-                    pooled.in_use = true;
                     pooled.last_used = tokio::time::Instant::now();
-
-                    // Move connection out of pool temporarily
-                    let conn = pool.remove(&key).unwrap().connection;
-                    return Ok(conn);
-                } else if pooled.last_used.elapsed() >= self.max_idle_time {
+                    return Ok(pooled.connection);
+                } else {
                     tracing::debug!("Connection expired for {}, removing", addr);
                     tracing::trace!(
                         "Connection age: {:?} (max: {:?})",
                         pooled.last_used.elapsed(),
                         self.max_idle_time
                     );
-                    pool.remove(&key);
+                    // Don't put it back, let it drop
                 }
             }
         }
@@ -224,7 +238,9 @@ impl ConnectionPool {
     pub async fn get_pool_stats(&self) -> (usize, usize) {
         let pool = self.connections.lock().await;
         let total = pool.len();
-        let active = pool.values().filter(|conn| conn.in_use).count();
+        // All connections in pool are currently idle (not in use)
+        // Active connections are those removed from pool temporarily
+        let active = 0;
         (total, active)
     }
 
@@ -244,7 +260,6 @@ impl ConnectionPool {
             PooledConnection {
                 connection: conn,
                 last_used: tokio::time::Instant::now(),
-                in_use: false,
             },
         );
     }

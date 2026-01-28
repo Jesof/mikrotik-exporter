@@ -7,9 +7,13 @@
 //! from the connection pool. It's not part of the public API.
 
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::watch;
 
 use crate::mikrotik::ConnectionPool;
+
+/// Cleanup interval for expired connections (60 seconds)
+const CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Starts a background task to clean up expired connections
 ///
@@ -20,7 +24,7 @@ pub(super) fn start_pool_cleanup_task(
     mut shutdown_rx: watch::Receiver<bool>,
 ) {
     tokio::spawn(async move {
-        let mut cleanup_ticker = tokio::time::interval(std::time::Duration::from_secs(60));
+        let mut cleanup_ticker = tokio::time::interval(CLEANUP_INTERVAL);
         loop {
             tokio::select! {
                 _ = cleanup_ticker.tick() => {

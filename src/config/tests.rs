@@ -53,4 +53,58 @@ mod test {
         assert_eq!(routers[0].name, "router1");
         assert_eq!(routers[1].name, "router2");
     }
+
+    #[test]
+    fn test_router_config_validate_valid() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: "192.168.1.1:8728".to_string(),
+            username: "admin".to_string(),
+            password: "password".to_string(),
+        };
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_router_config_validate_empty_name() {
+        let config = RouterConfig {
+            name: "  ".to_string(),
+            address: "192.168.1.1:8728".to_string(),
+            username: "admin".to_string(),
+            password: "password".to_string(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("name cannot be empty"));
+    }
+
+    #[test]
+    fn test_router_config_validate_invalid_address() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: "192.168.1.1".to_string(), // Missing port
+            username: "admin".to_string(),
+            password: "password".to_string(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("expected 'host:port'"));
+    }
+
+    #[test]
+    fn test_router_config_validate_empty_username() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: "192.168.1.1:8728".to_string(),
+            username: "  ".to_string(),
+            password: "password".to_string(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Username cannot be empty"));
+    }
 }

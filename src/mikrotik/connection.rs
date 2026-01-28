@@ -12,6 +12,9 @@ use tokio::time::timeout;
 
 use super::types::{InterfaceStats, SystemResource};
 
+/// Connection timeout (5 seconds)
+const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Low-level RouterOS API connection
 pub(super) struct RouterOsConnection {
     stream: TcpStream,
@@ -22,7 +25,7 @@ impl RouterOsConnection {
         addr: &str,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         tracing::trace!("Attempting TCP connection to: {}", addr);
-        let stream = timeout(Duration::from_secs(5), TcpStream::connect(addr)).await??;
+        let stream = timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await??;
         tracing::trace!("TCP connection established to: {}", addr);
         Ok(Self { stream })
     }
@@ -50,8 +53,7 @@ impl RouterOsConnection {
                 );
                 // Check for error messages
                 for s in &sentences {
-                    if s.contains_key("message") {
-                        let msg = s.get("message").unwrap();
+                    if let Some(msg) = s.get("message") {
                         if msg.contains("failure") || msg.contains("invalid") {
                             tracing::trace!("Login failed with message: {}", msg);
                             return Err(format!("Login failed: {msg}").into());

@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
     let app = api::create_router(state);
 
     let addr: SocketAddr = config.server_addr.parse().map_err(|e| {
-        tracing::error!("Invalid server address: {}", e);
+        tracing::error!("Invalid server address '{}': {}", config.server_addr, e);
         e
     })?;
 

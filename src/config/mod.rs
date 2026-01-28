@@ -32,6 +32,31 @@ pub struct RouterConfig {
     pub password: String,
 }
 
+impl RouterConfig {
+    /// Validates router configuration
+    pub fn validate(&self) -> Result<(), String> {
+        // Validate name is not empty
+        if self.name.trim().is_empty() {
+            return Err("Router name cannot be empty".to_string());
+        }
+
+        // Validate address format (must contain port)
+        if !self.address.contains(':') {
+            return Err(format!(
+                "Invalid address format '{}': expected 'host:port'",
+                self.address
+            ));
+        }
+
+        // Validate username is not empty
+        if self.username.trim().is_empty() {
+            return Err(format!("Username cannot be empty for router '{}'", self.name));
+        }
+
+        Ok(())
+    }
+}
+
 /// Application-wide configuration
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -91,6 +116,14 @@ impl Config {
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(30);
+
+        // Validate all router configurations
+        for router in &routers {
+            if let Err(e) = router.validate() {
+                tracing::error!("Invalid router configuration: {}", e);
+                tracing::warn!("Skipping invalid router: {}", router.name);
+            }
+        }
 
         Config {
             server_addr,

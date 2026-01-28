@@ -38,11 +38,20 @@ impl MikroTikClient {
     pub async fn collect_metrics(
         &self,
     ) -> Result<RouterMetrics, Box<dyn std::error::Error + Send + Sync>> {
-        match self.collect_real().await {
-            Ok(m) => Ok(m),
-            Err(e) => {
+        use tokio::time::{timeout, Duration};
+
+        const COLLECTION_TIMEOUT: Duration = Duration::from_secs(30);
+
+        match timeout(COLLECTION_TIMEOUT, self.collect_real()).await {
+            Ok(Ok(m)) => Ok(m),
+            Ok(Err(e)) => {
                 tracing::error!("Router '{}' collection failed: {}", self.config.name, e);
                 Err(e)
+            }
+            Err(_) => {
+                let err = format!("Router '{}' collection timeout (>30s)", self.config.name);
+                tracing::error!("{}", err);
+                Err(err.into())
             }
         }
     }
