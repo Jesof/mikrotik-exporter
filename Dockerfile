@@ -1,8 +1,8 @@
 # Build stage
-FROM rust:1.91-alpine3.19 AS builder
+FROM rust:1.91-alpine AS builder
 
-# Install build dependencies
-RUN apk add --no-cache \
+# Install build dependencies (disable triggers for QEMU compatibility)
+RUN apk add --no-cache --no-scripts \
     musl-dev \
     openssl-dev \
     openssl-libs-static \
