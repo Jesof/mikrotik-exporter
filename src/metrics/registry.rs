@@ -195,6 +195,19 @@ impl MetricsRegistry {
         }
     }
 
+    /// Update metrics from collected router data
+    ///
+    /// This method performs delta calculations for counter metrics (rx/tx bytes/packets)
+    /// using the previous snapshot stored in `prev_iface`.
+    ///
+    /// # Router Name Uniqueness
+    ///
+    /// **CRITICAL**: This method assumes router names are unique. If two routers have the same name,
+    /// their interface metrics will collide in the `prev_iface` HashMap, causing incorrect
+    /// delta calculations and data corruption. The configuration layer enforces this requirement.
+    ///
+    /// # Arguments
+    /// * `metrics` - The collected metrics from a router
     #[allow(clippy::similar_names)] // rx/tx naming pattern is intentional and clear
     pub async fn update_metrics(&self, metrics: &RouterMetrics) {
         {
@@ -337,6 +350,27 @@ impl MetricsRegistry {
     /// Get scrape error count for health check
     pub async fn get_scrape_error_count(&self, labels: &RouterLabels) -> u64 {
         self.scrape_errors.get_or_create(labels).get()
+    }
+
+    /// Clean up stale interface metrics for interfaces that no longer exist
+    ///
+    /// This method removes old interface snapshots from the prev_iface HashMap
+    /// to prevent unbounded memory growth when interfaces are dynamically added/removed.
+    ///
+    /// # Arguments
+    /// * `current_interfaces` - Set of currently active interface labels
+    pub async fn cleanup_stale_interfaces(
+        &self,
+        current_interfaces: &std::collections::HashSet<InterfaceLabels>,
+    ) {
+        let mut prev = self.prev_iface.lock().await;
+        let before_count = prev.len();
+        prev.retain(|labels, _| current_interfaces.contains(labels));
+        let after_count = prev.len();
+        let removed = before_count - after_count;
+        if removed > 0 {
+            tracing::debug!("Cleaned up {} stale interface snapshots", removed);
+        }
     }
 }
 

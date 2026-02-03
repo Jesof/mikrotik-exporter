@@ -15,6 +15,9 @@ use super::types::{InterfaceStats, SystemResource};
 /// Connection timeout (5 seconds)
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Read operation timeout (30 seconds)
+const READ_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// Low-level RouterOS API connection
 pub(super) struct RouterOsConnection {
     stream: TcpStream,
@@ -154,62 +157,67 @@ impl RouterOsConnection {
     async fn read_sentences(
         &mut self,
     ) -> Result<Vec<HashMap<String, String>>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut sentences: Vec<HashMap<String, String>> = Vec::new();
-        let mut current: Option<HashMap<String, String>> = None;
-        loop {
-            let word = self.read_word().await?;
-            if word.is_empty() {
-                continue;
-            }
-            tracing::trace!("Received word: {}", word);
-            if word == "!done" {
-                if let Some(s) = current.take() {
-                    sentences.push(s);
+        // Wrap the entire read operation in a timeout to prevent hanging on slow/dead connections
+        timeout(READ_TIMEOUT, async {
+            let mut sentences: Vec<HashMap<String, String>> = Vec::new();
+            let mut current: Option<HashMap<String, String>> = None;
+            loop {
+                let word = self.read_word().await?;
+                if word.is_empty() {
+                    continue;
                 }
-                tracing::trace!("Command complete, {} sentences received", sentences.len());
-                break;
-            }
-            if word == "!trap" {
-                tracing::trace!("Trap received, reading trap details");
-                // collect trap details
-                let mut trap = HashMap::new();
-                loop {
-                    let w = self.read_word().await?;
-                    if w.is_empty() {
-                        continue;
+                tracing::trace!("Received word: {}", word);
+                if word == "!done" {
+                    if let Some(s) = current.take() {
+                        sentences.push(s);
                     }
-                    if let Some(stripped) = w.strip_prefix('=') {
-                        if let Some((k, v)) = stripped.split_once('=') {
-                            trap.insert(k.to_string(), v.to_string());
+                    tracing::trace!("Command complete, {} sentences received", sentences.len());
+                    break;
+                }
+                if word == "!trap" {
+                    tracing::trace!("Trap received, reading trap details");
+                    // collect trap details
+                    let mut trap = HashMap::new();
+                    loop {
+                        let w = self.read_word().await?;
+                        if w.is_empty() {
+                            continue;
                         }
-                        continue;
+                        if let Some(stripped) = w.strip_prefix('=') {
+                            if let Some((k, v)) = stripped.split_once('=') {
+                                trap.insert(k.to_string(), v.to_string());
+                            }
+                            continue;
+                        }
+                        if w.starts_with('!') || w == "!done" {
+                            break;
+                        }
                     }
-                    if w.starts_with('!') || w == "!done" {
-                        break;
+                    let msg = trap
+                        .get("message")
+                        .cloned()
+                        .unwrap_or_else(|| "trap".to_string());
+                    return Err(format!("RouterOS trap: {msg}").into());
+                }
+                if word == "!re" {
+                    if let Some(s) = current.take() {
+                        sentences.push(s);
+                    }
+                    current = Some(HashMap::new());
+                    continue;
+                }
+                if let Some(stripped) = word.strip_prefix('=') {
+                    let tgt = current.get_or_insert(HashMap::new());
+                    if let Some((k, v)) = stripped.split_once('=') {
+                        tgt.insert(k.to_string(), v.to_string());
                     }
                 }
-                let msg = trap
-                    .get("message")
-                    .cloned()
-                    .unwrap_or_else(|| "trap".to_string());
-                return Err(format!("RouterOS trap: {msg}").into());
+                // ignore other headers
             }
-            if word == "!re" {
-                if let Some(s) = current.take() {
-                    sentences.push(s);
-                }
-                current = Some(HashMap::new());
-                continue;
-            }
-            if let Some(stripped) = word.strip_prefix('=') {
-                let tgt = current.get_or_insert(HashMap::new());
-                if let Some((k, v)) = stripped.split_once('=') {
-                    tgt.insert(k.to_string(), v.to_string());
-                }
-            }
-            // ignore other headers
-        }
-        Ok(sentences)
+            Ok(sentences)
+        })
+        .await
+        .map_err(|_| "Read timeout: RouterOS did not respond within 30 seconds")?
     }
 
     async fn read_word(&mut self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {

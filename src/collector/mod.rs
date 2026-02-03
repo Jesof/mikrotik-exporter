@@ -42,32 +42,37 @@ impl SystemInfoCache {
 
 /// Starts the background metrics collection loop
 ///
-/// Periodically collects metrics from all configured MikroTik routers.
+/// Spawns a background task that periodically collects metrics from all configured routers.
+/// The collection interval is configurable via `Config::collection_interval_secs`.
+///
 /// Also starts the connection pool cleanup task.
 pub fn start_collection_loop(
     mut shutdown_rx: watch::Receiver<bool>,
     config: Arc<Config>,
     metrics: MetricsRegistry,
+    pool: Arc<ConnectionPool>,
 ) -> JoinHandle<()> {
     let interval = config.collection_interval_secs;
     tracing::info!("Starting background collection loop every {}s", interval);
-
-    // Create shared connection pool for all routers
-    let pool = Arc::new(ConnectionPool::new());
 
     // Create system info cache for immutable metrics
     let system_cache = SystemInfoCache::new();
 
     // Start cleanup task for expired connections
-    cleanup::start_pool_cleanup_task(pool.clone(), shutdown_rx.clone());
+    let _cleanup_handle = cleanup::start_pool_cleanup_task(pool.clone(), shutdown_rx.clone());
 
     tracing::trace!(
         "Collection loop initialized with {} routers",
         config.routers.len()
     );
 
+    // Cleanup interval: every 100 collection cycles
+    const CLEANUP_EVERY_N_CYCLES: u64 = 100;
+
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval));
+        let mut collection_cycle: u64 = 0;
+
         loop {
             tokio::select! {
                 _ = ticker.tick() => {},
@@ -81,14 +86,14 @@ pub fn start_collection_loop(
 
             // Collect metrics from all routers
             for router in &config.routers {
-                let client = MikroTikClient::with_pool(router.clone(), pool.clone());
+                let router_config = router.clone();
+                let client = MikroTikClient::with_pool(router_config.clone(), pool.clone());
                 let metrics_ref = metrics.clone();
                 let router_name = router.name.clone();
                 let router_label = RouterLabels {
                     router: router_name.clone(),
                 };
                 let pool_ref = pool.clone();
-                let router_config = router.clone();
                 let cache_ref = system_cache.clone();
 
                 tokio::spawn(async move {
@@ -162,6 +167,20 @@ pub fn start_collection_loop(
             // Update pool statistics after all routers processed
             let (total, active) = pool.get_pool_stats().await;
             metrics.update_pool_stats(total, active);
+
+            // Periodic cleanup of stale interface metrics
+            // TODO: Implement proper interface tracking to enable cleanup
+            // For now, this is a placeholder. Full implementation would require:
+            // 1. Tracking active interfaces during each collection cycle
+            // 2. Calling metrics.cleanup_stale_interfaces() with the current set
+            // 3. This prevents unbounded HashMap growth when interfaces are added/removed
+            collection_cycle += 1;
+            if collection_cycle % CLEANUP_EVERY_N_CYCLES == 0 {
+                tracing::debug!(
+                    "Cleanup cycle {} (interface tracking not yet implemented)",
+                    collection_cycle
+                );
+            }
         }
     })
 }

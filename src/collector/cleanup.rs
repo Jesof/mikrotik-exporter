@@ -19,10 +19,12 @@ const CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
 ///
 /// This is an internal function (pub(super)) used only by the collector module
 /// to manage connection lifecycle. It runs every 60 seconds.
+///
+/// Returns a JoinHandle that can be awaited during shutdown or testing.
 pub(super) fn start_pool_cleanup_task(
     pool: Arc<ConnectionPool>,
     mut shutdown_rx: watch::Receiver<bool>,
-) {
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut cleanup_ticker = tokio::time::interval(CLEANUP_INTERVAL);
         loop {
@@ -38,7 +40,7 @@ pub(super) fn start_pool_cleanup_task(
                 }
             }
         }
-    });
+    })
 }
 
 #[cfg(test)]

@@ -24,6 +24,17 @@ pub mod env_vars {
 }
 
 /// Configuration for a single MikroTik router
+///
+/// # Router Name Uniqueness
+///
+/// **CRITICAL REQUIREMENT**: Router names MUST be unique across all routers.
+/// Duplicate router names will cause:
+/// - Metric label collisions in Prometheus
+/// - Incorrect data aggregation in the metrics registry
+/// - Race conditions in delta calculations for counter metrics
+///
+/// The configuration loading process validates and filters out routers with duplicate names,
+/// logging errors for any duplicates found.
 #[derive(Debug, Clone, Deserialize)]
 pub struct RouterConfig {
     pub name: String,
@@ -120,12 +131,41 @@ impl Config {
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(30);
 
-        // Validate all router configurations
-        for router in &routers {
-            if let Err(e) = router.validate() {
-                tracing::error!("Invalid router configuration: {}", e);
-                tracing::warn!("Skipping invalid router: {}", router.name);
-            }
+        // Validate and filter router configurations
+        let routers: Vec<RouterConfig> = routers
+            .into_iter()
+            .filter(|router| match router.validate() {
+                Ok(()) => true,
+                Err(e) => {
+                    tracing::error!("Invalid router '{}': {}", router.name, e);
+                    tracing::warn!("Skipping invalid router: {}", router.name);
+                    false
+                }
+            })
+            .collect();
+
+        // Check for duplicate router names
+        let mut seen_names = std::collections::HashSet::new();
+        let routers: Vec<RouterConfig> = routers
+            .into_iter()
+            .filter(|router| {
+                if seen_names.contains(&router.name) {
+                    tracing::error!(
+                        "Duplicate router name '{}' found. Router names must be unique.",
+                        router.name
+                    );
+                    false
+                } else {
+                    seen_names.insert(router.name.clone());
+                    true
+                }
+            })
+            .collect();
+
+        if routers.is_empty() {
+            tracing::warn!(
+                "No valid router configuration found. Service will start but /metrics will be empty."
+            );
         }
 
         Config {

@@ -16,11 +16,13 @@ use std::sync::Arc;
 
 use crate::config::Config;
 use crate::metrics::MetricsRegistry;
+use crate::mikrotik::ConnectionPool;
 
 /// Application state shared with endpoints
 pub struct AppState {
     pub config: Config,
     pub metrics: MetricsRegistry,
+    pub pool: Arc<ConnectionPool>,
 }
 
 /// Creates the main Axum router with all endpoints
@@ -51,7 +53,12 @@ mod tests {
         };
 
         let metrics = MetricsRegistry::new();
-        let app_state = Arc::new(AppState { config, metrics });
+        let pool = Arc::new(ConnectionPool::new());
+        let app_state = Arc::new(AppState {
+            config,
+            metrics,
+            pool,
+        });
 
         let _router = create_router(app_state);
         // If we get here without panicking, the router was created successfully
@@ -61,8 +68,13 @@ mod tests {
     fn test_app_state_creation() {
         let config = Config::default();
         let metrics = MetricsRegistry::new();
+        let pool = Arc::new(ConnectionPool::new());
 
-        let state = AppState { config, metrics };
+        let state = AppState {
+            config,
+            metrics,
+            pool,
+        };
 
         assert_eq!(state.config.server_addr, "0.0.0.0:9090");
         assert_eq!(state.config.collection_interval_secs, 30);

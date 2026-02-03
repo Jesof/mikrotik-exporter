@@ -6,6 +6,8 @@
 /// Parse MikroTik uptime string to seconds
 ///
 /// Accepts formats like: 1d2h3m4s, 2w1d, 05:23:10, 1h5m, 30s
+///
+/// Uses saturating arithmetic to prevent integer overflow on malicious/corrupted input.
 pub fn parse_uptime_to_seconds(s: &str) -> u64 {
     // Accept formats like 1d2h3m4s, 2w1d, 05:23:10, 1h5m, 30s
     if s.contains(':') {
@@ -15,11 +17,14 @@ pub fn parse_uptime_to_seconds(s: &str) -> u64 {
             let h = parts[0].parse::<u64>().unwrap_or(0);
             let m = parts[1].parse::<u64>().unwrap_or(0);
             let sec = parts[2].parse::<u64>().unwrap_or(0);
-            return h * 3600 + m * 60 + sec;
+            return h
+                .saturating_mul(3600)
+                .saturating_add(m.saturating_mul(60))
+                .saturating_add(sec);
         } else if parts.len() == 2 {
             let m = parts[0].parse::<u64>().unwrap_or(0);
             let sec = parts[1].parse::<u64>().unwrap_or(0);
-            return m * 60 + sec;
+            return m.saturating_mul(60).saturating_add(sec);
         }
     }
     let mut total = 0u64;
@@ -41,12 +46,12 @@ pub fn parse_uptime_to_seconds(s: &str) -> u64 {
             's' => 1,
             _ => 0,
         };
-        total += value * unit_seconds;
+        total = total.saturating_add(value.saturating_mul(unit_seconds));
         num.clear();
     }
     if !num.is_empty() {
         // trailing number without unit -> seconds
-        total += num.parse::<u64>().unwrap_or(0);
+        total = total.saturating_add(num.parse::<u64>().unwrap_or(0));
     }
     total
 }

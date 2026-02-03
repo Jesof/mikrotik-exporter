@@ -59,8 +59,8 @@ impl MikroTikClient {
     async fn collect_real(
         &self,
     ) -> Result<RouterMetrics, Box<dyn std::error::Error + Send + Sync>> {
-        // Get connection from pool
-        let mut conn = self
+        // Get connection from pool (returns RAII guard that auto-releases on drop)
+        let mut guard = self
             .pool
             .get_connection(
                 &self.config.address,
@@ -69,6 +69,7 @@ impl MikroTikClient {
             )
             .await?;
 
+        let conn = guard.get_mut();
         let system_result = conn.command("/system/resource/print", &[]).await;
         let interfaces_result = conn.command("/interface/print", &[]).await;
 
@@ -84,10 +85,7 @@ impl MikroTikClient {
                 .await;
         }
 
-        // Always return connection to pool
-        self.pool
-            .release_connection(&self.config.address, &self.config.username, conn)
-            .await;
+        // Connection automatically returned to pool when guard is dropped
 
         let system_sentences = system_result?;
         let interfaces_sentences = interfaces_result?;

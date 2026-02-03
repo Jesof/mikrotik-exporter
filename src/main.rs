@@ -11,7 +11,7 @@
 //! - Waits for shutdown signal
 //! - Runs HTTP server for Prometheus
 
-use mikrotik_exporter::{api, collector, config::Config, error::Result, metrics};
+use mikrotik_exporter::{api, collector, config::Config, error::Result, metrics, mikrotik};
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -42,10 +42,14 @@ async fn main() -> Result<()> {
     // Create metrics registry
     let metrics = metrics::MetricsRegistry::new();
 
+    // Create shared connection pool
+    let pool = Arc::new(mikrotik::ConnectionPool::new());
+
     // Create application state
     let state = Arc::new(api::AppState {
         config: config.clone(),
         metrics: metrics.clone(),
+        pool: pool.clone(),
     });
 
     // Graceful shutdown channel
@@ -63,7 +67,7 @@ async fn main() -> Result<()> {
     });
 
     // Start periodic background metrics collection
-    collector::start_collection_loop(shutdown_rx.clone(), Arc::new(config.clone()), metrics);
+    collector::start_collection_loop(shutdown_rx.clone(), Arc::new(config.clone()), metrics, pool);
 
     // Create the router
     let app = api::create_router(state);

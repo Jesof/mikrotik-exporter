@@ -21,11 +21,67 @@ mod timeouts {
     pub const MAX_BACKOFF: Duration = Duration::from_secs(300);
 }
 
+/// Backoff strategy configuration
+mod backoff {
+    use std::time::Duration;
+
+    /// Minimum consecutive errors before backoff applies
+    pub const MIN_ERRORS_FOR_BACKOFF: u32 = 3;
+
+    /// Error threshold for long backoff period (1 hour)
+    pub const LONG_BACKOFF_ERROR_THRESHOLD: u32 = 10;
+
+    /// Long backoff duration after many consecutive errors (1 hour)
+    pub const LONG_BACKOFF_DURATION: Duration = Duration::from_secs(3600);
+
+    /// Maximum exponent for exponential backoff (2^8 = 256 seconds)
+    pub const MAX_BACKOFF_EXPONENT: u32 = 8;
+}
+
 /// Connection pool for reusing `RouterOS` connections
+#[derive(Clone)]
 pub struct ConnectionPool {
     connections: Arc<Mutex<HashMap<String, PooledConnection>>>,
     connection_states: Arc<Mutex<HashMap<String, ConnectionState>>>,
     max_idle_time: Duration,
+}
+
+/// RAII guard for pooled connections
+///
+/// Ensures connections are always returned to the pool when dropped,
+/// preventing memory leaks from forgetting to call `release_connection`.
+pub struct PooledConnectionGuard {
+    connection: Option<RouterOsConnection>,
+    pool: ConnectionPool,
+    key: String,
+}
+
+impl PooledConnectionGuard {
+    /// Get a mutable reference to the underlying connection
+    pub(super) fn get_mut(&mut self) -> &mut RouterOsConnection {
+        self.connection.as_mut().expect("Connection already taken")
+    }
+}
+
+impl Drop for PooledConnectionGuard {
+    fn drop(&mut self) {
+        if let Some(conn) = self.connection.take() {
+            let pool = self.pool.clone();
+            let key = self.key.clone();
+            // Return connection to pool asynchronously
+            tokio::spawn(async move {
+                let mut pool_connections = pool.connections.lock().await;
+                tracing::debug!("Returning connection to pool (via Drop): {}", key);
+                pool_connections.insert(
+                    key,
+                    PooledConnection {
+                        connection: conn,
+                        last_used: tokio::time::Instant::now(),
+                    },
+                );
+            });
+        }
+    }
 }
 
 struct PooledConnection {
@@ -62,24 +118,26 @@ impl ConnectionState {
 
     fn backoff_delay(&self) -> Duration {
         // Exponential backoff: 2^n seconds, max 5 minutes
-        let base_delay = 2u64.pow(self.consecutive_errors.min(8));
+        let base_delay = 2u64.pow(self.consecutive_errors.min(backoff::MAX_BACKOFF_EXPONENT));
         let max_secs = timeouts::MAX_BACKOFF.as_secs();
         Duration::from_secs(base_delay.min(max_secs))
     }
 
     fn should_skip_attempt(&self) -> bool {
         // Skip if we've had many consecutive errors and not enough time has passed
-        if self.consecutive_errors < 3 {
+        if self.consecutive_errors < backoff::MIN_ERRORS_FOR_BACKOFF {
             return false;
         }
 
         // After 10 consecutive errors, require 1 hour wait
-        if self.consecutive_errors >= 10 {
-            if let Some(last_error) = self.last_error_time {
-                return last_error.elapsed() < Duration::from_secs(3600);
+        if self.consecutive_errors >= backoff::LONG_BACKOFF_ERROR_THRESHOLD {
+            if let Some(last_err) = self.last_error_time {
+                return last_err.elapsed() < backoff::LONG_BACKOFF_DURATION;
             }
+            return true;
         }
 
+        // For moderate errors, use exponential backoff
         if let Some(last_error) = self.last_error_time {
             last_error.elapsed() < self.backoff_delay()
         } else {
@@ -103,7 +161,10 @@ impl ConnectionPool {
         }
     }
 
-    /// Get or create a connection from the pool
+    /// Get or create a connection from the pool with RAII guard
+    ///
+    /// This method returns a guard that automatically returns the connection
+    /// to the pool when dropped, preventing memory leaks.
     ///
     /// This method is internal (pub(super)) to the mikrotik module.
     /// It implements connection pooling with exponential backoff for failed connections.
@@ -112,7 +173,7 @@ impl ConnectionPool {
         addr: &str,
         username: &str,
         password: &str,
-    ) -> Result<RouterOsConnection, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<PooledConnectionGuard, Box<dyn std::error::Error + Send + Sync>> {
         let key = format!("{addr}:{username}");
 
         tracing::trace!("Requesting connection for key: {}", key);
@@ -141,14 +202,14 @@ impl ConnectionPool {
         }
 
         // Check if we have an available connection
-        {
+        let conn = {
             let mut pool = self.connections.lock().await;
             if let Some(mut pooled) = pool.remove(&key) {
                 if pooled.last_used.elapsed() < self.max_idle_time {
                     tracing::debug!("Reusing connection from pool for {}", addr);
                     tracing::trace!("Connection last used: {:?} ago", pooled.last_used.elapsed());
                     pooled.last_used = tokio::time::Instant::now();
-                    return Ok(pooled.connection);
+                    Some(pooled.connection)
                 } else {
                     tracing::debug!("Connection expired for {}, removing", addr);
                     tracing::trace!(
@@ -157,56 +218,69 @@ impl ConnectionPool {
                         self.max_idle_time
                     );
                     // Don't put it back, let it drop
+                    None
                 }
+            } else {
+                None
             }
-        }
+        };
 
-        // Create new connection
-        tracing::debug!("Creating new connection for {}", addr);
-        tracing::trace!("Pool key: {}", key);
-        match RouterOsConnection::connect(addr).await {
-            Ok(mut conn) => {
-                tracing::trace!("Connection established, attempting login");
-                match conn.login(username, password).await {
-                    Ok(()) => {
-                        tracing::trace!("Login successful, connection ready");
-                        // Record success
-                        let mut states = self.connection_states.lock().await;
-                        if let Some(state) = states.get_mut(&key) {
-                            state.record_success();
-                            tracing::trace!("Connection state reset after successful login");
+        let conn = if let Some(c) = conn {
+            c
+        } else {
+            // Create new connection
+            tracing::debug!("Creating new connection for {}", addr);
+            tracing::trace!("Pool key: {}", key);
+            match RouterOsConnection::connect(addr).await {
+                Ok(mut conn) => {
+                    tracing::trace!("Connection established, attempting login");
+                    match conn.login(username, password).await {
+                        Ok(()) => {
+                            tracing::trace!("Login successful, connection ready");
+                            // Record success
+                            let mut states = self.connection_states.lock().await;
+                            if let Some(state) = states.get_mut(&key) {
+                                state.record_success();
+                                tracing::trace!("Connection state reset after successful login");
+                            }
+                            conn
                         }
-                        Ok(conn)
-                    }
-                    Err(e) => {
-                        tracing::trace!("Login failed: {}", e);
-                        // Record error
-                        let mut states = self.connection_states.lock().await;
-                        if let Some(state) = states.get_mut(&key) {
-                            state.record_error();
-                            tracing::trace!(
-                                "Login error recorded, consecutive errors: {}",
-                                state.consecutive_errors
-                            );
+                        Err(e) => {
+                            tracing::trace!("Login failed: {}", e);
+                            // Record error
+                            let mut states = self.connection_states.lock().await;
+                            if let Some(state) = states.get_mut(&key) {
+                                state.record_error();
+                                tracing::trace!(
+                                    "Login error recorded, consecutive errors: {}",
+                                    state.consecutive_errors
+                                );
+                            }
+                            return Err(e);
                         }
-                        Err(e)
                     }
                 }
-            }
-            Err(e) => {
-                tracing::trace!("Connection failed: {}", e);
-                // Record connection error
-                let mut states = self.connection_states.lock().await;
-                if let Some(state) = states.get_mut(&key) {
-                    state.record_error();
-                    tracing::trace!(
-                        "Connection error recorded, consecutive errors: {}",
-                        state.consecutive_errors
-                    );
+                Err(e) => {
+                    tracing::trace!("Connection failed: {}", e);
+                    // Record connection error
+                    let mut states = self.connection_states.lock().await;
+                    if let Some(state) = states.get_mut(&key) {
+                        state.record_error();
+                        tracing::trace!(
+                            "Connection error recorded, consecutive errors: {}",
+                            state.consecutive_errors
+                        );
+                    }
+                    return Err(e);
                 }
-                Err(e)
             }
-        }
+        };
+
+        Ok(PooledConnectionGuard {
+            connection: Some(conn),
+            pool: self.clone(),
+            key,
+        })
     }
 
     /// Record successful operation
@@ -242,26 +316,6 @@ impl ConnectionPool {
         // Active connections are those removed from pool temporarily
         let active = 0;
         (total, active)
-    }
-
-    /// Release a connection back to the pool
-    pub(super) async fn release_connection(
-        &self,
-        addr: &str,
-        username: &str,
-        conn: RouterOsConnection,
-    ) {
-        let key = format!("{addr}:{username}");
-        let mut pool = self.connections.lock().await;
-
-        tracing::debug!("Returning connection to pool for {}", addr);
-        pool.insert(
-            key,
-            PooledConnection {
-                connection: conn,
-                last_used: tokio::time::Instant::now(),
-            },
-        );
     }
 
     /// Clean up expired connections
