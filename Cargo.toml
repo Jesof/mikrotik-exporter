@@ -26,8 +26,8 @@ panic = "abort"
 
 [dependencies]
 # HTTP server
-axum = "0.8.7"
-tokio = { version = "1.48.0", features = [
+axum = "0.8.8"
+tokio = { version = "1.49.0", features = [
     "macros",
     "rt-multi-thread",
     "test-util",
@@ -37,18 +37,18 @@ tokio = { version = "1.48.0", features = [
 
 # Serialization
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0"
+serde_json = "1.0.149"
 
 # Logging
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.20", features = [
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = [
     "env-filter",
     "fmt",
     "time",
 ] }
 
 # Error handling
-thiserror = "2.0"
+thiserror = "2.0.18"
 
 # Environment variables
 dotenvy = "0.15.7"

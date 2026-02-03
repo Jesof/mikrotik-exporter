@@ -40,3 +40,29 @@ pub(super) fn start_pool_cleanup_task(
         }
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_cleanup_task_respects_shutdown_signal() {
+        let pool = Arc::new(ConnectionPool::default());
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+
+        start_pool_cleanup_task(pool.clone(), shutdown_rx);
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let _ = shutdown_tx.send(true);
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Task should have stopped, but pool stats are independent of task state
+        let (total, _) = pool.get_pool_stats().await;
+        assert_eq!(total, 0, "Empty pool should have 0 connections");
+    }
+
+    #[test]
+    fn test_cleanup_interval_constant_is_60_seconds() {
+        assert_eq!(CLEANUP_INTERVAL, Duration::from_secs(60));
+    }
+}

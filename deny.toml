@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Jesof
+#
+# cargo-deny configuration for vulnerability and dependency scanning
+#
+# Run checks with:
+#   cargo deny check advisories     # Security vulnerabilities only
+#   cargo deny check licenses       # License compliance
+#   cargo deny check bans           # Banned/duplicate dependencies
+#   cargo deny check sources        # Source validation
+#   cargo deny check all            # All checks
+#
+# Install cargo-deny if needed:
+#   cargo install cargo-deny
+#
+# For more info: https://embarkstudios.github.io/cargo-deny/
+#
+# Tested with: cargo-deny 0.19.0
+
+[graph]
+# Target platforms for this project (Linux/macOS on x86_64/aarch64)
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-unknown-linux-musl",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+]
+# Build dependency graph with default features only (not all-features)
+all-features = false
+no-default-features = false
+
+[output]
+# Maximum depth for feature display in diagnostics (1 = show direct features only)
+feature-depth = 1
+
+[advisories]
+# Advisory database configuration (default: RustSec)
+# db-path = "$CARGO_HOME/advisory-dbs"
+# db-urls = ["https://github.com/rustsec/advisory-db"]
+
+# Security vulnerability and maintenance checks
+yanked = "deny"
+# Levels for unmaintained/unsound: 'all', 'workspace', 'transitive', 'none'
+# 'workspace' = fail only for direct workspace dependencies
+unmaintained = "workspace"
+unsound = "workspace"
+
+# Ignore specific advisories (format: RUSTSEC-YYYY-NNNN or crate@version)
+ignore = []
+
+[licenses]
+# High confidence threshold for license detection (0.8-0.95 recommended, default: 0.8)
+# Higher values require closer match to canonical SPDX license text
+confidence-threshold = 0.93
+
+# Explicitly allowed licenses (permissive OSI-approved only)
+# All other licenses (GPL, AGPL, LGPL, etc.) are denied by default
+# See https://spdx.org/licenses/ for valid SPDX 3.11 identifiers
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+]
+
+# Per-crate license exceptions (use sparingly for edge cases)
+exceptions = []
+
+[licenses.private]
+# Ignore license checks for unpublished workspace crates
+ignore = false
+
+[bans]
+# Deny multiple versions of the same crate (forces dependency resolution)
+multiple-versions = "deny"
+
+# Deny wildcard (*) version dependencies
+wildcards = "deny"
+
+# Graph highlighting for duplicate version diagnostics
+# Options: 'lowest-version', 'simplest-path', 'all'
+highlight = "all"
+
+# Default feature lint levels
+workspace-default-features = "allow"
+external-default-features = "allow"
+
+# Allow list for specific crates (deny-by-default mode)
+allow = []
+
+# If true, workspace members are auto-allowed even in deny-by-default mode
+allow-workspace = false
+
+# Explicitly banned crates
+deny = []
+
+# Skip specific crate versions during duplicate detection
+skip = []
+
+# Skip entire dependency trees from duplicate checks (very heavy hammer)
+skip-tree = []
+
+[sources]
+# Supply chain security: deny unknown sources
+unknown-registry = "deny"
+unknown-git = "deny"
+
+# Only allow crates.io registry
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+# Allowed git repositories (currently none)
+allow-git = []
