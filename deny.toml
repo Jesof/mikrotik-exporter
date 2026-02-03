@@ -1,9 +1,13 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Jesof
+#
 # cargo-deny configuration for vulnerability and dependency scanning
 #
 # Run checks with:
 #   cargo deny check advisories     # Security vulnerabilities only
 #   cargo deny check licenses       # License compliance
 #   cargo deny check bans           # Banned/duplicate dependencies
+#   cargo deny check sources        # Source validation
 #   cargo deny check all            # All checks
 #
 # Install cargo-deny if needed:
@@ -11,33 +15,70 @@
 #
 # For more info: https://embarkstudios.github.io/cargo-deny/
 
+[graph]
+# Target platforms for this project
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-unknown-linux-musl",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+]
+# Use all features when building dependency graph
+all-features = false
+
+[output]
+# Maximum depth for feature display in diagnostics
+feature-depth = 1
+
 [advisories]
-# Advisory database configuration
-# db-path = "$CARGO_HOME/advisory-dbs"
-# db-urls = ["https://github.com/rustsec/advisory-db"]
-# Ignore specific advisories (format: RUSTSEC-YYYY-NNNN or crate@version)
+# Check for security vulnerabilities, unmaintained, and unsound crates
+version = 2
+yanked = "deny"
+# Levels: 'all', 'workspace', 'transitive', 'none'
+unmaintained = "workspace"
+unsound = "workspace"
+# Ignore specific advisories (format: RUSTSEC-YYYY-NNNN)
 ignore = []
 
 [licenses]
-# List of explicitly allowed licenses
-# See https://spdx.org/licenses/ for list of valid SPDX identifiers
+# High confidence threshold for license detection from text (0.8-0.95 recommended)
+confidence-threshold = 0.93
+# List of explicitly allowed licenses (permissive OSI-approved only)
+# All other licenses (including GPL, AGPL, LGPL) are denied by default
+# See https://spdx.org/licenses/ for valid SPDX identifiers
 allow = [
     "MIT",
     "Apache-2.0",
-    "Apache-2.0 WITH LLVM-exception",
     "BSD-3-Clause",
     "Unicode-3.0",
 ]
-# Confidence threshold for detecting licenses from text (0.0 to 1.0)
-confidence-threshold = 0.8
+# Per-crate exceptions (use sparingly)
+exceptions = []
 
 [bans]
-# Multiple versions of the same crate
-multiple-versions = "warn"
-# Wildcard dependencies
-wildcards = "warn"
+# Deny multiple versions of same crate (forces resolution)
+multiple-versions = "deny"
+# Deny wildcard version dependencies (unpinned versions)
+wildcards = "deny"
+# Allow external default features
+external-default-features = "allow"
+
+# Skip known acceptable duplicate version scenarios
+skip = []
+
+# Skip entire dependency trees from duplicate checks (use sparingly)
+skip-tree = []
+
+# Explicitly banned crates (security, maintenance, or policy reasons)
+deny = []
 
 [sources]
-# Unknown registries and git sources
-unknown-registry = "warn"
-unknown-git = "warn"
+# Deny unknown registries and git sources for supply chain security
+unknown-registry = "deny"
+unknown-git = "deny"
+# Only allow crates.io
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# Allowed git sources (currently none)
+allow-git = []
