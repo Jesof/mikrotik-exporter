@@ -73,7 +73,7 @@ impl MikroTikClient {
         let system_result = conn.command("/system/resource/print", &[]).await;
         let interfaces_result = conn.command("/interface/print", &[]).await;
 
-        // Check if operations succeeded and record state
+        // Record connection state BEFORE dropping guard to prevent race condition
         let success = system_result.is_ok() && interfaces_result.is_ok();
         if success {
             self.pool
@@ -85,8 +85,10 @@ impl MikroTikClient {
                 .await;
         }
 
-        // Connection automatically returned to pool when guard is dropped
+        // Explicitly drop guard AFTER state is recorded
+        drop(guard);
 
+        // Now process results after connection is returned to pool with correct state
         let system_sentences = system_result?;
         let interfaces_sentences = interfaces_result?;
 

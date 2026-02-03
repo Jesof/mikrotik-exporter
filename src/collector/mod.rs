@@ -7,7 +7,7 @@
 
 mod cleanup;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::{RwLock, watch};
 use tokio::task::JoinHandle;
@@ -84,7 +84,11 @@ pub fn start_collection_loop(
                 }
             }
 
+            // Track active interfaces for cleanup
+            let active_interfaces = Arc::new(tokio::sync::Mutex::new(HashSet::new()));
+
             // Collect metrics from all routers
+            let mut tasks = Vec::new();
             for router in &config.routers {
                 let router_config = router.clone();
                 let client = MikroTikClient::with_pool(router_config.clone(), pool.clone());
@@ -95,13 +99,26 @@ pub fn start_collection_loop(
                 };
                 let pool_ref = pool.clone();
                 let cache_ref = system_cache.clone();
+                let active_ifaces = active_interfaces.clone();
 
-                tokio::spawn(async move {
+                let task = tokio::spawn(async move {
                     tracing::trace!("Starting metrics collection for router: {}", router_name);
                     let start = std::time::Instant::now();
                     match client.collect_metrics().await {
                         Ok(m) => {
                             let duration = start.elapsed().as_secs_f64();
+
+                            // Track active interfaces
+                            {
+                                let mut active = active_ifaces.lock().await;
+                                for iface in &m.interfaces {
+                                    active.insert(crate::metrics::InterfaceLabels {
+                                        router: router_name.clone(),
+                                        interface: iface.name.clone(),
+                                    });
+                                }
+                            }
+
                             metrics_ref.update_metrics(&m).await;
                             metrics_ref.record_scrape_success(&router_label);
                             metrics_ref.record_scrape_duration(&router_label, duration);
@@ -162,6 +179,12 @@ pub fn start_collection_loop(
                         }
                     }
                 });
+                tasks.push(task);
+            }
+
+            // Wait for all collection tasks to complete
+            for task in tasks {
+                let _ = task.await;
             }
 
             // Update pool statistics after all routers processed
@@ -169,16 +192,14 @@ pub fn start_collection_loop(
             metrics.update_pool_stats(total, active);
 
             // Periodic cleanup of stale interface metrics
-            // TODO: Implement proper interface tracking to enable cleanup
-            // For now, this is a placeholder. Full implementation would require:
-            // 1. Tracking active interfaces during each collection cycle
-            // 2. Calling metrics.cleanup_stale_interfaces() with the current set
-            // 3. This prevents unbounded HashMap growth when interfaces are added/removed
             collection_cycle += 1;
             if collection_cycle % CLEANUP_EVERY_N_CYCLES == 0 {
+                let active_ifaces = active_interfaces.lock().await;
+                metrics.cleanup_stale_interfaces(&active_ifaces).await;
                 tracing::debug!(
-                    "Cleanup cycle {} (interface tracking not yet implemented)",
-                    collection_cycle
+                    "Cleanup cycle {} completed (tracked {} active interfaces)",
+                    collection_cycle,
+                    active_ifaces.len()
                 );
             }
         }

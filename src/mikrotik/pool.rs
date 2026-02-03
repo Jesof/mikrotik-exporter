@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, mpsc};
 
 use super::connection::RouterOsConnection;
 
@@ -44,6 +44,7 @@ pub struct ConnectionPool {
     connections: Arc<Mutex<HashMap<String, PooledConnection>>>,
     connection_states: Arc<Mutex<HashMap<String, ConnectionState>>>,
     max_idle_time: Duration,
+    return_tx: mpsc::UnboundedSender<(String, RouterOsConnection)>,
 }
 
 /// RAII guard for pooled connections
@@ -66,20 +67,14 @@ impl PooledConnectionGuard {
 impl Drop for PooledConnectionGuard {
     fn drop(&mut self) {
         if let Some(conn) = self.connection.take() {
-            let pool = self.pool.clone();
-            let key = self.key.clone();
-            // Return connection to pool asynchronously
-            tokio::spawn(async move {
-                let mut pool_connections = pool.connections.lock().await;
-                tracing::debug!("Returning connection to pool (via Drop): {}", key);
-                pool_connections.insert(
-                    key,
-                    PooledConnection {
-                        connection: conn,
-                        last_used: tokio::time::Instant::now(),
-                    },
+            // Send connection back to pool via channel (non-blocking)
+            // If send fails, pool is shutting down - connection will be dropped
+            if self.pool.return_tx.send((self.key.clone(), conn)).is_err() {
+                tracing::trace!(
+                    "Failed to return connection (pool shutting down): {}",
+                    self.key
                 );
-            });
+            }
         }
     }
 }
@@ -154,10 +149,36 @@ impl Default for ConnectionPool {
 
 impl ConnectionPool {
     pub fn new() -> Self {
+        let (return_tx, return_rx) = mpsc::unbounded_channel();
+        let connections = Arc::new(Mutex::new(HashMap::new()));
+        let connection_states = Arc::new(Mutex::new(HashMap::new()));
+
+        // Try to spawn background task for connection returns
+        // Only works if called from within tokio runtime context
+        if tokio::runtime::Handle::try_current().is_ok() {
+            let connections_clone = connections.clone();
+            tokio::spawn(async move {
+                let mut rx = return_rx;
+                while let Some((key, conn)) = rx.recv().await {
+                    let mut pool = connections_clone.lock().await;
+                    tracing::trace!("Connection returned to pool via channel: {}", key);
+                    pool.insert(
+                        key,
+                        PooledConnection {
+                            connection: conn,
+                            last_used: tokio::time::Instant::now(),
+                        },
+                    );
+                }
+                tracing::debug!("Connection return channel closed");
+            });
+        }
+
         Self {
-            connections: Arc::new(Mutex::new(HashMap::new())),
-            connection_states: Arc::new(Mutex::new(HashMap::new())),
+            connections,
+            connection_states,
             max_idle_time: timeouts::POOL_IDLE_TIMEOUT,
+            return_tx,
         }
     }
 
