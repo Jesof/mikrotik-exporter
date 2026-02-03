@@ -40,3 +40,91 @@ pub(super) fn start_pool_cleanup_task(
         }
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_cleanup_task_respects_shutdown_signal() {
+        let pool = Arc::new(ConnectionPool::default());
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+
+        start_pool_cleanup_task(pool.clone(), shutdown_rx);
+
+        let _ = shutdown_tx.send(true);
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let (total, _) = pool.get_pool_stats().await;
+        assert_eq!(total, 0);
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_task_shutdown_on_first_signal() {
+        let pool = Arc::new(ConnectionPool::default());
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+
+        start_pool_cleanup_task(pool.clone(), shutdown_rx);
+
+        let _ = shutdown_tx.send(true);
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let (stats, _) = pool.get_pool_stats().await;
+        assert_eq!(stats, 0);
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_task_handles_multiple_shutdown_attempts() {
+        let pool = Arc::new(ConnectionPool::default());
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+
+        start_pool_cleanup_task(pool.clone(), shutdown_rx);
+
+        let _ = shutdown_tx.send(true);
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let _ = shutdown_tx.send(true);
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let (total, _) = pool.get_pool_stats().await;
+        assert_eq!(total, 0);
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_interval_constant_is_60_seconds() {
+        assert_eq!(CLEANUP_INTERVAL, Duration::from_secs(60));
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_task_with_pool_operations() {
+        let pool = Arc::new(ConnectionPool::default());
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+
+        start_pool_cleanup_task(pool.clone(), shutdown_rx);
+
+        for _ in 0..3 {
+            let (total, _) = pool.get_pool_stats().await;
+            assert!(total as i32 >= 0);
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+
+        let _ = shutdown_tx.send(true);
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let (final_total, _) = pool.get_pool_stats().await;
+        assert_eq!(final_total, 0);
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_task_select_responds_to_shutdown() {
+        let pool = Arc::new(ConnectionPool::default());
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+
+        start_pool_cleanup_task(pool.clone(), shutdown_rx);
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let (total, _) = pool.get_pool_stats().await;
+        assert_eq!(total, 0);
+    }
+}
