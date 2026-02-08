@@ -397,6 +397,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn make_interface(
         name: &str,
         rx_bytes: u64,
@@ -705,14 +706,14 @@ mod tests {
                 .system_free_memory
                 .get_or_create(&router_label)
                 .get(),
-            512 * 1024 * 1024 as i64
+            512 * 1024 * 1024
         );
         assert_eq!(
             registry
                 .system_total_memory
                 .get_or_create(&router_label)
                 .get(),
-            1024 * 1024 * 1024 as i64
+            1024 * 1024 * 1024
         );
     }
 }
