@@ -359,13 +359,12 @@ pub(super) fn parse_connection_tracking(
 
     for s in sentences {
         if let Some(src) = s.get("src-address") {
-            // Extract IP without port (format: "192.168.1.1:12345")
-            let src_ip = src.split(':').next().unwrap_or(src);
+            let src_ip = extract_src_ip(src);
             let protocol = s
                 .get("protocol")
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string());
-            let key = (src_ip.to_string(), protocol);
+            let key = (src_ip, protocol);
             *aggregated.entry(key).or_insert(0) += 1;
         }
     }
@@ -380,6 +379,34 @@ pub(super) fn parse_connection_tracking(
             ip_version: ip_version.to_string(),
         })
         .collect()
+}
+
+/// Extract the source IP address from a RouterOS connection tracking entry.
+///
+/// Handles IPv4 with port (`192.168.1.1:12345`), IPv6 with brackets
+/// (`[::1]:12345`), and bare IPs without ports.
+#[must_use]
+fn extract_src_ip(src: &str) -> String {
+    if let Ok(socket) = src.parse::<std::net::SocketAddr>() {
+        return socket.ip().to_string();
+    }
+
+    if let Some(stripped) = src.strip_prefix('[') {
+        if let Some((ip, _port)) = stripped.split_once(":]") {
+            return ip.to_string();
+        }
+        if let Some((ip, _rest)) = stripped.split_once(']') {
+            return ip.to_string();
+        }
+    }
+
+    if let Some((ip, _port)) = src.rsplit_once(':') {
+        if ip.parse::<std::net::IpAddr>().is_ok() || ip.contains('.') {
+            return ip.to_string();
+        }
+    }
+
+    src.to_string()
 }
 
 #[cfg(test)]
@@ -608,7 +635,7 @@ mod tests {
         let result = parse_connection_tracking(&[conn], "ipv6");
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].src_address, "[");
+        assert_eq!(result[0].src_address, "::1");
         assert_eq!(result[0].protocol, "tcp");
         assert_eq!(result[0].ip_version, "ipv6");
     }

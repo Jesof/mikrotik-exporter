@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::{Mutex, mpsc};
 
@@ -43,6 +44,7 @@ mod backoff {
 pub struct ConnectionPool {
     connections: Arc<Mutex<HashMap<String, PooledConnection>>>,
     connection_states: Arc<Mutex<HashMap<String, ConnectionState>>>,
+    active_connections: Arc<AtomicUsize>,
     max_idle_time: Duration,
     return_tx: mpsc::UnboundedSender<(String, RouterOsConnection)>,
 }
@@ -70,11 +72,20 @@ impl Drop for PooledConnectionGuard {
             // Send connection back to pool via channel (non-blocking)
             // If send fails, pool is shutting down - connection will be dropped
             if self.pool.return_tx.send((self.key.clone(), conn)).is_err() {
-                tracing::trace!(
+                tracing::debug!(
                     "Failed to return connection (pool shutting down): {}",
                     self.key
                 );
             }
+        }
+
+        let prev = self.pool.active_connections.fetch_sub(1, Ordering::Relaxed);
+        if prev == 0 {
+            self.pool.active_connections.store(0, Ordering::Relaxed);
+            tracing::warn!(
+                "Active connection count underflow detected for key: {}",
+                self.key
+            );
         }
     }
 }
@@ -152,6 +163,7 @@ impl ConnectionPool {
         let (return_tx, return_rx) = mpsc::unbounded_channel();
         let connections = Arc::new(Mutex::new(HashMap::new()));
         let connection_states = Arc::new(Mutex::new(HashMap::new()));
+        let active_connections = Arc::new(AtomicUsize::new(0));
 
         // Try to spawn background task for connection returns
         // Only works if called from within tokio runtime context
@@ -177,6 +189,7 @@ impl ConnectionPool {
         Self {
             connections,
             connection_states,
+            active_connections,
             max_idle_time: timeouts::POOL_IDLE_TIMEOUT,
             return_tx,
         }
@@ -297,6 +310,8 @@ impl ConnectionPool {
             }
         };
 
+        self.active_connections.fetch_add(1, Ordering::Relaxed);
+
         Ok(PooledConnectionGuard {
             connection: Some(conn),
             pool: self.clone(),
@@ -335,7 +350,7 @@ impl ConnectionPool {
         let total = pool.len();
         // All connections in pool are currently idle (not in use)
         // Active connections are those removed from pool temporarily
-        let active = 0;
+        let active = self.active_connections.load(Ordering::Relaxed);
         (total, active)
     }
 

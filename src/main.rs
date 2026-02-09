@@ -55,14 +55,45 @@ async fn main() -> Result<()> {
     // Graceful shutdown channel
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
-    // Wait for Ctrl+C
+    // Wait for shutdown signals (Ctrl+C or SIGTERM)
     tokio::spawn({
         let shutdown_tx = shutdown_tx.clone();
         async move {
-            if tokio::signal::ctrl_c().await.is_ok() {
-                tracing::info!("Shutdown signal received");
-                let _ = shutdown_tx.send(true);
+            #[cfg(unix)]
+            {
+                use tokio::signal::unix::{SignalKind, signal};
+
+                let mut sigterm = match signal(SignalKind::terminate()) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::warn!("Failed to create SIGTERM handler: {}", e);
+                        // Fallback to just Ctrl+C
+                        if tokio::signal::ctrl_c().await.is_ok() {
+                            tracing::info!("Shutdown signal received (Ctrl+C)");
+                            let _ = shutdown_tx.send(true);
+                        }
+                        return;
+                    }
+                };
+
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {
+                        tracing::info!("Shutdown signal received (Ctrl+C)");
+                    }
+                    _ = sigterm.recv() => {
+                        tracing::info!("Shutdown signal received (SIGTERM)");
+                    }
+                }
             }
+
+            #[cfg(not(unix))]
+            {
+                if tokio::signal::ctrl_c().await.is_ok() {
+                    tracing::info!("Shutdown signal received (Ctrl+C)");
+                }
+            }
+
+            let _ = shutdown_tx.send(true);
         }
     });
 

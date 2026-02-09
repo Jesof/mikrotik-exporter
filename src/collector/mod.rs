@@ -84,6 +84,8 @@ pub fn start_collection_loop(
                 }
             }
 
+            let cycle_start = std::time::Instant::now();
+
             // Track active interfaces for cleanup
             let active_interfaces = Arc::new(tokio::sync::Mutex::new(HashSet::new()));
 
@@ -190,6 +192,9 @@ pub fn start_collection_loop(
             // Update pool statistics after all routers processed
             let (total, active) = pool.get_pool_stats().await;
             metrics.update_pool_stats(total, active);
+
+            // Record full collection cycle duration
+            metrics.record_collection_cycle_duration(cycle_start.elapsed().as_secs_f64());
 
             // Periodic cleanup of stale interface metrics
             collection_cycle += 1;
