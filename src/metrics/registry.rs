@@ -9,6 +9,7 @@ use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -50,6 +51,8 @@ pub struct MetricsRegistry {
     connection_tracking_count: Family<ConntrackLabels, Gauge>,
     // previous snapshot for counters
     prev_iface: Arc<Mutex<std::collections::HashMap<InterfaceLabels, InterfaceSnapshot>>>,
+    // previous connection tracking labels
+    prev_conntrack: Arc<Mutex<HashSet<ConntrackLabels>>>,
 }
 
 impl MetricsRegistry {
@@ -209,6 +212,7 @@ impl MetricsRegistry {
             connection_pool_active,
             connection_tracking_count,
             prev_iface: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            prev_conntrack: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -312,6 +316,7 @@ impl MetricsRegistry {
         self.system_info.get_or_create(&info_labels).set(1);
 
         // Update connection tracking metrics
+        let mut current_conntrack = HashSet::new();
         for ct in &metrics.connection_tracking {
             let ct_labels = ConntrackLabels {
                 router: metrics.router_name.clone(),
@@ -319,10 +324,18 @@ impl MetricsRegistry {
                 protocol: ct.protocol.clone(),
                 ip_version: ct.ip_version.clone(),
             };
+            current_conntrack.insert(ct_labels.clone());
             #[allow(clippy::cast_possible_wrap)]
             self.connection_tracking_count
                 .get_or_create(&ct_labels)
                 .set(ct.connection_count as i64);
+        }
+        {
+            let mut prev = self.prev_conntrack.lock().await;
+            for stale in prev.difference(&current_conntrack) {
+                self.connection_tracking_count.get_or_create(stale).set(0);
+            }
+            *prev = current_conntrack;
         }
     }
 
