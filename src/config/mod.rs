@@ -5,6 +5,7 @@
 //!
 //! Loads and parses configuration from environment variables and JSON.
 
+use secrecy::SecretString;
 use serde::Deserialize;
 
 #[cfg(test)]
@@ -40,7 +41,7 @@ pub struct RouterConfig {
     pub name: String,
     pub address: String,
     pub username: String,
-    pub password: String,
+    pub password: SecretString,
 }
 
 impl RouterConfig {
@@ -110,13 +111,14 @@ impl Config {
                 .unwrap_or_else(|_| defaults::ROUTEROS_USERNAME.to_string());
             let password = std::env::var("ROUTEROS_PASSWORD")
                 .unwrap_or_else(|_| defaults::ROUTEROS_PASSWORD.to_string());
+            let password_secret = SecretString::new(password.into_boxed_str());
 
             if let Some(addr) = address {
                 vec![RouterConfig {
                     name: "default".to_string(),
                     address: addr,
                     username,
-                    password,
+                    password: password_secret,
                 }]
             } else {
                 tracing::warn!(

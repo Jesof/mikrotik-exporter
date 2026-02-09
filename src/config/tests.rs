@@ -6,6 +6,7 @@
 #[cfg(test)]
 mod test {
     use super::super::*;
+    use secrecy::ExposeSecret;
 
     #[test]
     fn test_config_default() {
@@ -28,7 +29,7 @@ mod test {
         assert_eq!(router.name, "test-router");
         assert_eq!(router.address, "192.168.1.1:8728");
         assert_eq!(router.username, "admin");
-        assert_eq!(router.password, "secret");
+        assert_eq!(router.password.expose_secret(), "secret");
     }
 
     #[test]
@@ -60,7 +61,7 @@ mod test {
             name: "test-router".to_string(),
             address: "192.168.1.1:8728".to_string(),
             username: "admin".to_string(),
-            password: "password".to_string(),
+            password: secrecy::SecretString::new("password".to_string().into()),
         };
 
         assert!(config.validate().is_ok());
@@ -72,7 +73,7 @@ mod test {
             name: "  ".to_string(),
             address: "192.168.1.1:8728".to_string(),
             username: "admin".to_string(),
-            password: "password".to_string(),
+            password: "password".to_string().into(),
         };
 
         let result = config.validate();
@@ -86,7 +87,7 @@ mod test {
             name: "test-router".to_string(),
             address: "192.168.1.1".to_string(), // Missing port
             username: "admin".to_string(),
-            password: "password".to_string(),
+            password: "password".to_string().into(),
         };
 
         let result = config.validate();
@@ -100,7 +101,7 @@ mod test {
             name: "test-router".to_string(),
             address: "192.168.1.1:8728".to_string(),
             username: "  ".to_string(),
-            password: "password".to_string(),
+            password: "password".to_string().into(),
         };
 
         let result = config.validate();

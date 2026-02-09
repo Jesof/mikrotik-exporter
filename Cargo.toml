@@ -59,3 +59,7 @@ hex = "0.4"
 
 # Prometheus metrics
 prometheus-client = "0.24.0"
+
+# Secure credential handling
+secrecy = { version = "0.10.0", features = ["serde"] }
+zeroize = { version = "1.8.1", features = ["zeroize_derive"] }

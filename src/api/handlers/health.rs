@@ -104,7 +104,7 @@ mod tests {
                 name: "test-router".to_string(),
                 address: "192.168.1.1:8728".to_string(),
                 username: "admin".to_string(),
-                password: "password".to_string(),
+                password: secrecy::SecretString::new("password".to_string().into()),
             }],
             collection_interval_secs: 30,
         };

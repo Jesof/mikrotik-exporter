@@ -4,6 +4,7 @@
 //! High-level MikroTik client
 
 use crate::config::RouterConfig;
+use secrecy::ExposeSecret;
 use std::sync::Arc;
 
 use super::connection::{parse_interfaces, parse_system};
@@ -65,7 +66,7 @@ impl MikroTikClient {
             .get_connection(
                 &self.config.address,
                 &self.config.username,
-                &self.config.password,
+                self.config.password.expose_secret(),
             )
             .await?;
 
@@ -113,7 +114,7 @@ mod tests {
             name: "test-router".to_string(),
             address: "192.168.1.1:8728".to_string(),
             username: "admin".to_string(),
-            password: "password".to_string(),
+            password: "password".to_string().into(),
         };
 
         let pool = Arc::new(ConnectionPool::new());
@@ -129,7 +130,7 @@ mod tests {
             name: "test-router".to_string(),
             address: "invalid:address".to_string(),
             username: "admin".to_string(),
-            password: "password".to_string(),
+            password: "password".to_string().into(),
         };
 
         let pool = Arc::new(ConnectionPool::new());
