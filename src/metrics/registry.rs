@@ -39,9 +39,10 @@ pub struct MetricsRegistry {
     scrape_success: Family<RouterLabels, Counter>,
     scrape_errors: Family<RouterLabels, Counter>,
     // scrape timing metrics
-    scrape_duration_seconds: Family<RouterLabels, Gauge>,
+    scrape_duration_milliseconds: Family<RouterLabels, Gauge>,
     scrape_last_success_timestamp_seconds: Family<RouterLabels, Gauge>,
     connection_consecutive_errors: Family<RouterLabels, Gauge>,
+    collection_cycle_duration_milliseconds: Gauge,
     // connection pool metrics
     connection_pool_size: Gauge,
     connection_pool_active: Gauge,
@@ -141,11 +142,11 @@ impl MetricsRegistry {
             "Failed scrape cycles per router",
             scrape_errors.clone(),
         );
-        let scrape_duration_seconds = Family::<RouterLabels, Gauge>::default();
+        let scrape_duration_milliseconds = Family::<RouterLabels, Gauge>::default();
         registry.register(
             "mikrotik_scrape_duration_milliseconds",
             "Duration of last scrape in milliseconds",
-            scrape_duration_seconds.clone(),
+            scrape_duration_milliseconds.clone(),
         );
         let scrape_last_success_timestamp_seconds = Family::<RouterLabels, Gauge>::default();
         registry.register(
@@ -158,6 +159,12 @@ impl MetricsRegistry {
             "mikrotik_connection_consecutive_errors",
             "Number of consecutive connection errors",
             connection_consecutive_errors.clone(),
+        );
+        let collection_cycle_duration_milliseconds = Gauge::default();
+        registry.register(
+            "mikrotik_collection_cycle_duration_milliseconds",
+            "Duration of full collection cycle in milliseconds",
+            collection_cycle_duration_milliseconds.clone(),
         );
         let connection_pool_size = Gauge::default();
         registry.register(
@@ -194,9 +201,10 @@ impl MetricsRegistry {
             system_uptime_seconds,
             scrape_success,
             scrape_errors,
-            scrape_duration_seconds,
+            scrape_duration_milliseconds,
             scrape_last_success_timestamp_seconds,
             connection_consecutive_errors,
+            collection_cycle_duration_milliseconds,
             connection_pool_size,
             connection_pool_active,
             connection_tracking_count,
@@ -346,9 +354,16 @@ impl MetricsRegistry {
         // Store as milliseconds for better precision (will be interpreted as fractional seconds)
         #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
         let millis = (duration_secs * 1000.0).round() as i64;
-        self.scrape_duration_seconds
+        self.scrape_duration_milliseconds
             .get_or_create(labels)
             .set(millis);
+    }
+
+    pub fn record_collection_cycle_duration(&self, duration_secs: f64) {
+        // Store as milliseconds for better precision (will be interpreted as fractional seconds)
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+        let millis = (duration_secs * 1000.0).round() as i64;
+        self.collection_cycle_duration_milliseconds.set(millis);
     }
 
     pub fn update_connection_errors(&self, labels: &RouterLabels, consecutive_errors: u32) {
@@ -649,6 +664,17 @@ mod tests {
         registry.update_pool_stats(20, 8);
         assert_eq!(registry.connection_pool_size.get(), 20);
         assert_eq!(registry.connection_pool_active.get(), 8);
+    }
+
+    #[test]
+    fn test_record_collection_cycle_duration_sets_gauge() {
+        let registry = MetricsRegistry::new();
+
+        registry.record_collection_cycle_duration(0.012);
+        assert_eq!(registry.collection_cycle_duration_milliseconds.get(), 12);
+
+        registry.record_collection_cycle_duration(1.234);
+        assert_eq!(registry.collection_cycle_duration_milliseconds.get(), 1234);
     }
 
     #[test]
