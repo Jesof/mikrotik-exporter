@@ -7,7 +7,7 @@ use crate::config::RouterConfig;
 use secrecy::ExposeSecret;
 use std::sync::Arc;
 
-use super::connection::{parse_interfaces, parse_system};
+use super::connection::{parse_connection_tracking, parse_interfaces, parse_system};
 use super::pool::ConnectionPool;
 use super::types::RouterMetrics;
 
@@ -73,6 +73,8 @@ impl MikroTikClient {
         let conn = guard.get_mut();
         let system_result = conn.command("/system/resource/print", &[]).await;
         let interfaces_result = conn.command("/interface/print", &[]).await;
+        let conntrack_v4_result = conn.command("/ip/firewall/connection/print", &[]).await;
+        let conntrack_v6_result = conn.command("/ipv6/firewall/connection/print", &[]).await;
 
         // Record connection state BEFORE dropping guard to prevent race condition
         let success = system_result.is_ok() && interfaces_result.is_ok();
@@ -92,6 +94,11 @@ impl MikroTikClient {
         // Now process results after connection is returned to pool with correct state
         let system_sentences = system_result?;
         let interfaces_sentences = interfaces_result?;
+        let mut conntrack_v4 = parse_connection_tracking(&conntrack_v4_result.unwrap_or_default());
+        let conntrack_v6 = parse_connection_tracking(&conntrack_v6_result.unwrap_or_default());
+
+        // Merge IPv4 and IPv6 connection tracking data
+        conntrack_v4.extend(conntrack_v6);
 
         let system = parse_system(&system_sentences);
         let interfaces = parse_interfaces(&interfaces_sentences);
@@ -100,6 +107,7 @@ impl MikroTikClient {
             router_name: self.config.name.clone(),
             interfaces,
             system,
+            connection_tracking: conntrack_v4,
         })
     }
 }

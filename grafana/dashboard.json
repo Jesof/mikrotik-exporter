@@ -675,7 +675,7 @@
               }
             ]
           },
-          "unit": "Bps"
+          "unit": "bps"
         },
         "overrides": []
       },
@@ -708,7 +708,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_bytes_total{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "expr": "rate(mikrotik_interface_rx_bytes_total{router=\"$router\",interface=~\"$interface\"}[5m]) * 8",
           "legendFormat": "{{interface}} RX",
           "range": true,
           "refId": "A"
@@ -770,7 +770,7 @@
               }
             ]
           },
-          "unit": "Bps"
+          "unit": "bps"
         },
         "overrides": []
       },
@@ -803,7 +803,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_bytes_total{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "expr": "rate(mikrotik_interface_tx_bytes_total{router=\"$router\",interface=~\"$interface\"}[5m]) * 8",
           "legendFormat": "{{interface}} TX",
           "range": true,
           "refId": "A"
@@ -1233,6 +1233,296 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
+      "description": "Количество соединений по протоколам и IP-адресам источников",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "src_address"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
+      "id": 20,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Connections",
+            "desc": true
+          }
+        ]
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "topk(20, mikrotik_connection_tracking_count{router=\"$router\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Connection Tracking (Top 20 Sources)",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "router": true
+            },
+            "indexByName": {
+              "src_address": 0,
+              "protocol": 1,
+              "Value": 2
+            },
+            "renameByName": {
+              "Value": "Connections",
+              "protocol": "Protocol",
+              "src_address": "Source Address"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Распределение соединений по протоколам",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "stack"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 57
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (protocol) (mikrotik_connection_tracking_count{router=\"$router\"})",
+          "legendFormat": "{{protocol}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Connection Tracking by Protocol",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Общее количество отслеживаемых соединений",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10000
+              },
+              {
+                "color": "red",
+                "value": 50000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 57
+      },
+      "id": 22,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(mikrotik_connection_tracking_count{router=\"$router\"})",
+          "legendFormat": "Total Connections",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Total Tracked Connections",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "description": "Длительность сбора метрик в миллисекундах",
       "fieldConfig": {
         "defaults": {
@@ -1297,7 +1587,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 48
+        "y": 73
       },
       "id": 14,
       "options": {
@@ -1369,7 +1659,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 48
+        "y": 73
       },
       "id": 15,
       "options": {
@@ -1446,7 +1736,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 48
+        "y": 73
       },
       "id": 16,
       "options": {
@@ -1543,7 +1833,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 56
+        "y": 81
       },
       "id": 17,
       "options": {
@@ -1632,7 +1922,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 56
+        "y": 81
       },
       "id": 18,
       "options": {

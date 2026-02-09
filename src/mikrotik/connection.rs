@@ -10,7 +10,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
-use super::types::{InterfaceStats, SystemResource};
+use super::types::{ConnectionTrackingStats, InterfaceStats, SystemResource};
 
 /// Connection timeout (5 seconds)
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
@@ -347,6 +347,39 @@ pub(super) fn parse_interfaces(sentences: &[HashMap<String, String>]) -> Vec<Int
     out
 }
 
+/// Parse connection tracking entries and aggregate by source address and protocol
+pub(super) fn parse_connection_tracking(
+    sentences: &[HashMap<String, String>],
+) -> Vec<ConnectionTrackingStats> {
+    use std::collections::HashMap;
+
+    // Aggregate connections by (src_address, protocol)
+    let mut aggregated: HashMap<(String, String), u64> = HashMap::new();
+
+    for s in sentences {
+        if let Some(src) = s.get("src-address") {
+            // Extract IP without port (format: "192.168.1.1:12345")
+            let src_ip = src.split(':').next().unwrap_or(src);
+            let protocol = s
+                .get("protocol")
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string());
+            let key = (src_ip.to_string(), protocol);
+            *aggregated.entry(key).or_insert(0) += 1;
+        }
+    }
+
+    // Convert to Vec<ConnectionTrackingStats>
+    aggregated
+        .into_iter()
+        .map(|((src_address, protocol), count)| ConnectionTrackingStats {
+            src_address,
+            protocol,
+            connection_count: count,
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -479,5 +512,86 @@ mod tests {
 
         let result = parse_interfaces(&[data]);
         assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_connection_tracking_empty() {
+        let result = parse_connection_tracking(&[]);
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_connection_tracking_single() {
+        let mut conn = HashMap::new();
+        conn.insert("src-address".to_string(), "192.168.1.100:12345".to_string());
+        conn.insert("dst-address".to_string(), "8.8.8.8:53".to_string());
+        conn.insert("protocol".to_string(), "udp".to_string());
+
+        let result = parse_connection_tracking(&[conn]);
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].src_address, "192.168.1.100");
+        assert_eq!(result[0].protocol, "udp");
+        assert_eq!(result[0].connection_count, 1);
+    }
+
+    #[test]
+    fn test_parse_connection_tracking_aggregate_same_source() {
+        let mut conn1 = HashMap::new();
+        conn1.insert("src-address".to_string(), "192.168.1.100:12345".to_string());
+        conn1.insert("protocol".to_string(), "tcp".to_string());
+
+        let mut conn2 = HashMap::new();
+        conn2.insert("src-address".to_string(), "192.168.1.100:12346".to_string());
+        conn2.insert("protocol".to_string(), "tcp".to_string());
+
+        let result = parse_connection_tracking(&[conn1, conn2]);
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].src_address, "192.168.1.100");
+        assert_eq!(result[0].protocol, "tcp");
+        assert_eq!(result[0].connection_count, 2);
+    }
+
+    #[test]
+    fn test_parse_connection_tracking_different_protocols() {
+        let mut tcp_conn = HashMap::new();
+        tcp_conn.insert("src-address".to_string(), "192.168.1.100:12345".to_string());
+        tcp_conn.insert("protocol".to_string(), "tcp".to_string());
+
+        let mut udp_conn = HashMap::new();
+        udp_conn.insert("src-address".to_string(), "192.168.1.100:12346".to_string());
+        udp_conn.insert("protocol".to_string(), "udp".to_string());
+
+        let result = parse_connection_tracking(&[tcp_conn, udp_conn]);
+
+        assert_eq!(result.len(), 2);
+        let tcp = result.iter().find(|r| r.protocol == "tcp").unwrap();
+        let udp = result.iter().find(|r| r.protocol == "udp").unwrap();
+        assert_eq!(tcp.connection_count, 1);
+        assert_eq!(udp.connection_count, 1);
+    }
+
+    #[test]
+    fn test_parse_connection_tracking_missing_src_address() {
+        let mut conn = HashMap::new();
+        conn.insert("protocol".to_string(), "tcp".to_string());
+
+        let result = parse_connection_tracking(&[conn]);
+
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_connection_tracking_no_protocol() {
+        let mut conn = HashMap::new();
+        conn.insert("src-address".to_string(), "192.168.1.100:12345".to_string());
+
+        let result = parse_connection_tracking(&[conn]);
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].src_address, "192.168.1.100");
+        assert_eq!(result[0].protocol, "unknown");
+        assert_eq!(result[0].connection_count, 1);
     }
 }

@@ -27,12 +27,21 @@ pub struct SystemResource {
     pub board_name: String,
 }
 
+/// Connection tracking statistics per source address
+#[derive(Debug, Clone)]
+pub struct ConnectionTrackingStats {
+    pub src_address: String,
+    pub protocol: String,
+    pub connection_count: u64,
+}
+
 /// Complete metrics snapshot from a router
 #[derive(Debug, Clone)]
 pub struct RouterMetrics {
     pub router_name: String,
     pub interfaces: Vec<InterfaceStats>,
     pub system: SystemResource,
+    pub connection_tracking: Vec<ConnectionTrackingStats>,
 }
 
 #[cfg(test)]
@@ -97,6 +106,7 @@ mod tests {
                 version: "7.10".to_string(),
                 board_name: "test".to_string(),
             },
+            connection_tracking: Vec::new(),
         };
 
         assert_eq!(metrics.router_name, "main-router");

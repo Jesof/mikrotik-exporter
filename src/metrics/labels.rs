@@ -23,6 +23,13 @@ pub struct SystemInfoLabels {
     pub board: String,
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct ConntrackLabels {
+    pub router: String,
+    pub src_address: String,
+    pub protocol: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

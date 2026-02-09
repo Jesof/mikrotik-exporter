@@ -12,7 +12,7 @@ use prometheus_client::registry::Registry;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use super::labels::{InterfaceLabels, RouterLabels, SystemInfoLabels};
+use super::labels::{ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels};
 use super::parsers::parse_uptime_to_seconds;
 
 /// Snapshot of interface counters (`rx_bytes`, `tx_bytes`, `rx_packets`, `tx_packets`, `rx_errors`, `tx_errors`)
@@ -45,6 +45,8 @@ pub struct MetricsRegistry {
     // connection pool metrics
     connection_pool_size: Gauge,
     connection_pool_active: Gauge,
+    // connection tracking metrics
+    connection_tracking_count: Family<ConntrackLabels, Gauge>,
     // previous snapshot for counters
     prev_iface: Arc<Mutex<std::collections::HashMap<InterfaceLabels, InterfaceSnapshot>>>,
 }
@@ -169,6 +171,12 @@ impl MetricsRegistry {
             "Number of active connections in pool",
             connection_pool_active.clone(),
         );
+        let connection_tracking_count = Family::<ConntrackLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_connection_tracking_count",
+            "Number of tracked connections per source address and protocol",
+            connection_tracking_count.clone(),
+        );
 
         Self {
             registry: Arc::new(Mutex::new(registry)),
@@ -191,6 +199,7 @@ impl MetricsRegistry {
             connection_consecutive_errors,
             connection_pool_size,
             connection_pool_active,
+            connection_tracking_count,
             prev_iface: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
@@ -293,6 +302,19 @@ impl MetricsRegistry {
             board: metrics.system.board_name.clone(),
         };
         self.system_info.get_or_create(&info_labels).set(1);
+
+        // Update connection tracking metrics
+        for ct in &metrics.connection_tracking {
+            let ct_labels = ConntrackLabels {
+                router: metrics.router_name.clone(),
+                src_address: ct.src_address.clone(),
+                protocol: ct.protocol.clone(),
+            };
+            #[allow(clippy::cast_possible_wrap)]
+            self.connection_tracking_count
+                .get_or_create(&ct_labels)
+                .set(ct.connection_count as i64);
+        }
     }
 
     pub async fn encode_metrics(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
@@ -394,6 +416,7 @@ mod tests {
             router_name: router_name.to_string(),
             interfaces,
             system,
+            connection_tracking: Vec::new(),
         }
     }
 
