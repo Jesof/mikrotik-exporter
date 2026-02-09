@@ -33,6 +33,7 @@ pub struct ConnectionTrackingStats {
     pub src_address: String,
     pub protocol: String,
     pub connection_count: u64,
+    pub ip_version: String,
 }
 
 /// Complete metrics snapshot from a router

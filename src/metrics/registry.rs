@@ -309,6 +309,7 @@ impl MetricsRegistry {
                 router: metrics.router_name.clone(),
                 src_address: ct.src_address.clone(),
                 protocol: ct.protocol.clone(),
+                ip_version: ct.ip_version.clone(),
             };
             #[allow(clippy::cast_possible_wrap)]
             self.connection_tracking_count

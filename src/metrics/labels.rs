@@ -28,6 +28,7 @@ pub struct ConntrackLabels {
     pub router: String,
     pub src_address: String,
     pub protocol: String,
+    pub ip_version: String,
 }
 
 #[cfg(test)]

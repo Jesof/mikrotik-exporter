@@ -350,6 +350,7 @@ pub(super) fn parse_interfaces(sentences: &[HashMap<String, String>]) -> Vec<Int
 /// Parse connection tracking entries and aggregate by source address and protocol
 pub(super) fn parse_connection_tracking(
     sentences: &[HashMap<String, String>],
+    ip_version: &str,
 ) -> Vec<ConnectionTrackingStats> {
     use std::collections::HashMap;
 
@@ -376,6 +377,7 @@ pub(super) fn parse_connection_tracking(
             src_address,
             protocol,
             connection_count: count,
+            ip_version: ip_version.to_string(),
         })
         .collect()
 }
@@ -516,7 +518,7 @@ mod tests {
 
     #[test]
     fn test_parse_connection_tracking_empty() {
-        let result = parse_connection_tracking(&[]);
+        let result = parse_connection_tracking(&[], "ipv4");
         assert_eq!(result.len(), 0);
     }
 
@@ -527,12 +529,13 @@ mod tests {
         conn.insert("dst-address".to_string(), "8.8.8.8:53".to_string());
         conn.insert("protocol".to_string(), "udp".to_string());
 
-        let result = parse_connection_tracking(&[conn]);
+        let result = parse_connection_tracking(&[conn], "ipv4");
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].src_address, "192.168.1.100");
         assert_eq!(result[0].protocol, "udp");
         assert_eq!(result[0].connection_count, 1);
+        assert_eq!(result[0].ip_version, "ipv4");
     }
 
     #[test]
@@ -545,7 +548,7 @@ mod tests {
         conn2.insert("src-address".to_string(), "192.168.1.100:12346".to_string());
         conn2.insert("protocol".to_string(), "tcp".to_string());
 
-        let result = parse_connection_tracking(&[conn1, conn2]);
+        let result = parse_connection_tracking(&[conn1, conn2], "ipv4");
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].src_address, "192.168.1.100");
@@ -563,7 +566,7 @@ mod tests {
         udp_conn.insert("src-address".to_string(), "192.168.1.100:12346".to_string());
         udp_conn.insert("protocol".to_string(), "udp".to_string());
 
-        let result = parse_connection_tracking(&[tcp_conn, udp_conn]);
+        let result = parse_connection_tracking(&[tcp_conn, udp_conn], "ipv4");
 
         assert_eq!(result.len(), 2);
         let tcp = result.iter().find(|r| r.protocol == "tcp").unwrap();
@@ -577,7 +580,7 @@ mod tests {
         let mut conn = HashMap::new();
         conn.insert("protocol".to_string(), "tcp".to_string());
 
-        let result = parse_connection_tracking(&[conn]);
+        let result = parse_connection_tracking(&[conn], "ipv4");
 
         assert_eq!(result.len(), 0);
     }
@@ -587,11 +590,26 @@ mod tests {
         let mut conn = HashMap::new();
         conn.insert("src-address".to_string(), "192.168.1.100:12345".to_string());
 
-        let result = parse_connection_tracking(&[conn]);
+        let result = parse_connection_tracking(&[conn], "ipv4");
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].src_address, "192.168.1.100");
         assert_eq!(result[0].protocol, "unknown");
         assert_eq!(result[0].connection_count, 1);
+        assert_eq!(result[0].ip_version, "ipv4");
+    }
+
+    #[test]
+    fn test_parse_connection_tracking_ipv6() {
+        let mut conn = HashMap::new();
+        conn.insert("src-address".to_string(), "[::1]:12345".to_string());
+        conn.insert("protocol".to_string(), "tcp".to_string());
+
+        let result = parse_connection_tracking(&[conn], "ipv6");
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].src_address, "[");
+        assert_eq!(result[0].protocol, "tcp");
+        assert_eq!(result[0].ip_version, "ipv6");
     }
 }

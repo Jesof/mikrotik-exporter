@@ -94,8 +94,10 @@ impl MikroTikClient {
         // Now process results after connection is returned to pool with correct state
         let system_sentences = system_result?;
         let interfaces_sentences = interfaces_result?;
-        let mut conntrack_v4 = parse_connection_tracking(&conntrack_v4_result.unwrap_or_default());
-        let conntrack_v6 = parse_connection_tracking(&conntrack_v6_result.unwrap_or_default());
+        let mut conntrack_v4 =
+            parse_connection_tracking(&conntrack_v4_result.unwrap_or_default(), "ipv4");
+        let conntrack_v6 =
+            parse_connection_tracking(&conntrack_v6_result.unwrap_or_default(), "ipv6");
 
         // Merge IPv4 and IPv6 connection tracking data
         conntrack_v4.extend(conntrack_v6);
