@@ -9,7 +9,7 @@ use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -50,9 +50,9 @@ pub struct MetricsRegistry {
     // connection tracking metrics
     connection_tracking_count: Family<ConntrackLabels, Gauge>,
     // previous snapshot for counters
-    prev_iface: Arc<Mutex<std::collections::HashMap<InterfaceLabels, InterfaceSnapshot>>>,
-    // previous connection tracking labels
-    prev_conntrack: Arc<Mutex<HashSet<ConntrackLabels>>>,
+    prev_iface: Arc<Mutex<HashMap<InterfaceLabels, InterfaceSnapshot>>>,
+    // previous connection tracking labels per router
+    prev_conntrack: Arc<Mutex<HashMap<String, HashSet<ConntrackLabels>>>>,
 }
 
 impl MetricsRegistry {
@@ -211,8 +211,8 @@ impl MetricsRegistry {
             connection_pool_size,
             connection_pool_active,
             connection_tracking_count,
-            prev_iface: Arc::new(Mutex::new(std::collections::HashMap::new())),
-            prev_conntrack: Arc::new(Mutex::new(HashSet::new())),
+            prev_iface: Arc::new(Mutex::new(HashMap::new())),
+            prev_conntrack: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -331,11 +331,14 @@ impl MetricsRegistry {
                 .set(ct.connection_count as i64);
         }
         {
-            let mut prev = self.prev_conntrack.lock().await;
-            for stale in prev.difference(&current_conntrack) {
+            let mut prev_map = self.prev_conntrack.lock().await;
+            let prev_labels = prev_map
+                .entry(metrics.router_name.clone())
+                .or_insert_with(HashSet::new);
+            for stale in prev_labels.difference(&current_conntrack) {
                 self.connection_tracking_count.get_or_create(stale).set(0);
             }
-            *prev = current_conntrack;
+            *prev_labels = current_conntrack;
         }
     }
 
@@ -434,7 +437,7 @@ impl Default for MetricsRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mikrotik::{InterfaceStats, SystemResource};
+    use crate::mikrotik::{ConnectionTrackingStats, InterfaceStats, SystemResource};
 
     fn make_router_metrics(
         router_name: &str,
@@ -446,6 +449,20 @@ mod tests {
             interfaces,
             system,
             connection_tracking: Vec::new(),
+        }
+    }
+
+    fn make_conntrack(
+        src_address: &str,
+        protocol: &str,
+        connection_count: u64,
+        ip_version: &str,
+    ) -> ConnectionTrackingStats {
+        ConnectionTrackingStats {
+            src_address: src_address.to_string(),
+            protocol: protocol.to_string(),
+            connection_count,
+            ip_version: ip_version.to_string(),
         }
     }
 
@@ -777,6 +794,120 @@ mod tests {
                 .get_or_create(&router_label)
                 .get(),
             1024 * 1024 * 1024
+        );
+    }
+
+    #[tokio::test]
+    async fn test_connection_tracking_multi_router() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("ether1", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d2h3m4s");
+
+        // First update for router1 with TCP connections
+        let mut metrics1 = make_router_metrics("router1", vec![iface.clone()], system.clone());
+        metrics1.connection_tracking = vec![
+            make_conntrack("192.168.1.1", "tcp", 100, "ipv4"),
+            make_conntrack("192.168.1.1", "udp", 50, "ipv4"),
+        ];
+        registry.update_metrics(&metrics1).await;
+
+        // First update for router2 with different connections
+        let mut metrics2 = make_router_metrics("router2", vec![iface.clone()], system.clone());
+        metrics2.connection_tracking = vec![
+            make_conntrack("10.0.0.1", "tcp", 200, "ipv4"),
+            make_conntrack("10.0.0.1", "icmp", 10, "ipv4"),
+        ];
+        registry.update_metrics(&metrics2).await;
+
+        // Check that both routers have their metrics
+        let labels1_tcp = ConntrackLabels {
+            router: "router1".to_string(),
+            src_address: "192.168.1.1".to_string(),
+            protocol: "tcp".to_string(),
+            ip_version: "ipv4".to_string(),
+        };
+        let labels1_udp = ConntrackLabels {
+            router: "router1".to_string(),
+            src_address: "192.168.1.1".to_string(),
+            protocol: "udp".to_string(),
+            ip_version: "ipv4".to_string(),
+        };
+        let labels2_tcp = ConntrackLabels {
+            router: "router2".to_string(),
+            src_address: "10.0.0.1".to_string(),
+            protocol: "tcp".to_string(),
+            ip_version: "ipv4".to_string(),
+        };
+        let labels2_icmp = ConntrackLabels {
+            router: "router2".to_string(),
+            src_address: "10.0.0.1".to_string(),
+            protocol: "icmp".to_string(),
+            ip_version: "ipv4".to_string(),
+        };
+
+        assert_eq!(
+            registry
+                .connection_tracking_count
+                .get_or_create(&labels1_tcp)
+                .get(),
+            100
+        );
+        assert_eq!(
+            registry
+                .connection_tracking_count
+                .get_or_create(&labels1_udp)
+                .get(),
+            50
+        );
+        assert_eq!(
+            registry
+                .connection_tracking_count
+                .get_or_create(&labels2_tcp)
+                .get(),
+            200
+        );
+        assert_eq!(
+            registry
+                .connection_tracking_count
+                .get_or_create(&labels2_icmp)
+                .get(),
+            10
+        );
+
+        // Second update for router1: remove UDP, keep TCP
+        metrics1.connection_tracking = vec![make_conntrack("192.168.1.1", "tcp", 150, "ipv4")];
+        registry.update_metrics(&metrics1).await;
+
+        // Check that router1's UDP was reset to 0, but TCP updated
+        assert_eq!(
+            registry
+                .connection_tracking_count
+                .get_or_create(&labels1_tcp)
+                .get(),
+            150
+        );
+        assert_eq!(
+            registry
+                .connection_tracking_count
+                .get_or_create(&labels1_udp)
+                .get(),
+            0
+        );
+
+        // CRITICAL: Check that router2's metrics are NOT affected
+        assert_eq!(
+            registry
+                .connection_tracking_count
+                .get_or_create(&labels2_tcp)
+                .get(),
+            200
+        );
+        assert_eq!(
+            registry
+                .connection_tracking_count
+                .get_or_create(&labels2_icmp)
+                .get(),
+            10
         );
     }
 }

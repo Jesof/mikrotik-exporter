@@ -18,4 +18,4 @@ pub use client::MikroTikClient;
 pub use pool::ConnectionPool;
 
 /// Types for router metrics and statistics
-pub use types::{InterfaceStats, RouterMetrics, SystemResource};
+pub use types::{ConnectionTrackingStats, InterfaceStats, RouterMetrics, SystemResource};
