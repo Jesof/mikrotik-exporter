@@ -27,6 +27,7 @@ kubectl apply -k k8s/
 | `mikrotik_system_free_memory_bytes`     | gauge   | Свободная память       |
 | `mikrotik_scrape_duration_milliseconds` | gauge   | Длительность сбора     |
 | `mikrotik_connection_pool_size`         | gauge   | Размер пула соединений |
+| `mikrotik_connection_tracking_count`    | gauge   | Connection tracking    |
 
 [Полный список метрик →](#полный-список-метрик)
 
@@ -133,8 +134,15 @@ MIT - см. [LICENSE](LICENSE)
 | `mikrotik_scrape_duration_milliseconds`          | gauge   | Длительность последнего сбора             |
 | `mikrotik_scrape_last_success_timestamp_seconds` | gauge   | Unix timestamp последнего успешного сбора |
 | `mikrotik_connection_consecutive_errors`         | gauge   | Последовательные ошибки подключения       |
+| `mikrotik_collection_cycle_duration_milliseconds`| gauge   | Длительность полного цикла сбора          |
 | `mikrotik_connection_pool_size`                  | gauge   | Размер пула соединений                    |
 | `mikrotik_connection_pool_active`                | gauge   | Активные соединения в пуле                |
+
+### Connection tracking (Labels: router, src_address, protocol, ip_version)
+
+| Метрика                                | Тип   | Описание                                   |
+| -------------------------------------- | ----- | ------------------------------------------ |
+| `mikrotik_connection_tracking_count`   | gauge | Количество соединений по src/protocol/ip   |
 
 ## Архитектура проекта
 
