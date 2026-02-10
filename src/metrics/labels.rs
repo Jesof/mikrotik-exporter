@@ -31,6 +31,20 @@ pub struct ConntrackLabels {
     pub ip_version: String,
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct WireGuardInterfaceLabels {
+    pub router: String,
+    pub interface: String,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct WireGuardPeerLabels {
+    pub router: String,
+    pub interface: String,
+    pub public_key: String,
+    pub endpoint: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -10,6 +10,7 @@ mod client;
 mod connection;
 mod pool;
 mod types;
+pub mod wireguard;
 
 /// Client for MikroTik RouterOS API
 pub use client::MikroTikClient;
@@ -19,5 +20,8 @@ pub use pool::ConnectionPool;
 
 /// Types for router metrics and statistics
 pub use types::{ConnectionTrackingStats, InterfaceStats, RouterMetrics, SystemResource};
+
+/// Types for WireGuard metrics and statistics
+pub use wireguard::{WireGuardInterfaceStats, WireGuardPeerStats};
 
 pub use connection::encode_length;
