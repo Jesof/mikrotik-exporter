@@ -36,7 +36,7 @@ pub(super) fn parse_wireguard_interfaces(
         if let Some(name) = sentence.get("name") {
             interfaces.push(WireGuardInterfaceStats {
                 name: name.clone(),
-                enabled: sentence.get("disabled").map_or(true, |v| v != "true"),
+                enabled: sentence.get("disabled").is_none_or(|v| v != "true"),
             });
         }
     }
@@ -64,9 +64,10 @@ pub(super) fn parse_wireguard_peers(
                     .unwrap_or(0);
 
                 // Parse last-handshake to timestamp if available
-                let latest_handshake = sentence
-                    .get("last-handshake")
-                    .and_then(|v| parse_handshake_to_timestamp(v));
+                // Support both "last-handshake" (new) and "latest-handshake" (old) field names
+                let latest_handshake =
+                    get_field_value(sentence, &["last-handshake", "latest-handshake"])
+                        .and_then(|v| parse_handshake_to_timestamp(&v));
 
                 peers.push(WireGuardPeerStats {
                     interface: interface.clone(),
@@ -81,6 +82,16 @@ pub(super) fn parse_wireguard_peers(
     }
 
     peers
+}
+
+/// Get field value with fallback support for different field names
+///
+/// This function tries to get a field value from a HashMap, supporting multiple
+/// possible field names for backward compatibility with different RouterOS versions.
+fn get_field_value(fields: &HashMap<String, String>, possible_names: &[&str]) -> Option<String> {
+    possible_names
+        .iter()
+        .find_map(|name| fields.get(*name).cloned())
 }
 
 /// Parse the last-handshake field from RouterOS duration format to seconds
@@ -122,42 +133,46 @@ fn parse_routeros_duration(duration_str: &str) -> Option<u64> {
     }
 
     let mut total_seconds: u64 = 0;
-    let mut current_number = String::new();
+    let mut current_number = 0u64;
 
     for ch in duration_str.chars() {
         match ch {
             '0'..='9' => {
-                current_number.push(ch);
+                // Parse digit and check for overflow
+                if let Some(new_val) = current_number
+                    .checked_mul(10)
+                    .and_then(|v| v.checked_add((ch as u8 - b'0') as u64))
+                {
+                    current_number = new_val;
+                } else {
+                    // If overflow occurs during number parsing, return maximum value
+                    return Some(u64::MAX);
+                }
             }
             's' => {
-                if let Ok(seconds) = current_number.parse::<u64>() {
-                    total_seconds += seconds;
-                }
-                current_number.clear();
+                // Add seconds with overflow protection
+                total_seconds = total_seconds.saturating_add(current_number);
+                current_number = 0;
             }
             'm' => {
-                if let Ok(minutes) = current_number.parse::<u64>() {
-                    total_seconds += minutes * 60;
-                }
-                current_number.clear();
+                // Add minutes (60 seconds) with overflow protection
+                total_seconds = total_seconds.saturating_add(current_number.saturating_mul(60));
+                current_number = 0;
             }
             'h' => {
-                if let Ok(hours) = current_number.parse::<u64>() {
-                    total_seconds += hours * 3600;
-                }
-                current_number.clear();
+                // Add hours (3600 seconds) with overflow protection
+                total_seconds = total_seconds.saturating_add(current_number.saturating_mul(3600));
+                current_number = 0;
             }
             'd' => {
-                if let Ok(days) = current_number.parse::<u64>() {
-                    total_seconds += days * 86400;
-                }
-                current_number.clear();
+                // Add days (86400 seconds) with overflow protection
+                total_seconds = total_seconds.saturating_add(current_number.saturating_mul(86400));
+                current_number = 0;
             }
             'w' => {
-                if let Ok(weeks) = current_number.parse::<u64>() {
-                    total_seconds += weeks * 604800; // 7 days in a week
-                }
-                current_number.clear();
+                // Add weeks (604800 seconds) with overflow protection
+                total_seconds = total_seconds.saturating_add(current_number.saturating_mul(604800)); // 7 days in a week
+                current_number = 0;
             }
             _ => {
                 // Ignore any other characters
@@ -406,5 +421,36 @@ mod tests {
         assert_eq!(parse_routeros_duration("1w4d9h15m7s"), Some(983707)); // Correct calculation
         assert_eq!(parse_routeros_duration(""), Some(0));
         assert_eq!(parse_routeros_duration("0s"), Some(0));
+    }
+
+    #[test]
+    fn test_get_field_value() {
+        let mut data = HashMap::new();
+        data.insert("last-handshake".to_string(), "120".to_string());
+
+        // Test exact match
+        assert_eq!(
+            get_field_value(&data, &["last-handshake"]),
+            Some("120".to_string())
+        );
+
+        // Test fallback to second option
+        assert_eq!(
+            get_field_value(&data, &["latest-handshake", "last-handshake"]),
+            Some("120".to_string())
+        );
+
+        // Test no match
+        assert_eq!(get_field_value(&data, &["nonexistent"]), None);
+    }
+
+    #[test]
+    fn test_parse_routeros_duration_overflow_protection() {
+        // Test with a very large number that could cause overflow
+        // This should safely saturate rather than panic
+        assert_eq!(
+            parse_routeros_duration("9999999999999999999999999999999999999999s"),
+            Some(u64::MAX)
+        );
     }
 }
