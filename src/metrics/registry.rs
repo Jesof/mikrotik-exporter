@@ -60,7 +60,6 @@ pub struct MetricsRegistry {
     // connection tracking metrics
     connection_tracking_count: Family<ConntrackLabels, Gauge>,
     // WireGuard metrics
-    wireguard_interface_enabled: Family<WireGuardInterfaceLabels, Gauge>,
     wireguard_peer_rx_bytes: Family<WireGuardPeerLabels, Gauge>,
     wireguard_peer_tx_bytes: Family<WireGuardPeerLabels, Gauge>,
     wireguard_peer_latest_handshake: Family<WireGuardPeerLabels, Gauge>,
@@ -203,12 +202,6 @@ impl MetricsRegistry {
         );
 
         // WireGuard metrics
-        let wireguard_interface_enabled = Family::<WireGuardInterfaceLabels, Gauge>::default();
-        registry.register(
-            "mikrotik_wireguard_interface_enabled",
-            "WireGuard interface enabled status (1=enabled,0=disabled)",
-            wireguard_interface_enabled.clone(),
-        );
 
         let wireguard_peer_rx_bytes = Family::<WireGuardPeerLabels, Gauge>::default();
         registry.register(
@@ -254,7 +247,6 @@ impl MetricsRegistry {
             connection_pool_size,
             connection_pool_active,
             connection_tracking_count,
-            wireguard_interface_enabled,
             wireguard_peer_rx_bytes,
             wireguard_peer_tx_bytes,
             wireguard_peer_latest_handshake,
@@ -399,13 +391,12 @@ impl MetricsRegistry {
 
         // Update WireGuard interface metrics
         for wg_iface in &metrics.wireguard_interfaces {
-            let wg_labels = WireGuardInterfaceLabels {
+            let _wg_labels = WireGuardInterfaceLabels {
                 router: metrics.router_name.clone(),
                 interface: wg_iface.name.clone(),
             };
-            self.wireguard_interface_enabled
-                .get_or_create(&wg_labels)
-                .set(i64::from(wg_iface.enabled));
+            // Note: We're no longer updating wireguard_interface_enabled metric
+            // as it duplicates information available in mikrotik_interface_running
         }
 
         // Update WireGuard peer metrics
@@ -417,7 +408,8 @@ impl MetricsRegistry {
             let wg_peer_labels = WireGuardPeerLabels {
                 router: metrics.router_name.clone(),
                 interface: wg_peer.interface.clone(),
-                public_key: wg_peer.public_key.clone(),
+                name: wg_peer.name.clone(),
+                allowed_address: wg_peer.allowed_address.clone(),
                 endpoint,
             };
             #[allow(clippy::cast_possible_wrap)]

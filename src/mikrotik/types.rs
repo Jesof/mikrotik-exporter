@@ -118,7 +118,8 @@ mod tests {
             }],
             wireguard_peers: vec![WireGuardPeerStats {
                 interface: "wg1".to_string(),
-                public_key: "abc123".to_string(),
+                name: "peer1".to_string(),
+                allowed_address: "10.10.10.1/32".to_string(),
                 endpoint: Some("192.168.1.1:51820".to_string()),
                 rx_bytes: 1024,
                 tx_bytes: 2048,

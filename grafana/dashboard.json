@@ -1235,21 +1235,6 @@
           "legendFormat": "__auto",
           "range": false,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "mikrotik_wireguard_interface_enabled{router=\"$router\"}",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "B"
         }
       ],
       "title": "Interface Status",
@@ -1363,7 +1348,7 @@
           },
           "editorMode": "code",
           "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[5m]) * 8",
-          "legendFormat": "{{interface}}/{{public_key}} ({{endpoint}}) RX",
+          "legendFormat": "{{interface}}/{{name}}",
           "range": true,
           "refId": "A"
         }
@@ -1461,7 +1446,7 @@
           },
           "editorMode": "code",
           "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[5m]) * 8",
-          "legendFormat": "{{interface}}/{{public_key}} ({{endpoint}}) TX",
+          "legendFormat": "{{interface}}/{{name}}",
           "range": true,
           "refId": "A"
         }

@@ -28,6 +28,8 @@ kubectl apply -k k8s/
 | `mikrotik_scrape_duration_milliseconds` | gauge   | Длительность сбора     |
 | `mikrotik_connection_pool_size`         | gauge   | Размер пула соединений |
 | `mikrotik_connection_tracking_count`    | gauge   | Connection tracking    |
+| `mikrotik_wireguard_peer_rx_bytes`      | gauge   | WireGuard RX bytes     |
+| `mikrotik_wireguard_peer_tx_bytes`      | gauge   | WireGuard TX bytes     |
 
 [Полный список метрик →](#полный-список-метрик)
 
@@ -144,13 +146,11 @@ MIT - см. [LICENSE](LICENSE)
 | -------------------------------------- | ----- | ------------------------------------------ |
 | `mikrotik_connection_tracking_count`   | gauge | Количество соединений по src/protocol/ip   |
 
-### WireGuard (Labels: router, interface)
+### WireGuard Interfaces (Labels: router, interface)
 
-| Метрика                                 | Тип   | Описание                                       |
-| --------------------------------------- | ----- | ---------------------------------------------- |
-| `mikrotik_wireguard_interface_enabled`  | gauge | Статус интерфейса (1=включен, 0=выключен)      |
+Статус интерфейсов WireGuard доступен через стандартную метрику `mikrotik_interface_running`.
 
-### WireGuard Peers (Labels: router, interface, public_key, endpoint)
+### WireGuard Peers (Labels: router, interface, name, allowed_address, endpoint)
 
 | Метрика                              | Тип   | Описание                                    |
 | ------------------------------------ | ----- | ------------------------------------------- |

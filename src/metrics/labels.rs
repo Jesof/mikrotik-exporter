@@ -41,7 +41,8 @@ pub struct WireGuardInterfaceLabels {
 pub struct WireGuardPeerLabels {
     pub router: String,
     pub interface: String,
-    pub public_key: String,
+    pub name: String,
+    pub allowed_address: String,
     pub endpoint: String,
 }
 
