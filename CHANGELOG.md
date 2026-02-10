@@ -7,41 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-02-10
+### Added
+- DHCP metrics support (in development for v0.3.0)
+- Route metrics support (in development for v0.3.0)
+- Firewall metrics support (in development for v0.3.0)
+- Neighbors metrics support (in development for v0.3.0)
+- POE metrics support (in development for v0.3.0)
+
+## [0.2.0] - 2026-02-11
 
 ### Added
-- WireGuard monitoring support
+- WireGuard monitoring support with peer rx/tx bytes and latest handshake metrics
 - Open connections stats panel with IPv4/IPv6 support
 
 ### Fixed
-- Stale system_info gauge issue
+- Stale system_info gauge issue where old labels were not properly reset
 - Conntrack metrics isolation for multi-router configurations
 - AtomicUsize underflow race condition in connection pool
-- Proper WireGuard handshake timestamp parsing
+- Proper WireGuard handshake timestamp parsing with support for RouterOS duration format
 
 ### Changed
 - Improved Grafana dashboard with better visualizations and metadata
-- Refactored WireGuard peer identification
-- Removed redundant metrics
-- Resolved clippy warnings
+- Refactored WireGuard peer identification to use allowed-address instead of public-key for enhanced privacy
+- Updated documentation to reflect current project status and capabilities
 
 ### Removed
-- Unused zeroize dependency
+- Unused zeroize dependency to reduce binary size
 
 ## [0.1.1] - 2026-02-09
 
 ### Fixed
 - Health check endpoint now properly returns 503 when routers have errors
-- Connection pool backoff algorithm improvements
-- RouterOS authentication method selection
+- Connection pool backoff algorithm improvements for better reliability
+- RouterOS authentication method selection to support both legacy and modern versions
 
 ## [0.1.0] - 2025-11-15
 
 ### Added
-- Initial release
-- Prometheus exporter for MikroTik RouterOS devices
-- Interface, system, and connection tracking metrics
-- HTTP `/metrics` and `/health` endpoints
-- Configurable via environment variables
-- Connection pooling with exponential backoff
-- Multi-router support
+- Initial release of the Prometheus exporter for MikroTik RouterOS devices
+- Interface metrics including rx/tx bytes, packets, and errors
+- System resource metrics such as CPU load, memory usage, and uptime
+- Connection tracking metrics with IPv4/IPv6 support
+- HTTP `/metrics` endpoint for Prometheus scraping
+- HTTP `/health` endpoint for service health monitoring
+- Environment variable based configuration
+- Connection pooling with exponential backoff for efficient resource usage
+- Multi-router support with unique naming requirements
