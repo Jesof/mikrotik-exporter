@@ -62,4 +62,7 @@ prometheus-client = "0.24.0"
 
 # Secure credential handling
 secrecy = { version = "0.10.0", features = ["serde"] }
-zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
