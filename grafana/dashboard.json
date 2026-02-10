@@ -1,4 +1,59 @@
 {
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__elements": {},
+  "__requires": [
+    {
+      "type": "panel",
+      "id": "barchart",
+      "name": "Bar chart",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "gauge",
+      "name": "Gauge",
+      "version": ""
+    },
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "12.1.1"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    }
+  ],
   "annotations": {
     "list": [
       {
@@ -18,7 +73,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 858,
+  "id": null,
   "links": [],
   "panels": [
     {
@@ -66,7 +121,7 @@
           "values": false
         },
         "showPercentChange": false,
-        "textMode": "value_and_name",
+        "textMode": "name",
         "wideLayout": true
       },
       "pluginVersion": "12.1.1",
@@ -78,7 +133,7 @@
           },
           "editorMode": "code",
           "expr": "mikrotik_system_info{router=\"$router\"}",
-          "legendFormat": "{{version}} | {{board}}",
+          "legendFormat": "{{version}} {{board}}",
           "range": true,
           "refId": "A"
         }
@@ -455,9 +510,10 @@
       "options": {
         "legend": {
           "calcs": [
+            "last",
+            "min",
             "mean",
-            "max",
-            "min"
+            "max"
           ],
           "displayMode": "table",
           "placement": "bottom",
@@ -589,9 +645,10 @@
       "options": {
         "legend": {
           "calcs": [
+            "last",
+            "min",
             "mean",
-            "max",
-            "min"
+            "max"
           ],
           "displayMode": "table",
           "placement": "bottom",
@@ -699,12 +756,15 @@
       "options": {
         "legend": {
           "calcs": [
+            "last",
             "mean",
             "max"
           ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "sortBy": "Last",
+          "sortDesc": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -797,12 +857,15 @@
       "options": {
         "legend": {
           "calcs": [
+            "last",
             "mean",
             "max"
           ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "sortBy": "Last",
+          "sortDesc": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -895,12 +958,15 @@
       "options": {
         "legend": {
           "calcs": [
+            "last",
             "mean",
             "max"
           ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "sortBy": "Last",
+          "sortDesc": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -993,12 +1059,15 @@
       "options": {
         "legend": {
           "calcs": [
+            "last",
             "mean",
             "max"
           ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "sortBy": "Last",
+          "sortDesc": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -1099,7 +1168,9 @@
           ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "sortBy": "Total",
+          "sortDesc": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -1326,12 +1397,15 @@
       "options": {
         "legend": {
           "calcs": [
+            "last",
             "mean",
             "max"
           ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "sortBy": "Last",
+          "sortDesc": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -1348,7 +1422,7 @@
           },
           "editorMode": "code",
           "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[5m]) * 8",
-          "legendFormat": "{{interface}}/{{name}}",
+          "legendFormat": "{{interface}} | {{name}}",
           "range": true,
           "refId": "A"
         }
@@ -1424,12 +1498,15 @@
       "options": {
         "legend": {
           "calcs": [
+            "last",
             "mean",
             "max"
           ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "sortBy": "Last",
+          "sortDesc": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -1446,7 +1523,7 @@
           },
           "editorMode": "code",
           "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[5m]) * 8",
-          "legendFormat": "{{interface}}/{{name}}",
+          "legendFormat": "{{interface}} | {{name}}",
           "range": true,
           "refId": "A"
         }
@@ -2002,13 +2079,15 @@
       "options": {
         "legend": {
           "calcs": [
+            "last",
             "mean",
-            "max",
-            "last"
+            "max"
           ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "sortBy": "Last",
+          "sortDesc": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -2183,9 +2262,10 @@
       "options": {
         "legend": {
           "calcs": [
+            "last",
+            "min",
             "mean",
-            "max",
-            "last"
+            "max"
           ],
           "displayMode": "table",
           "placement": "bottom",
@@ -2360,9 +2440,9 @@
       "options": {
         "legend": {
           "calcs": [
+            "last",
             "mean",
-            "max",
-            "last"
+            "max"
           ],
           "displayMode": "table",
           "placement": "bottom",
@@ -2523,7 +2603,7 @@
       "options": {
         "colorMode": "background",
         "graphMode": "area",
-        "justifyMode": "auto",
+        "justifyMode": "center",
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
@@ -2534,8 +2614,8 @@
           "values": false
         },
         "showPercentChange": false,
-        "textMode": "value_and_name",
-        "wideLayout": true
+        "textMode": "value",
+        "wideLayout": false
       },
       "pluginVersion": "12.1.1",
       "targets": [
@@ -2555,7 +2635,6 @@
       "type": "stat"
     }
   ],
-  "preload": false,
   "refresh": "30s",
   "schemaVersion": 41,
   "tags": [
@@ -2566,10 +2645,7 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "text": "Prometheus",
-          "value": "prometheus"
-        },
+        "current": {},
         "includeAll": false,
         "label": "Datasource",
         "name": "DS_PROMETHEUS",
@@ -2580,10 +2656,7 @@
         "type": "datasource"
       },
       {
-        "current": {
-          "text": "RB5009",
-          "value": "RB5009"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
@@ -2604,12 +2677,7 @@
         "type": "query"
       },
       {
-        "current": {
-          "text": "All",
-          "value": [
-            "$__all"
-          ]
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
@@ -2633,7 +2701,7 @@
     ]
   },
   "time": {
-    "from": "now-1m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {
@@ -2652,5 +2720,6 @@
   "timezone": "browser",
   "title": "MikroTik Router Monitoring",
   "uid": "mikrotik-exporter",
-  "version": 22
+  "version": 28,
+  "weekStart": ""
 }
