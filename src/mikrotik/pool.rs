@@ -79,13 +79,25 @@ impl Drop for PooledConnectionGuard {
             }
         }
 
-        let prev = self.pool.active_connections.fetch_sub(1, Ordering::Relaxed);
-        if prev == 0 {
-            self.pool.active_connections.store(0, Ordering::Relaxed);
-            tracing::warn!(
-                "Active connection count underflow detected for key: {}",
-                self.key
-            );
+        // Saturating decrement via CAS loop to prevent underflow race.
+        // fetch_sub(1) on 0 would wrap to usize::MAX, briefly exposing
+        // an absurd value to concurrent readers (e.g. get_pool_stats).
+        let active = &self.pool.active_connections;
+        loop {
+            let current = active.load(Ordering::Acquire);
+            if current == 0 {
+                tracing::warn!(
+                    "Active connection count underflow detected for key: {}",
+                    self.key
+                );
+                break;
+            }
+            if active
+                .compare_exchange_weak(current, current - 1, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
+                break;
+            }
         }
     }
 }
@@ -271,46 +283,46 @@ impl ConnectionPool {
                     match conn.login(username, password).await {
                         Ok(()) => {
                             tracing::trace!("Login successful, connection ready");
-                            // Record success
                             let mut states = self.connection_states.lock().await;
-                            if let Some(state) = states.get_mut(&key) {
-                                state.record_success();
-                                tracing::trace!("Connection state reset after successful login");
-                            }
+                            let state = states
+                                .entry(key.clone())
+                                .or_insert_with(ConnectionState::new);
+                            state.record_success();
+                            tracing::trace!("Connection state reset after successful login");
                             conn
                         }
                         Err(e) => {
                             tracing::trace!("Login failed: {}", e);
-                            // Record error
                             let mut states = self.connection_states.lock().await;
-                            if let Some(state) = states.get_mut(&key) {
-                                state.record_error();
-                                tracing::trace!(
-                                    "Login error recorded, consecutive errors: {}",
-                                    state.consecutive_errors
-                                );
-                            }
+                            let state = states
+                                .entry(key.clone())
+                                .or_insert_with(ConnectionState::new);
+                            state.record_error();
+                            tracing::trace!(
+                                "Login error recorded, consecutive errors: {}",
+                                state.consecutive_errors
+                            );
                             return Err(e);
                         }
                     }
                 }
                 Err(e) => {
                     tracing::trace!("Connection failed: {}", e);
-                    // Record connection error
                     let mut states = self.connection_states.lock().await;
-                    if let Some(state) = states.get_mut(&key) {
-                        state.record_error();
-                        tracing::trace!(
-                            "Connection error recorded, consecutive errors: {}",
-                            state.consecutive_errors
-                        );
-                    }
+                    let state = states
+                        .entry(key.clone())
+                        .or_insert_with(ConnectionState::new);
+                    state.record_error();
+                    tracing::trace!(
+                        "Connection error recorded, consecutive errors: {}",
+                        state.consecutive_errors
+                    );
                     return Err(e);
                 }
             }
         };
 
-        self.active_connections.fetch_add(1, Ordering::Relaxed);
+        self.active_connections.fetch_add(1, Ordering::AcqRel);
 
         Ok(PooledConnectionGuard {
             connection: Some(conn),
@@ -350,7 +362,7 @@ impl ConnectionPool {
         let total = pool.len();
         // All connections in pool are currently idle (not in use)
         // Active connections are those removed from pool temporarily
-        let active = self.active_connections.load(Ordering::Relaxed);
+        let active = self.active_connections.load(Ordering::Acquire);
         (total, active)
     }
 
