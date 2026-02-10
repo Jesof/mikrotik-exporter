@@ -83,17 +83,18 @@ pub(super) fn parse_wireguard_peers(
     peers
 }
 
-/// Parse the latest-handshake field to a Unix timestamp
+/// Parse the latest-handshake field to seconds since last handshake
+///
+/// The RouterOS API returns the last-handshake field as an integer representing
+/// "time in seconds after the last successful handshake".
+/// See: https://help.mikrotik.com/docs/spaces/ROS/pages/69664792/WireGuard
 fn parse_handshake_to_timestamp(handshake_str: &str) -> Option<u64> {
     if handshake_str.is_empty() || handshake_str == "never" {
         return None;
     }
 
-    // RouterOS stores handshake time in format like "2023-05-15 10:30:45"
-    // We need to convert this to a Unix timestamp
-    // For now, we'll return None as proper parsing would require chrono or similar
-    // In a real implementation, we would parse this datetime string to a timestamp
-    None
+    // Parse the string as an integer representing seconds since last handshake
+    handshake_str.parse::<u64>().ok()
 }
 
 #[cfg(test)]
@@ -195,6 +196,26 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_wireguard_peers_with_handshake() {
+        let mut data = HashMap::new();
+        data.insert("interface".to_string(), "wg1".to_string());
+        data.insert("public-key".to_string(), "abc123".to_string());
+        data.insert("endpoint".to_string(), "192.168.1.1:51820".to_string());
+        data.insert("rx".to_string(), "1024".to_string());
+        data.insert("tx".to_string(), "2048".to_string());
+        data.insert("latest-handshake".to_string(), "120".to_string()); // 120 seconds since last handshake
+
+        let result = parse_wireguard_peers(&[data]);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].interface, "wg1");
+        assert_eq!(result[0].public_key, "abc123");
+        assert_eq!(result[0].endpoint, Some("192.168.1.1:51820".to_string()));
+        assert_eq!(result[0].rx_bytes, 1024);
+        assert_eq!(result[0].tx_bytes, 2048);
+        assert_eq!(result[0].latest_handshake, Some(120)); // Should parse to 120 seconds
+    }
+
+    #[test]
     fn test_parse_wireguard_peers_missing_fields() {
         let mut data = HashMap::new();
         data.insert("interface".to_string(), "wg1".to_string());
@@ -282,8 +303,13 @@ mod tests {
         // Test that the function returns None for empty string
         assert_eq!(parse_handshake_to_timestamp(""), None);
 
-        // In a real implementation, we would test actual datetime parsing
-        // But for now, we just test that it returns None for any non-empty string that isn't "never"
-        assert_eq!(parse_handshake_to_timestamp("2023-05-15 10:30:45"), None);
+        // Test that the function correctly parses integer values
+        assert_eq!(parse_handshake_to_timestamp("0"), Some(0));
+        assert_eq!(parse_handshake_to_timestamp("120"), Some(120));
+        assert_eq!(parse_handshake_to_timestamp("3600"), Some(3600));
+
+        // Test that the function returns None for invalid integers
+        assert_eq!(parse_handshake_to_timestamp("invalid"), None);
+        assert_eq!(parse_handshake_to_timestamp("-1"), None); // Negative values shouldn't occur but test anyway
     }
 }
