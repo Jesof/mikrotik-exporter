@@ -8,9 +8,19 @@ on:
       - main
     tags:
       - 'v*'
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Dockerfile'
+      - '.dockerignore'
   pull_request:
     branches:
       - main
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Dockerfile'
+      - '.dockerignore'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
