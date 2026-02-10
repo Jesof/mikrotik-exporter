@@ -15,7 +15,10 @@ pub async fn metrics_handler(State(state): State<Arc<AppState>>) -> Response {
     match state.metrics.encode_metrics().await {
         Ok(metrics_text) => (
             StatusCode::OK,
-            [("Content-Type", "text/plain; version=0.0.4")],
+            [(
+                "Content-Type",
+                "application/openmetrics-text; version=1.0.0; charset=utf-8",
+            )],
             metrics_text,
         )
             .into_response(),

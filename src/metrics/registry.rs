@@ -16,8 +16,15 @@ use tokio::sync::Mutex;
 use super::labels::{ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels};
 use super::parsers::parse_uptime_to_seconds;
 
-/// Snapshot of interface counters (`rx_bytes`, `tx_bytes`, `rx_packets`, `tx_packets`, `rx_errors`, `tx_errors`)
-type InterfaceSnapshot = (u64, u64, u64, u64, u64, u64);
+#[derive(Clone, Copy)]
+struct InterfaceSnapshot {
+    rx_bytes: u64,
+    tx_bytes: u64,
+    rx_packets: u64,
+    tx_packets: u64,
+    rx_errors: u64,
+    tx_errors: u64,
+}
 
 #[derive(Clone)]
 pub struct MetricsRegistry {
@@ -49,10 +56,9 @@ pub struct MetricsRegistry {
     connection_pool_active: Gauge,
     // connection tracking metrics
     connection_tracking_count: Family<ConntrackLabels, Gauge>,
-    // previous snapshot for counters
     prev_iface: Arc<Mutex<HashMap<InterfaceLabels, InterfaceSnapshot>>>,
-    // previous connection tracking labels per router
     prev_conntrack: Arc<Mutex<HashMap<String, HashSet<ConntrackLabels>>>>,
+    prev_system_info: Arc<Mutex<HashMap<String, SystemInfoLabels>>>,
 }
 
 impl MetricsRegistry {
@@ -213,6 +219,7 @@ impl MetricsRegistry {
             connection_tracking_count,
             prev_iface: Arc::new(Mutex::new(HashMap::new())),
             prev_conntrack: Arc::new(Mutex::new(HashMap::new())),
+            prev_system_info: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -238,21 +245,20 @@ impl MetricsRegistry {
                     router: metrics.router_name.clone(),
                     interface: iface.name.clone(),
                 };
-                let (prx, ptx, prxp, ptxp, prxe, ptxe) = prev.get(&labels).copied().unwrap_or((
-                    iface.rx_bytes,
-                    iface.tx_bytes,
-                    iface.rx_packets,
-                    iface.tx_packets,
-                    iface.rx_errors,
-                    iface.tx_errors,
-                ));
-                // compute deltas (handle reset)
-                let dx_rx_bytes = iface.rx_bytes.saturating_sub(prx);
-                let dx_tx_bytes = iface.tx_bytes.saturating_sub(ptx);
-                let dx_rx_packets = iface.rx_packets.saturating_sub(prxp);
-                let dx_tx_packets = iface.tx_packets.saturating_sub(ptxp);
-                let dx_rx_errors = iface.rx_errors.saturating_sub(prxe);
-                let dx_tx_errors = iface.tx_errors.saturating_sub(ptxe);
+                let snapshot = prev.get(&labels).copied().unwrap_or(InterfaceSnapshot {
+                    rx_bytes: iface.rx_bytes,
+                    tx_bytes: iface.tx_bytes,
+                    rx_packets: iface.rx_packets,
+                    tx_packets: iface.tx_packets,
+                    rx_errors: iface.rx_errors,
+                    tx_errors: iface.tx_errors,
+                });
+                let dx_rx_bytes = iface.rx_bytes.saturating_sub(snapshot.rx_bytes);
+                let dx_tx_bytes = iface.tx_bytes.saturating_sub(snapshot.tx_bytes);
+                let dx_rx_packets = iface.rx_packets.saturating_sub(snapshot.rx_packets);
+                let dx_tx_packets = iface.tx_packets.saturating_sub(snapshot.tx_packets);
+                let dx_rx_errors = iface.rx_errors.saturating_sub(snapshot.rx_errors);
+                let dx_tx_errors = iface.tx_errors.saturating_sub(snapshot.tx_errors);
                 self.interface_rx_bytes
                     .get_or_create(&labels)
                     .inc_by(dx_rx_bytes);
@@ -276,14 +282,14 @@ impl MetricsRegistry {
                     .set(i64::from(iface.running));
                 prev.insert(
                     labels,
-                    (
-                        iface.rx_bytes,
-                        iface.tx_bytes,
-                        iface.rx_packets,
-                        iface.tx_packets,
-                        iface.rx_errors,
-                        iface.tx_errors,
-                    ),
+                    InterfaceSnapshot {
+                        rx_bytes: iface.rx_bytes,
+                        tx_bytes: iface.tx_bytes,
+                        rx_packets: iface.rx_packets,
+                        tx_packets: iface.tx_packets,
+                        rx_errors: iface.rx_errors,
+                        tx_errors: iface.tx_errors,
+                    },
                 );
             }
         }
@@ -313,6 +319,15 @@ impl MetricsRegistry {
             version: metrics.system.version.clone(),
             board: metrics.system.board_name.clone(),
         };
+        {
+            let mut prev = self.prev_system_info.lock().await;
+            if let Some(old) = prev.get(&metrics.router_name) {
+                if *old != info_labels {
+                    self.system_info.get_or_create(old).set(0);
+                }
+            }
+            prev.insert(metrics.router_name.clone(), info_labels.clone());
+        }
         self.system_info.get_or_create(&info_labels).set(1);
 
         // Update connection tracking metrics
@@ -908,6 +923,86 @@ mod tests {
                 .get_or_create(&labels2_icmp)
                 .get(),
             10
+        );
+    }
+
+    #[tokio::test]
+    async fn test_system_info_stale_label_reset_on_version_change() {
+        let registry = MetricsRegistry::new();
+
+        let iface = make_interface("ether1", 1000, 2000, 10, 20, 0, 0, true);
+        let system_v1 = SystemResource {
+            uptime: "1d".to_string(),
+            cpu_load: 10,
+            free_memory: 512 * 1024 * 1024,
+            total_memory: 1024 * 1024 * 1024,
+            version: "7.10".to_string(),
+            board_name: "RB750Gr3".to_string(),
+        };
+        let metrics_v1 = make_router_metrics("router1", vec![iface.clone()], system_v1);
+        registry.update_metrics(&metrics_v1).await;
+
+        let old_labels = SystemInfoLabels {
+            router: "router1".to_string(),
+            version: "7.10".to_string(),
+            board: "RB750Gr3".to_string(),
+        };
+        assert_eq!(registry.system_info.get_or_create(&old_labels).get(), 1);
+
+        let system_v2 = SystemResource {
+            uptime: "1d".to_string(),
+            cpu_load: 10,
+            free_memory: 512 * 1024 * 1024,
+            total_memory: 1024 * 1024 * 1024,
+            version: "7.11".to_string(),
+            board_name: "RB750Gr3".to_string(),
+        };
+        let metrics_v2 = make_router_metrics("router1", vec![iface], system_v2);
+        registry.update_metrics(&metrics_v2).await;
+
+        let new_labels = SystemInfoLabels {
+            router: "router1".to_string(),
+            version: "7.11".to_string(),
+            board: "RB750Gr3".to_string(),
+        };
+        assert_eq!(
+            registry.system_info.get_or_create(&old_labels).get(),
+            0,
+            "Old system_info label should be reset to 0"
+        );
+        assert_eq!(
+            registry.system_info.get_or_create(&new_labels).get(),
+            1,
+            "New system_info label should be 1"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_system_info_no_reset_when_unchanged() {
+        let registry = MetricsRegistry::new();
+
+        let iface = make_interface("ether1", 1000, 2000, 10, 20, 0, 0, true);
+        let system = SystemResource {
+            uptime: "1d".to_string(),
+            cpu_load: 10,
+            free_memory: 512 * 1024 * 1024,
+            total_memory: 1024 * 1024 * 1024,
+            version: "7.10".to_string(),
+            board_name: "RB750Gr3".to_string(),
+        };
+        let metrics = make_router_metrics("router1", vec![iface.clone()], system.clone());
+        registry.update_metrics(&metrics).await;
+        registry.update_metrics(&metrics).await;
+
+        let labels = SystemInfoLabels {
+            router: "router1".to_string(),
+            version: "7.10".to_string(),
+            board: "RB750Gr3".to_string(),
+        };
+        assert_eq!(
+            registry.system_info.get_or_create(&labels).get(),
+            1,
+            "system_info should stay 1 when version/board unchanged"
         );
     }
 }

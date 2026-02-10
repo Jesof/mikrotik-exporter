@@ -92,9 +92,9 @@ impl Default for Config {
 
 impl Config {
     /// Loads configuration from environment variables
+    ///
+    /// Expects `dotenvy::dotenv()` to have been called by the application entry point.
     pub fn from_env() -> Self {
-        dotenvy::dotenv().ok();
-
         let server_addr = std::env::var(env_vars::SERVER_ADDR)
             .unwrap_or_else(|_| defaults::SERVER_ADDR.to_string());
 

@@ -58,8 +58,8 @@ pub fn start_collection_loop(
     // Create system info cache for immutable metrics
     let system_cache = SystemInfoCache::new();
 
-    // Start cleanup task for expired connections
-    let _cleanup_handle = cleanup::start_pool_cleanup_task(pool.clone(), shutdown_rx.clone());
+    // Start cleanup task for expired connections (joined inside collection loop on shutdown)
+    let cleanup_handle = cleanup::start_pool_cleanup_task(pool.clone(), shutdown_rx.clone());
 
     tracing::trace!(
         "Collection loop initialized with {} routers",
@@ -79,6 +79,7 @@ pub fn start_collection_loop(
                 _ = shutdown_rx.changed() => {
                     if *shutdown_rx.borrow() {
                         tracing::info!("Stopping collection loop");
+                        let _ = cleanup_handle.await;
                         break;
                     }
                 }
