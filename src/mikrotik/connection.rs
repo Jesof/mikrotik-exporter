@@ -267,7 +267,7 @@ impl RouterOsConnection {
 
 // RouterOS protocol length encoding - intentional truncation is part of the wire format
 #[allow(clippy::cast_possible_truncation)]
-fn encode_length(len: usize) -> Vec<u8> {
+pub fn encode_length(len: usize) -> Vec<u8> {
     if len < 0x80 {
         vec![len as u8]
     } else if len < 0x4000 {
