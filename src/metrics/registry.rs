@@ -13,7 +13,10 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use super::labels::{ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels};
+use super::labels::{
+    ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardInterfaceLabels,
+    WireGuardPeerLabels,
+};
 use super::parsers::parse_uptime_to_seconds;
 
 #[derive(Clone, Copy)]
@@ -56,6 +59,11 @@ pub struct MetricsRegistry {
     connection_pool_active: Gauge,
     // connection tracking metrics
     connection_tracking_count: Family<ConntrackLabels, Gauge>,
+    // WireGuard metrics
+    wireguard_interface_enabled: Family<WireGuardInterfaceLabels, Gauge>,
+    wireguard_peer_rx_bytes: Family<WireGuardPeerLabels, Gauge>,
+    wireguard_peer_tx_bytes: Family<WireGuardPeerLabels, Gauge>,
+    wireguard_peer_latest_handshake: Family<WireGuardPeerLabels, Gauge>,
     prev_iface: Arc<Mutex<HashMap<InterfaceLabels, InterfaceSnapshot>>>,
     prev_conntrack: Arc<Mutex<HashMap<String, HashSet<ConntrackLabels>>>>,
     prev_system_info: Arc<Mutex<HashMap<String, SystemInfoLabels>>>,
@@ -194,6 +202,35 @@ impl MetricsRegistry {
             connection_tracking_count.clone(),
         );
 
+        // WireGuard metrics
+        let wireguard_interface_enabled = Family::<WireGuardInterfaceLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_wireguard_interface_enabled",
+            "WireGuard interface enabled status (1=enabled,0=disabled)",
+            wireguard_interface_enabled.clone(),
+        );
+
+        let wireguard_peer_rx_bytes = Family::<WireGuardPeerLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_wireguard_peer_rx_bytes",
+            "Bytes received from WireGuard peer",
+            wireguard_peer_rx_bytes.clone(),
+        );
+
+        let wireguard_peer_tx_bytes = Family::<WireGuardPeerLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_wireguard_peer_tx_bytes",
+            "Bytes transmitted to WireGuard peer",
+            wireguard_peer_tx_bytes.clone(),
+        );
+
+        let wireguard_peer_latest_handshake = Family::<WireGuardPeerLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_wireguard_peer_latest_handshake",
+            "Unix timestamp of last handshake with WireGuard peer",
+            wireguard_peer_latest_handshake.clone(),
+        );
+
         Self {
             registry: Arc::new(Mutex::new(registry)),
             interface_rx_bytes,
@@ -217,6 +254,10 @@ impl MetricsRegistry {
             connection_pool_size,
             connection_pool_active,
             connection_tracking_count,
+            wireguard_interface_enabled,
+            wireguard_peer_rx_bytes,
+            wireguard_peer_tx_bytes,
+            wireguard_peer_latest_handshake,
             prev_iface: Arc::new(Mutex::new(HashMap::new())),
             prev_conntrack: Arc::new(Mutex::new(HashMap::new())),
             prev_system_info: Arc::new(Mutex::new(HashMap::new())),
@@ -355,6 +396,45 @@ impl MetricsRegistry {
             }
             *prev_labels = current_conntrack;
         }
+
+        // Update WireGuard interface metrics
+        for wg_iface in &metrics.wireguard_interfaces {
+            let wg_labels = WireGuardInterfaceLabels {
+                router: metrics.router_name.clone(),
+                interface: wg_iface.name.clone(),
+            };
+            self.wireguard_interface_enabled
+                .get_or_create(&wg_labels)
+                .set(i64::from(wg_iface.enabled));
+        }
+
+        // Update WireGuard peer metrics
+        for wg_peer in &metrics.wireguard_peers {
+            let endpoint = wg_peer
+                .endpoint
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string());
+            let wg_peer_labels = WireGuardPeerLabels {
+                router: metrics.router_name.clone(),
+                interface: wg_peer.interface.clone(),
+                public_key: wg_peer.public_key.clone(),
+                endpoint,
+            };
+            #[allow(clippy::cast_possible_wrap)]
+            {
+                self.wireguard_peer_rx_bytes
+                    .get_or_create(&wg_peer_labels)
+                    .set(wg_peer.rx_bytes as i64);
+                self.wireguard_peer_tx_bytes
+                    .get_or_create(&wg_peer_labels)
+                    .set(wg_peer.tx_bytes as i64);
+                if let Some(timestamp) = wg_peer.latest_handshake {
+                    self.wireguard_peer_latest_handshake
+                        .get_or_create(&wg_peer_labels)
+                        .set(timestamp as i64);
+                }
+            }
+        }
     }
 
     pub async fn encode_metrics(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
@@ -464,6 +544,8 @@ mod tests {
             interfaces,
             system,
             connection_tracking: Vec::new(),
+            wireguard_interfaces: Vec::new(),
+            wireguard_peers: Vec::new(),
         }
     }
 

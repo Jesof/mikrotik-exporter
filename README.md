@@ -144,6 +144,20 @@ MIT - см. [LICENSE](LICENSE)
 | -------------------------------------- | ----- | ------------------------------------------ |
 | `mikrotik_connection_tracking_count`   | gauge | Количество соединений по src/protocol/ip   |
 
+### WireGuard (Labels: router, interface)
+
+| Метрика                                 | Тип   | Описание                                       |
+| --------------------------------------- | ----- | ---------------------------------------------- |
+| `mikrotik_wireguard_interface_enabled`  | gauge | Статус интерфейса (1=включен, 0=выключен)      |
+
+### WireGuard Peers (Labels: router, interface, public_key, endpoint)
+
+| Метрика                              | Тип   | Описание                                    |
+| ------------------------------------ | ----- | ------------------------------------------- |
+| `mikrotik_wireguard_peer_rx_bytes`   | gauge | Полученные байты от пира                    |
+| `mikrotik_wireguard_peer_tx_bytes`   | gauge | Отправленные байты пиру                     |
+| `mikrotik_wireguard_peer_latest_handshake` | gauge | Unix timestamp последнего хендшейка |
+
 ## Архитектура проекта
 
 ```tree

@@ -3,6 +3,8 @@
 
 //! Type definitions for MikroTik metrics
 
+use super::wireguard::{WireGuardInterfaceStats, WireGuardPeerStats};
+
 /// Statistics for a network interface
 #[derive(Debug, Clone)]
 pub struct InterfaceStats {
@@ -43,6 +45,8 @@ pub struct RouterMetrics {
     pub interfaces: Vec<InterfaceStats>,
     pub system: SystemResource,
     pub connection_tracking: Vec<ConnectionTrackingStats>,
+    pub wireguard_interfaces: Vec<WireGuardInterfaceStats>,
+    pub wireguard_peers: Vec<WireGuardPeerStats>,
 }
 
 #[cfg(test)]
@@ -108,12 +112,26 @@ mod tests {
                 board_name: "test".to_string(),
             },
             connection_tracking: Vec::new(),
+            wireguard_interfaces: vec![WireGuardInterfaceStats {
+                name: "wg1".to_string(),
+                enabled: true,
+            }],
+            wireguard_peers: vec![WireGuardPeerStats {
+                interface: "wg1".to_string(),
+                public_key: "abc123".to_string(),
+                endpoint: Some("192.168.1.1:51820".to_string()),
+                rx_bytes: 1024,
+                tx_bytes: 2048,
+                latest_handshake: None,
+            }],
         };
 
         assert_eq!(metrics.router_name, "main-router");
         assert_eq!(metrics.interfaces.len(), 1);
         assert_eq!(metrics.interfaces[0].name, "ether1");
         assert_eq!(metrics.system.version, "7.10");
+        assert_eq!(metrics.wireguard_interfaces.len(), 1);
+        assert_eq!(metrics.wireguard_peers.len(), 1);
     }
 
     #[test]

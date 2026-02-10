@@ -113,6 +113,8 @@ async fn metrics_contains_router_data_after_update() {
         interfaces: vec![iface],
         system,
         connection_tracking: Vec::new(),
+        wireguard_interfaces: vec![],
+        wireguard_peers: vec![],
     };
     state.metrics.update_metrics(&metrics).await;
 

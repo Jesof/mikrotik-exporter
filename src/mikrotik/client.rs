@@ -10,6 +10,7 @@ use std::sync::Arc;
 use super::connection::{parse_connection_tracking, parse_interfaces, parse_system};
 use super::pool::ConnectionPool;
 use super::types::RouterMetrics;
+use super::wireguard::{parse_wireguard_interfaces, parse_wireguard_peers};
 
 /// `MikroTik` `RouterOS` API client
 ///
@@ -75,6 +76,8 @@ impl MikroTikClient {
         let interfaces_result = conn.command("/interface/print", &[]).await;
         let conntrack_v4_result = conn.command("/ip/firewall/connection/print", &[]).await;
         let conntrack_v6_result = conn.command("/ipv6/firewall/connection/print", &[]).await;
+        let wireguard_interfaces_result = conn.command("/interface/wireguard/print", &[]).await;
+        let wireguard_peers_result = conn.command("/interface/wireguard/peers/print", &[]).await;
 
         // Record connection state BEFORE dropping guard to prevent race condition
         let success = system_result.is_ok() && interfaces_result.is_ok();
@@ -105,11 +108,18 @@ impl MikroTikClient {
         let system = parse_system(&system_sentences);
         let interfaces = parse_interfaces(&interfaces_sentences);
 
+        // Parse WireGuard interfaces and peers
+        let wireguard_interfaces =
+            parse_wireguard_interfaces(&wireguard_interfaces_result.unwrap_or_default());
+        let wireguard_peers = parse_wireguard_peers(&wireguard_peers_result.unwrap_or_default());
+
         Ok(RouterMetrics {
             router_name: self.config.name.clone(),
             interfaces,
             system,
             connection_tracking: conntrack_v4,
+            wireguard_interfaces,
+            wireguard_peers,
         })
     }
 }
