@@ -63,9 +63,9 @@ pub(super) fn parse_wireguard_peers(
                     .and_then(|v| v.parse::<u64>().ok())
                     .unwrap_or(0);
 
-                // Parse latest-handshake to timestamp if available
+                // Parse last-handshake to timestamp if available
                 let latest_handshake = sentence
-                    .get("latest-handshake")
+                    .get("last-handshake")
                     .and_then(|v| parse_handshake_to_timestamp(v));
 
                 peers.push(WireGuardPeerStats {
@@ -83,18 +83,90 @@ pub(super) fn parse_wireguard_peers(
     peers
 }
 
-/// Parse the latest-handshake field to seconds since last handshake
+/// Parse the last-handshake field from RouterOS duration format to seconds
 ///
-/// The RouterOS API returns the last-handshake field as an integer representing
-/// "time in seconds after the last successful handshake".
+/// The RouterOS API returns the last-handshake field in duration format like:
+/// - "7s" (7 seconds)
+/// - "1w4d9h15m7s" (1 week, 4 days, 9 hours, 15 minutes, 7 seconds)
+/// - "never" (no handshake)
+/// - "120" (120 seconds, older RouterOS versions)
+/// - "0s" or "" (zero seconds)
+///
+/// Returns the total seconds as a u64, or None if the handshake was never.
 /// See: https://help.mikrotik.com/docs/spaces/ROS/pages/69664792/WireGuard
 fn parse_handshake_to_timestamp(handshake_str: &str) -> Option<u64> {
     if handshake_str.is_empty() || handshake_str == "never" {
         return None;
     }
 
-    // Parse the string as an integer representing seconds since last handshake
-    handshake_str.parse::<u64>().ok()
+    // First try to parse as a plain number (for backward compatibility)
+    if let Ok(seconds) = handshake_str.parse::<u64>() {
+        return Some(seconds);
+    }
+
+    // If that fails, parse as RouterOS duration format (e.g., "1w4d9h15m7s")
+    parse_routeros_duration(handshake_str)
+}
+
+/// Parse RouterOS duration format to seconds
+///
+/// RouterOS uses a format like "1w4d9h15m7s" meaning:
+/// - w = weeks (1w = 7 days)
+/// - d = days
+/// - h = hours
+/// - m = minutes
+/// - s = seconds
+fn parse_routeros_duration(duration_str: &str) -> Option<u64> {
+    if duration_str.is_empty() {
+        return Some(0);
+    }
+
+    let mut total_seconds: u64 = 0;
+    let mut current_number = String::new();
+
+    for ch in duration_str.chars() {
+        match ch {
+            '0'..='9' => {
+                current_number.push(ch);
+            }
+            's' => {
+                if let Ok(seconds) = current_number.parse::<u64>() {
+                    total_seconds += seconds;
+                }
+                current_number.clear();
+            }
+            'm' => {
+                if let Ok(minutes) = current_number.parse::<u64>() {
+                    total_seconds += minutes * 60;
+                }
+                current_number.clear();
+            }
+            'h' => {
+                if let Ok(hours) = current_number.parse::<u64>() {
+                    total_seconds += hours * 3600;
+                }
+                current_number.clear();
+            }
+            'd' => {
+                if let Ok(days) = current_number.parse::<u64>() {
+                    total_seconds += days * 86400;
+                }
+                current_number.clear();
+            }
+            'w' => {
+                if let Ok(weeks) = current_number.parse::<u64>() {
+                    total_seconds += weeks * 604800; // 7 days in a week
+                }
+                current_number.clear();
+            }
+            _ => {
+                // Ignore any other characters
+                continue;
+            }
+        }
+    }
+
+    Some(total_seconds)
 }
 
 #[cfg(test)]
@@ -183,7 +255,7 @@ mod tests {
         data.insert("endpoint".to_string(), "192.168.1.1:51820".to_string());
         data.insert("rx".to_string(), "1024".to_string());
         data.insert("tx".to_string(), "2048".to_string());
-        data.insert("latest-handshake".to_string(), "never".to_string());
+        data.insert("last-handshake".to_string(), "never".to_string());
 
         let result = parse_wireguard_peers(&[data]);
         assert_eq!(result.len(), 1);
@@ -203,7 +275,7 @@ mod tests {
         data.insert("endpoint".to_string(), "192.168.1.1:51820".to_string());
         data.insert("rx".to_string(), "1024".to_string());
         data.insert("tx".to_string(), "2048".to_string());
-        data.insert("latest-handshake".to_string(), "120".to_string()); // 120 seconds since last handshake
+        data.insert("last-handshake".to_string(), "120".to_string()); // 120 seconds since last handshake
 
         let result = parse_wireguard_peers(&[data]);
         assert_eq!(result.len(), 1);
@@ -220,7 +292,7 @@ mod tests {
         let mut data = HashMap::new();
         data.insert("interface".to_string(), "wg1".to_string());
         data.insert("public-key".to_string(), "abc123".to_string());
-        // Missing endpoint, rx, tx, latest-handshake
+        // Missing endpoint, rx, tx, last-handshake
 
         let result = parse_wireguard_peers(&[data]);
         assert_eq!(result.len(), 1);
@@ -303,13 +375,36 @@ mod tests {
         // Test that the function returns None for empty string
         assert_eq!(parse_handshake_to_timestamp(""), None);
 
-        // Test that the function correctly parses integer values
+        // Test that the function correctly parses plain integer values (backward compatibility)
         assert_eq!(parse_handshake_to_timestamp("0"), Some(0));
         assert_eq!(parse_handshake_to_timestamp("120"), Some(120));
         assert_eq!(parse_handshake_to_timestamp("3600"), Some(3600));
 
-        // Test that the function returns None for invalid integers
-        assert_eq!(parse_handshake_to_timestamp("invalid"), None);
-        assert_eq!(parse_handshake_to_timestamp("-1"), None); // Negative values shouldn't occur but test anyway
+        // Test that the function correctly parses RouterOS duration format
+        assert_eq!(parse_handshake_to_timestamp("7s"), Some(7));
+        assert_eq!(parse_handshake_to_timestamp("1m30s"), Some(90));
+        assert_eq!(parse_handshake_to_timestamp("2h30m"), Some(9000));
+        assert_eq!(parse_handshake_to_timestamp("1d2h"), Some(93600));
+        assert_eq!(parse_handshake_to_timestamp("1w2d"), Some(777600));
+        assert_eq!(parse_handshake_to_timestamp("1w4d9h15m7s"), Some(983707)); // 1 week + 4 days + 9 hours + 15 minutes + 7 seconds
+
+        // Test zero duration
+        assert_eq!(parse_handshake_to_timestamp("0s"), Some(0));
+
+        // Test mixed order (should still work)
+        assert_eq!(parse_handshake_to_timestamp("30s1m"), Some(90)); // 1 minute + 30 seconds
+    }
+
+    #[test]
+    fn test_parse_routeros_duration() {
+        // Test the helper function directly
+        assert_eq!(parse_routeros_duration("7s"), Some(7));
+        assert_eq!(parse_routeros_duration("1m30s"), Some(90));
+        assert_eq!(parse_routeros_duration("2h30m"), Some(9000));
+        assert_eq!(parse_routeros_duration("1d2h"), Some(93600));
+        assert_eq!(parse_routeros_duration("1w2d"), Some(777600));
+        assert_eq!(parse_routeros_duration("1w4d9h15m7s"), Some(983707)); // Correct calculation
+        assert_eq!(parse_routeros_duration(""), Some(0));
+        assert_eq!(parse_routeros_duration("0s"), Some(0));
     }
 }
