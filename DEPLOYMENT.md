@@ -159,7 +159,7 @@ kubectl rollout status deployment/mikrotik-exporter -n monitoring
 ```bash
 # Rolling update на новую версию
 kubectl set image deployment/mikrotik-exporter \
-  mikrotik-exporter=ghcr.io/jesof/mikrotik-exporter:v0.2.0 \
+  mikrotik-exporter=ghcr.io/jesof/mikrotik-exporter:v0.2.1 \
   -n monitoring
 
 # Проверка статуса

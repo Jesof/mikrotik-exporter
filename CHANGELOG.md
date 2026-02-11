@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Neighbors metrics support (in development for v0.3.0)
 - POE metrics support (in development for v0.3.0)
 
+## [0.2.1] - 2026-02-11
+
+### Changed
+- CI: Add path filtering to GitHub Actions workflows for faster builds
+
 ## [0.2.0] - 2026-02-11
 
 ### Added
