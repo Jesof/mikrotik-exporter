@@ -453,6 +453,18 @@ impl MetricsRegistry {
         self.scrape_errors.get_or_create(labels).inc();
     }
 
+    /// Initialize metrics for a router to zero
+    ///
+    /// This ensures that counters like scrape_success and scrape_errors
+    /// exist from the start, allowing Prometheus to calculate rates correctly
+    /// even before the first success or error occurs.
+    pub fn initialize_router_metrics(&self, labels: &RouterLabels) {
+        let _ = self.scrape_success.get_or_create(labels);
+        let _ = self.scrape_errors.get_or_create(labels);
+        let _ = self.scrape_duration_milliseconds.get_or_create(labels);
+        let _ = self.connection_consecutive_errors.get_or_create(labels);
+    }
+
     pub fn record_scrape_duration(&self, labels: &RouterLabels, duration_secs: f64) {
         // Store as milliseconds for better precision (will be interpreted as fractional seconds)
         #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
@@ -697,13 +709,21 @@ mod tests {
         let metrics = make_router_metrics("router1", vec![iface], system);
         registry.update_metrics(&metrics).await;
 
+        let router_label = RouterLabels {
+            router: "router1".to_string(),
+        };
+        registry.record_scrape_success(&router_label);
+        registry.record_scrape_error(&router_label);
+
         let encoded = registry.encode_metrics().await.expect("Failed to encode");
 
-        assert!(encoded.contains("mikrotik_interface_rx_bytes"));
-        assert!(encoded.contains("mikrotik_interface_tx_bytes"));
+        assert!(encoded.contains("mikrotik_interface_rx_bytes_total"));
+        assert!(encoded.contains("mikrotik_interface_tx_bytes_total"));
         assert!(encoded.contains("mikrotik_interface_running"));
         assert!(encoded.contains("mikrotik_system_cpu_load"));
         assert!(encoded.contains("mikrotik_system_free_memory_bytes"));
+        assert!(encoded.contains("mikrotik_scrape_success_total"));
+        assert!(encoded.contains("mikrotik_scrape_errors_total"));
         assert!(encoded.contains("router=\"router1\""));
         assert!(encoded.contains("interface=\"ether1\""));
     }

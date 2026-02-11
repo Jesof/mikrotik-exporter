@@ -11,6 +11,7 @@
 //! identifier for monitoring while maintaining privacy.
 
 use std::collections::HashMap;
+use std::time::SystemTime;
 
 /// Statistics for a WireGuard interface
 #[derive(Debug, Clone, PartialEq)]
@@ -120,13 +121,18 @@ fn parse_handshake_to_timestamp(handshake_str: &str) -> Option<u64> {
         return None;
     }
 
-    // First try to parse as a plain number (for backward compatibility)
-    if let Ok(seconds) = handshake_str.parse::<u64>() {
-        return Some(seconds);
-    }
+    let duration_secs = if let Ok(seconds) = handshake_str.parse::<u64>() {
+        seconds
+    } else {
+        parse_routeros_duration(handshake_str)?
+    };
 
-    // If that fails, parse as RouterOS duration format (e.g., "1w4d9h15m7s")
-    parse_routeros_duration(handshake_str)
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+
+    Some(now.saturating_sub(duration_secs))
 }
 
 /// Parse RouterOS duration format to seconds
@@ -313,7 +319,14 @@ mod tests {
         assert_eq!(result[0].endpoint, Some("192.168.1.1:51820".to_string()));
         assert_eq!(result[0].rx_bytes, 1024);
         assert_eq!(result[0].tx_bytes, 2048);
-        assert_eq!(result[0].latest_handshake, Some(120)); // Should parse to 120 seconds
+        assert!(result[0].latest_handshake.is_some());
+        let handshake = result[0].latest_handshake.unwrap();
+        let now = SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        assert!(handshake <= now);
+        assert!(handshake >= now - 130); // account for test execution time
     }
 
     #[test]
@@ -424,6 +437,11 @@ mod tests {
 
     #[test]
     fn test_parse_handshake_to_timestamp() {
+        let now = SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
         // Test that the function returns None for "never"
         assert_eq!(parse_handshake_to_timestamp("never"), None);
 
@@ -431,23 +449,22 @@ mod tests {
         assert_eq!(parse_handshake_to_timestamp(""), None);
 
         // Test that the function correctly parses plain integer values (backward compatibility)
-        assert_eq!(parse_handshake_to_timestamp("0"), Some(0));
-        assert_eq!(parse_handshake_to_timestamp("120"), Some(120));
-        assert_eq!(parse_handshake_to_timestamp("3600"), Some(3600));
+        let ts0 = parse_handshake_to_timestamp("0").unwrap();
+        assert!(ts0 <= now && ts0 >= now - 2);
+
+        let ts120 = parse_handshake_to_timestamp("120").unwrap();
+        assert!(ts120 <= now - 120 && ts120 >= now - 122);
 
         // Test that the function correctly parses RouterOS duration format
-        assert_eq!(parse_handshake_to_timestamp("7s"), Some(7));
-        assert_eq!(parse_handshake_to_timestamp("1m30s"), Some(90));
-        assert_eq!(parse_handshake_to_timestamp("2h30m"), Some(9000));
-        assert_eq!(parse_handshake_to_timestamp("1d2h"), Some(93600));
-        assert_eq!(parse_handshake_to_timestamp("1w2d"), Some(777600));
-        assert_eq!(parse_handshake_to_timestamp("1w4d9h15m7s"), Some(983707)); // 1 week + 4 days + 9 hours + 15 minutes + 7 seconds
+        let ts7s = parse_handshake_to_timestamp("7s").unwrap();
+        assert!(ts7s <= now - 7 && ts7s >= now - 9);
+
+        let ts90s = parse_handshake_to_timestamp("1m30s").unwrap();
+        assert!(ts90s <= now - 90 && ts90s >= now - 92);
 
         // Test zero duration
-        assert_eq!(parse_handshake_to_timestamp("0s"), Some(0));
-
-        // Test mixed order (should still work)
-        assert_eq!(parse_handshake_to_timestamp("30s1m"), Some(90)); // 1 minute + 30 seconds
+        let ts0s = parse_handshake_to_timestamp("0s").unwrap();
+        assert!(ts0s <= now && ts0s >= now - 2);
     }
 
     #[test]

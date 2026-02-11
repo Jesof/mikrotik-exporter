@@ -1,8 +1,8 @@
 {
   "__inputs": [
     {
-      "name": "DS_PROMETHEUS",
-      "label": "Prometheus",
+      "name": "DS_VICTORIAMETRICS",
+      "label": "VictoriaMetrics",
       "description": "",
       "type": "datasource",
       "pluginId": "prometheus",
@@ -27,7 +27,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "12.1.1"
+      "version": "12.3.0"
     },
     {
       "type": "datasource",
@@ -73,13 +73,25 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": null,
   "links": [],
   "panels": [
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "panels": [],
+      "title": "System Overview",
+      "type": "row"
+    },
+    {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Системная информация о роутере",
       "fieldConfig": {
@@ -104,7 +116,7 @@
         "h": 4,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 1
       },
       "id": 1,
       "options": {
@@ -124,12 +136,12 @@
         "textMode": "name",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_system_info{router=\"$router\"}",
@@ -144,7 +156,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Загрузка CPU роутера в процентах",
       "fieldConfig": {
@@ -180,7 +192,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 4
+        "y": 5
       },
       "id": 2,
       "options": {
@@ -198,12 +210,12 @@
         "showThresholdMarkers": true,
         "sizing": "auto"
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_system_cpu_load{router=\"$router\"}",
@@ -218,7 +230,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Использование памяти роутера",
       "fieldConfig": {
@@ -254,7 +266,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 4
+        "y": 5
       },
       "id": 3,
       "options": {
@@ -272,12 +284,12 @@
         "showThresholdMarkers": true,
         "sizing": "auto"
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "expr": "(1 - (mikrotik_system_free_memory_bytes{router=\"$router\"} / mikrotik_system_total_memory_bytes{router=\"$router\"})) * 100",
@@ -292,7 +304,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Время работы роутера",
       "fieldConfig": {
@@ -318,7 +330,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 4
+        "y": 5
       },
       "id": 4,
       "options": {
@@ -338,12 +350,12 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_system_uptime_seconds{router=\"$router\"}",
@@ -358,9 +370,9 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
-      "description": "Статус успешности сбора метрик",
+      "description": "Текущий статус сбора метрик (на основе последовательных ошибок подключения)",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -369,18 +381,27 @@
           "mappings": [
             {
               "options": {
-                "0": {
+                "from": 1,
+                "result": {
                   "color": "red",
                   "index": 1,
-                  "text": "Errors"
+                  "text": "Error"
                 },
-                "1": {
+                "to": 1000
+              },
+              "type": "range"
+            },
+            {
+              "options": {
+                "from": 0,
+                "result": {
                   "color": "green",
                   "index": 0,
                   "text": "OK"
-                }
+                },
+                "to": 0
               },
-              "type": "value"
+              "type": "range"
             }
           ],
           "thresholds": {
@@ -389,6 +410,10 @@
               {
                 "color": "green",
                 "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1
               }
             ]
           }
@@ -399,7 +424,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 4
+        "y": 5
       },
       "id": 5,
       "options": {
@@ -419,15 +444,15 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_scrape_success{router=\"$router\"} > 0",
+          "expr": "mikrotik_connection_consecutive_errors{router=\"$router\"}",
           "legendFormat": "Scrape Status",
           "range": true,
           "refId": "A"
@@ -439,7 +464,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "История загрузки CPU",
       "fieldConfig": {
@@ -471,6 +496,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -504,7 +530,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 12
+        "y": 13
       },
       "id": 6,
       "options": {
@@ -525,12 +551,12 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_system_cpu_load{router=\"$router\"}",
@@ -545,7 +571,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "История использования памяти",
       "fieldConfig": {
@@ -577,6 +603,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -639,7 +666,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 12
+        "y": 13
       },
       "id": 7,
       "options": {
@@ -660,12 +687,12 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_system_free_memory_bytes{router=\"$router\"}",
@@ -676,7 +703,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_system_total_memory_bytes{router=\"$router\"} - mikrotik_system_free_memory_bytes{router=\"$router\"}",
@@ -689,527 +716,22 @@
       "type": "timeseries"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Трафик по всем интерфейсам (получено)",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          },
-          "unit": "bps"
-        },
-        "overrides": []
-      },
+      "collapsed": false,
       "gridPos": {
-        "h": 9,
-        "w": 12,
+        "h": 1,
+        "w": 24,
         "x": 0,
-        "y": 21
+        "y": 22
       },
-      "id": 8,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "sortBy": "Last",
-          "sortDesc": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "12.1.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_bytes_total{router=\"$router\",interface=~\"$interface\"}[5m]) * 8",
-          "legendFormat": "{{interface}} RX",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Interface Traffic (RX)",
-      "type": "timeseries"
+      "id": 101,
+      "panels": [],
+      "title": "Network Interfaces",
+      "type": "row"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Трафик по всем интерфейсам (отправлено)",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          },
-          "unit": "bps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 21
-      },
-      "id": 9,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "sortBy": "Last",
-          "sortDesc": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "12.1.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_bytes_total{router=\"$router\",interface=~\"$interface\"}[5m]) * 8",
-          "legendFormat": "{{interface}} TX",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Interface Traffic (TX)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Пакеты полученные по интерфейсам",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          },
-          "unit": "pps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 30
-      },
-      "id": 10,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "sortBy": "Last",
-          "sortDesc": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "12.1.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_packets_total{router=\"$router\",interface=~\"$interface\"}[5m])",
-          "legendFormat": "{{interface}} RX",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Interface Packets (RX)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Пакеты отправленные по интерфейсам",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          },
-          "unit": "pps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 30
-      },
-      "id": 11,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "sortBy": "Last",
-          "sortDesc": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "12.1.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_packets_total{router=\"$router\",interface=~\"$interface\"}[5m])",
-          "legendFormat": "{{interface}} TX",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Interface Packets (TX)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Ошибки на интерфейсах",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 39
-      },
-      "id": 12,
-      "options": {
-        "legend": {
-          "calcs": [
-            "sum"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "sortBy": "Total",
-          "sortDesc": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "12.1.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_errors_total{router=\"$router\",interface=~\"$interface\"}[5m])",
-          "legendFormat": "{{interface}} RX Errors",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_errors_total{router=\"$router\",interface=~\"$interface\"}[5m])",
-          "legendFormat": "{{interface}} TX Errors",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "Interface Errors",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Статус интерфейсов (1 = работает, 0 = не работает)",
       "fieldConfig": {
@@ -1221,6 +743,9 @@
             "align": "auto",
             "cellOptions": {
               "type": "color-text"
+            },
+            "footer": {
+              "reducers": []
             },
             "inspect": false
           },
@@ -1268,21 +793,13 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 39
+        "w": 24,
+        "x": 0,
+        "y": 23
       },
       "id": 13,
       "options": {
         "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
         "showHeader": true,
         "sortBy": [
           {
@@ -1291,12 +808,12 @@
           }
         ]
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1332,7 +849,543 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "description": "Трафик по всем интерфейсам (получено)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Last",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_VICTORIAMETRICS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(mikrotik_interface_rx_bytes_total{router=\"$router\",interface=~\"$interface\"}[5m]) * 8",
+          "legendFormat": "{{interface}} RX",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Interface Traffic (RX)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "description": "Трафик по всем интерфейсам (отправлено)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Last",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_VICTORIAMETRICS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(mikrotik_interface_tx_bytes_total{router=\"$router\",interface=~\"$interface\"}[5m]) * 8",
+          "legendFormat": "{{interface}} TX",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Interface Traffic (TX)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "description": "Пакеты полученные по интерфейсам",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "pps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 41
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Last",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_VICTORIAMETRICS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(mikrotik_interface_rx_packets_total{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "legendFormat": "{{interface}} RX",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Interface Packets (RX)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "description": "Пакеты отправленные по интерфейсам",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "pps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 41
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Last",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_VICTORIAMETRICS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(mikrotik_interface_tx_packets_total{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "legendFormat": "{{interface}} TX",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Interface Packets (TX)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "description": "Ошибки на интерфейсах",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Total",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_VICTORIAMETRICS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(mikrotik_interface_rx_errors_total{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "legendFormat": "{{interface}} RX Errors",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_VICTORIAMETRICS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(mikrotik_interface_tx_errors_total{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "legendFormat": "{{interface}} TX Errors",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Interface Errors",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 59
+      },
+      "id": 102,
+      "panels": [],
+      "title": "WireGuard",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Трафик WireGuard пиров (получено)",
       "fieldConfig": {
@@ -1364,6 +1417,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1391,7 +1445,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 48
+        "y": 60
       },
       "id": 28,
       "options": {
@@ -1413,12 +1467,12 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[5m]) * 8",
@@ -1433,7 +1487,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Трафик WireGuard пиров (отправлено)",
       "fieldConfig": {
@@ -1465,6 +1519,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1492,7 +1547,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 48
+        "y": 60
       },
       "id": 29,
       "options": {
@@ -1514,12 +1569,12 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[5m]) * 8",
@@ -1534,7 +1589,275 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "description": "Время последнего WireGuard handshake для каждого пира (значение показывает, как давно был последний handshake)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "match": "null",
+                "result": {
+                  "color": "dark-gray",
+                  "index": 0,
+                  "text": "Never"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "Never",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "dateTimeFromNow"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 69
+      },
+      "id": 30,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_VICTORIAMETRICS}"
+          },
+          "editorMode": "code",
+          "expr": "(mikrotik_wireguard_peer_latest_handshake{router=\"$router\"} > 0) * 1000",
+          "legendFormat": "{{interface}} | {{name}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "WireGuard Last Handshake",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 78
+      },
+      "id": 103,
+      "panels": [],
+      "title": "Connection Tracking",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "description": "Общее количество отслеживаемых соединений",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 10000
+              },
+              {
+                "color": "red",
+                "value": 50000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 79
+      },
+      "id": 22,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_VICTORIAMETRICS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(mikrotik_connection_tracking_count{router=\"$router\"})",
+          "legendFormat": "Total Connections",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Total Tracked Connections",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "description": "Распределение соединений по протоколам",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "stack"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 79
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Last",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_VICTORIAMETRICS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (protocol) (mikrotik_connection_tracking_count{router=\"$router\"})",
+          "legendFormat": "{{protocol}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Connection Tracking by Protocol",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Current open IPv4 connections by source",
       "fieldConfig": {
@@ -1598,7 +1921,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 57
+        "y": 88
       },
       "id": 24,
       "options": {
@@ -1630,12 +1953,12 @@
         "xTickLabelRotation": 0,
         "xTickLabelSpacing": 0
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1653,7 +1976,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Current open IPv6 connections by source",
       "fieldConfig": {
@@ -1717,7 +2040,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 57
+        "y": 88
       },
       "id": 25,
       "options": {
@@ -1749,12 +2072,12 @@
         "xTickLabelRotation": 0,
         "xTickLabelSpacing": 0
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1772,7 +2095,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Количество соединений по протоколам и IP-адресам источников",
       "fieldConfig": {
@@ -1784,6 +2107,9 @@
             "align": "auto",
             "cellOptions": {
               "type": "auto"
+            },
+            "footer": {
+              "reducers": []
             },
             "inspect": false
           },
@@ -1826,19 +2152,11 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 65
+        "y": 96
       },
       "id": 20,
       "options": {
         "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
         "showHeader": true,
         "sortBy": [
           {
@@ -1847,12 +2165,12 @@
           }
         ]
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1893,7 +2211,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Количество соединений по протоколам и IP-адресам источников (IPv6)",
       "fieldConfig": {
@@ -1905,6 +2223,9 @@
             "align": "auto",
             "cellOptions": {
               "type": "auto"
+            },
+            "footer": {
+              "reducers": []
             },
             "inspect": false
           },
@@ -1947,19 +2268,11 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 65
+        "y": 96
       },
       "id": 23,
       "options": {
         "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
         "showHeader": true,
         "sortBy": [
           {
@@ -1968,12 +2281,12 @@
           }
         ]
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -2012,184 +2325,22 @@
       "type": "table"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Распределение соединений по протоколам",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "stack"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
+      "collapsed": false,
       "gridPos": {
-        "h": 8,
-        "w": 12,
+        "h": 1,
+        "w": 24,
         "x": 0,
-        "y": 74
+        "y": 105
       },
-      "id": 21,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "sortBy": "Last",
-          "sortDesc": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.1.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "sum by (protocol) (mikrotik_connection_tracking_count{router=\"$router\"})",
-          "legendFormat": "{{protocol}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Connection Tracking by Protocol",
-      "type": "timeseries"
+      "id": 104,
+      "panels": [],
+      "title": "Exporter Internals",
+      "type": "row"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Общее количество отслеживаемых соединений",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "yellow",
-                "value": 10000
-              },
-              {
-                "color": "red",
-                "value": 50000
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 74
-      },
-      "id": 22,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "12.1.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "sum(mikrotik_connection_tracking_count{router=\"$router\"})",
-          "legendFormat": "Total Connections",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Total Tracked Connections",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Длительность сбора метрик в миллисекундах",
       "fieldConfig": {
@@ -2221,6 +2372,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -2256,7 +2408,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 82
+        "y": 106
       },
       "id": 14,
       "options": {
@@ -2277,12 +2429,12 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_scrape_duration_milliseconds{router=\"$router\"}",
@@ -2297,9 +2449,9 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
-      "description": "Процент успешных сборов метрик за последний час",
+      "description": "Процент успешных сборов метрик за последние 5 минут",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2337,7 +2489,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 82
+        "y": 106
       },
       "id": 18,
       "options": {
@@ -2355,15 +2507,15 @@
         "showThresholdMarkers": true,
         "sizing": "auto"
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "100 * rate(mikrotik_scrape_success{router=\"$router\"}[1h]) / (rate(mikrotik_scrape_success{router=\"$router\"}[1h]) + rate(mikrotik_scrape_errors{router=\"$router\"}[1h]))",
+          "expr": "100 * (rate(mikrotik_scrape_success_total{router=\"$router\"}[5m]) or vector(0)) / clamp_min((rate(mikrotik_scrape_success_total{router=\"$router\"}[5m]) or vector(0)) + (rate(mikrotik_scrape_errors_total{router=\"$router\"}[5m]) or vector(0)), 1)",
           "legendFormat": "{{router}}",
           "range": true,
           "refId": "A"
@@ -2375,7 +2527,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Статистика использования пула соединений",
       "fieldConfig": {
@@ -2407,6 +2559,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -2434,7 +2587,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 90
+        "y": 114
       },
       "id": 17,
       "options": {
@@ -2454,12 +2607,12 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_connection_pool_size",
@@ -2470,7 +2623,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_connection_pool_active",
@@ -2485,7 +2638,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Время последнего успешного сбора метрик",
       "fieldConfig": {
@@ -2519,7 +2672,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 90
+        "y": 114
       },
       "id": 15,
       "options": {
@@ -2539,12 +2692,12 @@
         "textMode": "value",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_scrape_last_success_timestamp_seconds{router=\"$router\"} * 1000",
@@ -2559,7 +2712,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_VICTORIAMETRICS}"
       },
       "description": "Количество последовательных ошибок подключения",
       "fieldConfig": {
@@ -2597,7 +2750,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 90
+        "y": 114
       },
       "id": 16,
       "options": {
@@ -2617,15 +2770,15 @@
         "textMode": "value",
         "wideLayout": false
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_connection_consecutive_errors{router=\"$router\"}",
+          "expr": "mikrotik_connection_consecutive_errors{router=\"$router\"} or vector(0)",
           "legendFormat": "{{router}}",
           "range": true,
           "refId": "A"
@@ -2635,8 +2788,9 @@
       "type": "stat"
     }
   ],
+  "preload": false,
   "refresh": "30s",
-  "schemaVersion": 41,
+  "schemaVersion": 42,
   "tags": [
     "mikrotik",
     "network",
@@ -2659,7 +2813,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
+          "uid": "${DS_VICTORIAMETRICS}"
         },
         "definition": "label_values(mikrotik_system_info, router)",
         "includeAll": false,
@@ -2680,7 +2834,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
+          "uid": "${DS_VICTORIAMETRICS}"
         },
         "definition": "label_values(mikrotik_interface_rx_bytes_total{router=\"$router\"}, interface)",
         "includeAll": true,
@@ -2720,6 +2874,7 @@
   "timezone": "browser",
   "title": "MikroTik Router Monitoring",
   "uid": "mikrotik-exporter",
-  "version": 28,
-  "weekStart": ""
+  "version": 6,
+  "weekStart": "",
+  "id": null
 }

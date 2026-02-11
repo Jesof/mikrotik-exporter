@@ -61,6 +61,14 @@ pub fn start_collection_loop(
     // Start cleanup task for expired connections (joined inside collection loop on shutdown)
     let cleanup_handle = cleanup::start_pool_cleanup_task(pool.clone(), shutdown_rx.clone());
 
+    // Initialize metrics for all routers to ensure counters start at zero
+    for router in &config.routers {
+        let router_label = RouterLabels {
+            router: router.name.clone(),
+        };
+        metrics.initialize_router_metrics(&router_label);
+    }
+
     tracing::trace!(
         "Collection loop initialized with {} routers",
         config.routers.len()
