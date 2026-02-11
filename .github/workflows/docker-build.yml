@@ -36,7 +36,7 @@ on:
         default: manual
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: docker-build-${{ github.ref }}
   cancel-in-progress: true
 
 env:
