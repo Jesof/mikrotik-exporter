@@ -75,7 +75,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
         with:
           components: rustfmt
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
       - run: cargo fmt --all -- --check
 
   clippy:
@@ -110,6 +109,20 @@ jobs:
         with:
           files: ./coverage/cobertura.xml
           fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  deny:
+    name: Cargo Deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name != 'schedule'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
+      - uses: taiki-e/install-action@d4422f254e595ee762a758628fe4f16ce050fa2e # v2
+        with:
+          tool: cargo-deny
+      - run: cargo deny check
 
   security-audit:
     name: Security Audit
@@ -126,7 +139,7 @@ jobs:
 
   docker-build:
     name: Docker Build and Push
-    needs: [check, test, fmt, clippy, coverage, security-audit]
+    needs: [check, test, fmt, clippy, deny, coverage, security-audit]
     if: >-
       github.event_name != 'schedule' &&
       (github.event_name == 'pull_request' ||
