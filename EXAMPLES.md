@@ -313,6 +313,9 @@ docker run -d \
   ghcr.io/jesof/mikrotik-exporter:latest
 ```
 
+Если `ROUTERS_CONFIG` не задан, используйте legacy-конфигурацию
+`ROUTEROS_ADDRESS/ROUTEROS_USERNAME/ROUTEROS_PASSWORD` (имя роутера будет `default`).
+
 ### С конфигурацией из файла
 
 ```bash
@@ -581,7 +584,7 @@ docker stats mikrotik-exporter
 docker exec -it mikrotik-exporter sh
 
 # Проверка health
-docker exec mikrotik-exporter wget -qO- http://localhost:9090/health | jq
+docker exec mikrotik-exporter wget -qO- http://localhost:9090/health
 
 # Перезапуск
 docker restart mikrotik-exporter

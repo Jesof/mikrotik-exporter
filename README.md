@@ -39,10 +39,16 @@ kubectl apply -k k8s/
 
 ```bash
 SERVER_ADDR=0.0.0.0:9090                    # HTTP server bind address
-ROUTERS_CONFIG=[{...}]                      # JSON массив роутеров (обязательно)
+ROUTERS_CONFIG=[{...}]                      # JSON массив роутеров (рекомендуется)
 COLLECTION_INTERVAL_SECONDS=30              # Интервал сбора метрик
 RUST_LOG=info                               # Уровень логирования
+ROUTEROS_ADDRESS=192.168.88.1:8728          # Legacy: адрес RouterOS API (один роутер)
+ROUTEROS_USERNAME=admin                     # Legacy: пользователь (default: admin)
+ROUTEROS_PASSWORD=                          # Legacy: пароль (default: пусто)
 ```
+
+Если `ROUTERS_CONFIG` не задан, используется legacy-конфигурация
+`ROUTEROS_ADDRESS/ROUTEROS_USERNAME/ROUTEROS_PASSWORD` с именем роутера `default`.
 
 ### Формат ROUTERS_CONFIG
 

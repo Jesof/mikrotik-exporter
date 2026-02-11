@@ -55,6 +55,9 @@ docker run -d \
   ghcr.io/jesof/mikrotik-exporter:latest
 ```
 
+Если `ROUTERS_CONFIG` не задан, можно использовать legacy-конфигурацию
+`ROUTEROS_ADDRESS/ROUTEROS_USERNAME/ROUTEROS_PASSWORD` (имя роутера будет `default`).
+
 ---
 
 ## Kubernetes
@@ -495,7 +498,7 @@ kubectl logs -n monitoring -l app=mikrotik-exporter -f
 
 # Проверка сетевой доступности из pod
 kubectl exec -it -n monitoring deployment/mikrotik-exporter -- sh
-# В контейнере нет дополнительных утилит, используйте busybox sidecar
+# В контейнере только busybox (wget есть, curl/jq нет) — для curl/jq используйте sidecar
 ```
 
 ### Dashboard не показывает данные
