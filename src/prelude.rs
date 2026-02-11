@@ -15,7 +15,13 @@ pub use crate::config::{Config, RouterConfig};
 pub use crate::error::{AppError, Result};
 
 // Metrics types
-pub use crate::metrics::{InterfaceLabels, MetricsRegistry, RouterLabels, SystemInfoLabels};
+pub use crate::metrics::{
+    ConntrackLabels, InterfaceLabels, MetricsRegistry, RouterLabels, SystemInfoLabels,
+    WireGuardInterfaceLabels, WireGuardPeerLabels,
+};
 
 // MikroTik client
-pub use crate::mikrotik::{InterfaceStats, MikroTikClient, RouterMetrics, SystemResource};
+pub use crate::mikrotik::{
+    ConnectionPool, ConnectionTrackingStats, InterfaceStats, MikroTikClient, RouterMetrics,
+    SystemResource, WireGuardInterfaceStats, WireGuardPeerStats,
+};

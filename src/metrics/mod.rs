@@ -13,7 +13,10 @@ mod registry;
 mod tests;
 
 /// Labels for interfaces, routers, and system info
-pub use labels::{InterfaceLabels, RouterLabels, SystemInfoLabels};
+pub use labels::{
+    ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardInterfaceLabels,
+    WireGuardPeerLabels,
+};
 
 /// Prometheus metrics registry
 pub use registry::MetricsRegistry;
