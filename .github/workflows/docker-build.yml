@@ -3,30 +3,37 @@
 name: Docker Build and Push
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - '.github/workflows/**'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - '.github/workflows/**'
+  workflow_call:
+    inputs:
+      platforms:
+        description: Docker platforms to build
+        type: string
+        required: true
+      push:
+        description: Whether to push to registry
+        type: boolean
+        required: true
+      cache_scope:
+        description: Cache scope for GHA cache
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: Docker platforms to build
+        type: string
+        required: true
+        default: linux/amd64,linux/arm64
+      push:
+        description: Whether to push to registry
+        type: boolean
+        required: true
+        default: false
+      cache_scope:
+        description: Cache scope for GHA cache
+        type: string
+        required: true
+        default: manual
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -57,7 +64,7 @@ jobs:
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
+        if: inputs.push
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -80,21 +87,21 @@ jobs:
             type=semver,pattern=v{{major}}
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
-
+          
       - name: Build and push Docker image
         id: build
         uses: docker/build-push-action@601a80b39c9405e50806ae38af30926f9d957c47 # v6
         with:
           context: .
-          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
-          push: ${{ github.event_name != 'pull_request' }}
+          platforms: ${{ inputs.platforms }}
+          push: ${{ inputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ github.ref_name }}
-          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}
+          cache-from: type=gha,scope=${{ inputs.cache_scope }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}
 
       - name: Generate artifact attestation
-        if: github.event_name != 'pull_request'
+        if: inputs.push
         uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}

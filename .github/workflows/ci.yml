@@ -2,7 +2,10 @@ name: Rust CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches:
+      - '**'
+    tags:
+      - 'v*'
     paths:
       - 'src/**'
       - 'tests/**'
@@ -120,3 +123,19 @@ jobs:
         with:
           tool: cargo-audit
       - run: cargo audit
+
+  docker-build:
+    name: Docker Build and Push
+    needs: [check, test, fmt, clippy, coverage, security-audit]
+    if: github.event_name != 'schedule'
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+      push: ${{ github.event_name != 'pull_request' }}
+      cache_scope: ${{ github.ref_name }}
+    secrets: inherit
