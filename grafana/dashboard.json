@@ -939,7 +939,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_bytes_total{router=\"$router\",interface=~\"$interface\"}[5m]) * 8",
+          "expr": "rate(mikrotik_interface_rx_bytes_total{router=\"$router\",interface=~\"$interface\"}[$__rate_interval]) * 8",
           "legendFormat": "{{interface}} RX",
           "range": true,
           "refId": "A"
@@ -1041,7 +1041,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_bytes_total{router=\"$router\",interface=~\"$interface\"}[5m]) * 8",
+          "expr": "rate(mikrotik_interface_tx_bytes_total{router=\"$router\",interface=~\"$interface\"}[$__rate_interval]) * 8",
           "legendFormat": "{{interface}} TX",
           "range": true,
           "refId": "A"
@@ -1143,7 +1143,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_packets_total{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "expr": "rate(mikrotik_interface_rx_packets_total{router=\"$router\",interface=~\"$interface\"}[$__rate_interval])",
           "legendFormat": "{{interface}} RX",
           "range": true,
           "refId": "A"
@@ -1245,7 +1245,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_packets_total{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "expr": "rate(mikrotik_interface_tx_packets_total{router=\"$router\",interface=~\"$interface\"}[$__rate_interval])",
           "legendFormat": "{{interface}} TX",
           "range": true,
           "refId": "A"
@@ -1349,7 +1349,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_errors_total{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "expr": "rate(mikrotik_interface_rx_errors_total{router=\"$router\",interface=~\"$interface\"}[$__rate_interval])",
           "legendFormat": "{{interface}} RX Errors",
           "range": true,
           "refId": "A"
@@ -1360,7 +1360,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_errors_total{router=\"$router\",interface=~\"$interface\"}[5m])",
+          "expr": "rate(mikrotik_interface_tx_errors_total{router=\"$router\",interface=~\"$interface\"}[$__rate_interval])",
           "legendFormat": "{{interface}} TX Errors",
           "range": true,
           "refId": "B"
@@ -1475,7 +1475,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[5m]) * 8",
+          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]) * 8",
           "legendFormat": "{{interface}} | {{name}}",
           "range": true,
           "refId": "A"
@@ -1577,7 +1577,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[5m]) * 8",
+          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]) * 8",
           "legendFormat": "{{interface}} | {{name}}",
           "range": true,
           "refId": "A"
@@ -2515,7 +2515,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "100 * (rate(mikrotik_scrape_success_total{router=\"$router\"}[5m]) or vector(0)) / clamp_min((rate(mikrotik_scrape_success_total{router=\"$router\"}[5m]) or vector(0)) + (rate(mikrotik_scrape_errors_total{router=\"$router\"}[5m]) or vector(0)), 1)",
+          "expr": "100 * increase(mikrotik_scrape_success_total{router=\"$router\"}[$__rate_interval]) / clamp_min(increase(mikrotik_scrape_success_total{router=\"$router\"}[$__rate_interval]) + increase(mikrotik_scrape_errors_total{router=\"$router\"}[$__rate_interval]), 1)",
           "legendFormat": "{{router}}",
           "range": true,
           "refId": "A"
@@ -2778,7 +2778,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_connection_consecutive_errors{router=\"$router\"} or vector(0)",
+          "expr": "mikrotik_connection_consecutive_errors{router=\"$router\"}",
           "legendFormat": "{{router}}",
           "range": true,
           "refId": "A"
@@ -2855,7 +2855,7 @@
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {
@@ -2874,7 +2874,7 @@
   "timezone": "browser",
   "title": "MikroTik Router Monitoring",
   "uid": "mikrotik-exporter",
-  "version": 6,
+  "version": 8,
   "weekStart": "",
   "id": null
 }
