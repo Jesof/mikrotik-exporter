@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 # Build stage
 FROM rust:1.91-alpine AS builder
 
@@ -14,17 +16,20 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 
 # Create dummy src to cache dependencies
-RUN mkdir src && \
-    echo "fn main() {}" > src/main.rs && \
-    cargo build --release && \
-    rm -rf src target/release/deps/mikrotik* target/release/mikrotik*
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    sh -c 'mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release --locked && rm -rf src target/release/deps/mikrotik* target/release/mikrotik*'
 
 # Copy actual source code
 COPY src ./src
 COPY clippy.toml rustfmt.toml ./
 
 # Build for release
-RUN cargo build --release
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    sh -c 'cargo build --release --locked && cp target/release/mikrotik-exporter /app/mikrotik-exporter'
 
 # Runtime stage
 FROM alpine:3.19
@@ -39,10 +44,7 @@ RUN addgroup -g 1000 mikrotik && \
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder /app/target/release/mikrotik-exporter /app/mikrotik-exporter
-
-# Change ownership
-RUN chown -R mikrotik:mikrotik /app
+COPY --from=builder --chown=mikrotik:mikrotik /app/mikrotik-exporter /app/mikrotik-exporter
 
 # Switch to non-root user
 USER mikrotik
