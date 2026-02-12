@@ -57,6 +57,13 @@ pub(super) fn parse_wireguard_peers(
     let mut peers = Vec::new();
 
     for sentence in sentences {
+        if sentence
+            .get("disabled")
+            .is_some_and(|value| value.eq_ignore_ascii_case("true"))
+        {
+            continue;
+        }
+
         if let Some(interface) = sentence.get("interface") {
             let rx_bytes = sentence
                 .get("rx")
@@ -83,7 +90,7 @@ pub(super) fn parse_wireguard_peers(
                         .cloned()
                         .unwrap_or_else(|| "unnamed-peer".to_string()),
                     allowed_address: allowed_address.clone(),
-                    endpoint: sentence.get("endpoint").cloned(),
+                    endpoint: parse_peer_endpoint(sentence),
                     rx_bytes,
                     tx_bytes,
                     latest_handshake,
@@ -103,6 +110,18 @@ fn get_field_value(fields: &HashMap<String, String>, possible_names: &[&str]) ->
     possible_names
         .iter()
         .find_map(|name| fields.get(*name).cloned())
+}
+
+/// Parse WireGuard peer endpoint from RouterOS fields
+///
+/// Uses current-endpoint-address when available, with fallback to endpoint.
+/// Returns None when address is empty.
+fn parse_peer_endpoint(fields: &HashMap<String, String>) -> Option<String> {
+    let address = get_field_value(fields, &["current-endpoint-address", "endpoint"])?;
+    if address.is_empty() {
+        return None;
+    }
+    Some(address)
 }
 
 /// Parse the last-handshake field from RouterOS duration format to seconds
@@ -284,7 +303,10 @@ mod tests {
         data.insert("interface".to_string(), "wg1".to_string());
         data.insert("name".to_string(), "peer1".to_string());
         data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
-        data.insert("endpoint".to_string(), "192.168.1.1:51820".to_string());
+        data.insert(
+            "current-endpoint-address".to_string(),
+            "192.168.1.1".to_string(),
+        );
         data.insert("rx".to_string(), "1024".to_string());
         data.insert("tx".to_string(), "2048".to_string());
         data.insert("last-handshake".to_string(), "never".to_string());
@@ -294,7 +316,7 @@ mod tests {
         assert_eq!(result[0].interface, "wg1");
         assert_eq!(result[0].name, "peer1");
         assert_eq!(result[0].allowed_address, "10.10.10.1/32");
-        assert_eq!(result[0].endpoint, Some("192.168.1.1:51820".to_string()));
+        assert_eq!(result[0].endpoint, Some("192.168.1.1".to_string()));
         assert_eq!(result[0].rx_bytes, 1024);
         assert_eq!(result[0].tx_bytes, 2048);
         assert_eq!(result[0].latest_handshake, None);
@@ -306,7 +328,10 @@ mod tests {
         data.insert("interface".to_string(), "wg1".to_string());
         data.insert("name".to_string(), "peer1".to_string());
         data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
-        data.insert("endpoint".to_string(), "192.168.1.1:51820".to_string());
+        data.insert(
+            "current-endpoint-address".to_string(),
+            "192.168.1.1".to_string(),
+        );
         data.insert("rx".to_string(), "1024".to_string());
         data.insert("tx".to_string(), "2048".to_string());
         data.insert("last-handshake".to_string(), "120".to_string()); // 120 seconds since last handshake
@@ -316,7 +341,7 @@ mod tests {
         assert_eq!(result[0].interface, "wg1");
         assert_eq!(result[0].name, "peer1");
         assert_eq!(result[0].allowed_address, "10.10.10.1/32");
-        assert_eq!(result[0].endpoint, Some("192.168.1.1:51820".to_string()));
+        assert_eq!(result[0].endpoint, Some("192.168.1.1".to_string()));
         assert_eq!(result[0].rx_bytes, 1024);
         assert_eq!(result[0].tx_bytes, 2048);
         assert!(result[0].latest_handshake.is_some());
@@ -406,7 +431,10 @@ mod tests {
         peer1.insert("interface".to_string(), "wg1".to_string());
         peer1.insert("name".to_string(), "peer1".to_string());
         peer1.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
-        peer1.insert("endpoint".to_string(), "192.168.1.1:51820".to_string());
+        peer1.insert(
+            "current-endpoint-address".to_string(),
+            "192.168.1.1".to_string(),
+        );
         peer1.insert("rx".to_string(), "1024".to_string());
         peer1.insert("tx".to_string(), "2048".to_string());
 
@@ -414,7 +442,10 @@ mod tests {
         peer2.insert("interface".to_string(), "wg1".to_string());
         peer2.insert("name".to_string(), "peer2".to_string());
         peer2.insert("allowed-address".to_string(), "10.10.10.2/32".to_string());
-        peer2.insert("endpoint".to_string(), "192.168.1.2:51820".to_string());
+        peer2.insert(
+            "current-endpoint-address".to_string(),
+            "192.168.1.2".to_string(),
+        );
         peer2.insert("rx".to_string(), "2048".to_string());
         peer2.insert("tx".to_string(), "4096".to_string());
 
@@ -423,16 +454,45 @@ mod tests {
         assert_eq!(result[0].interface, "wg1");
         assert_eq!(result[0].name, "peer1");
         assert_eq!(result[0].allowed_address, "10.10.10.1/32");
-        assert_eq!(result[0].endpoint, Some("192.168.1.1:51820".to_string()));
+        assert_eq!(result[0].endpoint, Some("192.168.1.1".to_string()));
         assert_eq!(result[0].rx_bytes, 1024);
         assert_eq!(result[0].tx_bytes, 2048);
 
         assert_eq!(result[1].interface, "wg1");
         assert_eq!(result[1].name, "peer2");
         assert_eq!(result[1].allowed_address, "10.10.10.2/32");
-        assert_eq!(result[1].endpoint, Some("192.168.1.2:51820".to_string()));
+        assert_eq!(result[1].endpoint, Some("192.168.1.2".to_string()));
         assert_eq!(result[1].rx_bytes, 2048);
         assert_eq!(result[1].tx_bytes, 4096);
+    }
+
+    #[test]
+    fn test_parse_wireguard_peers_disabled() {
+        let mut data = HashMap::new();
+        data.insert("interface".to_string(), "wg1".to_string());
+        data.insert("name".to_string(), "peer1".to_string());
+        data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
+        data.insert("disabled".to_string(), "true".to_string());
+        data.insert("rx".to_string(), "1024".to_string());
+        data.insert("tx".to_string(), "2048".to_string());
+
+        let result = parse_wireguard_peers(&[data]);
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_wireguard_peers_current_endpoint_only() {
+        let mut data = HashMap::new();
+        data.insert("interface".to_string(), "wg1".to_string());
+        data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
+        data.insert(
+            "current-endpoint-address".to_string(),
+            "2001:db8::1".to_string(),
+        );
+
+        let result = parse_wireguard_peers(&[data]);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].endpoint, Some("2001:db8::1".to_string()));
     }
 
     #[test]
