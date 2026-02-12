@@ -828,6 +828,10 @@
       "title": "Interface Status",
       "transformations": [
         {
+          "id": "labelsToFields",
+          "options": {}
+        },
+        {
           "id": "organize",
           "options": {
             "excludeByName": {
@@ -1475,8 +1479,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]) * on (router, interface, allowed_address) group_left(name, peer_endpoint) (label_replace(mikrotik_wireguard_peer_info{router=\"$router\", exported_endpoint=~\".+\"}, \"peer_endpoint\", \"$1\", \"exported_endpoint\", \"(.*)\") or label_replace(mikrotik_wireguard_peer_info{router=\"$router\", exported_endpoint!~\".+\", endpoint=~\".+\"}, \"peer_endpoint\", \"$1\", \"endpoint\", \"(.*)\")) * 8",
-          "legendFormat": "{{interface}} - {{name}} - {{peer_endpoint}}",
+          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (interface, allowed_address) group_left(name, endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
+          "legendFormat": "{{interface}} - {{name}} - {{endpoint}}",
           "range": true,
           "refId": "A"
         }
@@ -1577,8 +1581,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]) * on (router, interface, allowed_address) group_left(name, peer_endpoint) (label_replace(mikrotik_wireguard_peer_info{router=\"$router\", exported_endpoint=~\".+\"}, \"peer_endpoint\", \"$1\", \"exported_endpoint\", \"(.*)\") or label_replace(mikrotik_wireguard_peer_info{router=\"$router\", exported_endpoint!~\".+\", endpoint=~\".+\"}, \"peer_endpoint\", \"$1\", \"endpoint\", \"(.*)\")) * 8",
-          "legendFormat": "{{interface}} - {{name}} - {{peer_endpoint}}",
+          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (interface, allowed_address) group_left(name, endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
+          "legendFormat": "{{interface}} - {{name}} - {{endpoint}}",
           "range": true,
           "refId": "A"
         }
@@ -1607,20 +1611,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null",
-                "result": {
-                  "color": "dark-gray",
-                  "index": 0,
-                  "text": "Never"
-                }
-              },
-              "type": "special"
-            }
-          ],
-          "noValue": "Never",
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1629,10 +1620,37 @@
                 "value": 0
               }
             ]
-          },
-          "unit": "dateTimeFromNow"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "dark-gray",
+                        "index": 0,
+                        "text": "Never"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 9,
@@ -1660,7 +1678,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "(mikrotik_wireguard_peer_latest_handshake{router=\"$router\"} > 0) * on (router, interface, allowed_address) group_left(name, peer_endpoint) (label_replace(mikrotik_wireguard_peer_info{router=\"$router\", exported_endpoint=~\".+\"}, \"peer_endpoint\", \"$1\", \"exported_endpoint\", \"(.*)\") or label_replace(mikrotik_wireguard_peer_info{router=\"$router\", exported_endpoint!~\".+\", endpoint=~\".+\"}, \"peer_endpoint\", \"$1\", \"endpoint\", \"(.*)\")) * 1000",
+          "expr": "(mikrotik_wireguard_peer_latest_handshake{router=\"$router\"} * 1000) * on (interface, allowed_address) group_left(name, endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -1676,8 +1694,6 @@
               "Time": true,
               "__name__": true,
               "container": true,
-              "endpoint": true,
-              "exported_endpoint": true,
               "instance": true,
               "job": true,
               "namespace": true,
@@ -1687,18 +1703,18 @@
               "service": true
             },
             "indexByName": {
-              "Value": 4,
-              "allowed_address": 3,
               "interface": 0,
               "name": 1,
-              "peer_endpoint": 2
+              "endpoint": 2,
+              "allowed_address": 3,
+              "Value": 4
             },
             "renameByName": {
               "Value": "Last Handshake",
               "allowed_address": "Allowed Address",
+              "endpoint": "Endpoint",
               "interface": "Interface",
-              "name": "Name",
-              "peer_endpoint": "Endpoint"
+              "name": "Name"
             }
           }
         }
