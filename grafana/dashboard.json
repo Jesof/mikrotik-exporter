@@ -1479,8 +1479,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (interface, allowed_address) group_left(name, endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
-          "legendFormat": "{{interface}} - {{name}} - {{endpoint}}",
+          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (interface, allowed_address) group_left(name, exported_endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
+          "legendFormat": "{{interface}} - {{name}} - {{exported_endpoint}}",
           "range": true,
           "refId": "A"
         }
@@ -1581,8 +1581,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (interface, allowed_address) group_left(name, endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
-          "legendFormat": "{{interface}} - {{name}} - {{endpoint}}",
+          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (interface, allowed_address) group_left(name, exported_endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
+          "legendFormat": "{{interface}} - {{name}} - {{exported_endpoint}}",
           "range": true,
           "refId": "A"
         }
@@ -1678,7 +1678,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "(mikrotik_wireguard_peer_latest_handshake{router=\"$router\"} * 1000) * on (interface, allowed_address) group_left(name, endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
+          "expr": "(mikrotik_wireguard_peer_latest_handshake{router=\"$router\"} * 1000) * on (interface, allowed_address) group_left(name, exported_endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -1694,6 +1694,7 @@
               "Time": true,
               "__name__": true,
               "container": true,
+              "endpoint": true,
               "instance": true,
               "job": true,
               "namespace": true,
@@ -1705,14 +1706,14 @@
             "indexByName": {
               "interface": 0,
               "name": 1,
-              "endpoint": 2,
+              "exported_endpoint": 2,
               "allowed_address": 3,
               "Value": 4
             },
             "renameByName": {
               "Value": "Last Handshake",
               "allowed_address": "Allowed Address",
-              "endpoint": "Endpoint",
+              "exported_endpoint": "Endpoint",
               "interface": "Interface",
               "name": "Name"
             }
