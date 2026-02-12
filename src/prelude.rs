@@ -17,7 +17,7 @@ pub use crate::error::{AppError, Result};
 // Metrics types
 pub use crate::metrics::{
     ConntrackLabels, InterfaceLabels, MetricsRegistry, RouterLabels, SystemInfoLabels,
-    WireGuardInterfaceLabels, WireGuardPeerLabels,
+    WireGuardInterfaceLabels, WireGuardPeerInfoLabels, WireGuardPeerLabels,
 };
 
 // MikroTik client

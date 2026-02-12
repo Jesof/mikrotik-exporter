@@ -15,7 +15,7 @@ mod tests;
 /// Labels for interfaces, routers, and system info
 pub use labels::{
     ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardInterfaceLabels,
-    WireGuardPeerLabels,
+    WireGuardPeerInfoLabels, WireGuardPeerLabels,
 };
 
 /// Prometheus metrics registry

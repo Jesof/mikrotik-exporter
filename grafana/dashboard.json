@@ -1475,8 +1475,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]) * 8",
-          "legendFormat": "{{interface}} | {{name}}",
+          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]) * on (router, interface, allowed_address) group_left(name, peer_endpoint) (label_replace(mikrotik_wireguard_peer_info{router=\"$router\", exported_endpoint=~\".+\"}, \"peer_endpoint\", \"$1\", \"exported_endpoint\", \"(.*)\") or label_replace(mikrotik_wireguard_peer_info{router=\"$router\", exported_endpoint!~\".+\", endpoint=~\".+\"}, \"peer_endpoint\", \"$1\", \"endpoint\", \"(.*)\")) * 8",
+          "legendFormat": "{{interface}} - {{name}} - {{peer_endpoint}}",
           "range": true,
           "refId": "A"
         }
@@ -1577,8 +1577,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]) * 8",
-          "legendFormat": "{{interface}} | {{name}}",
+          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]) * on (router, interface, allowed_address) group_left(name, peer_endpoint) (label_replace(mikrotik_wireguard_peer_info{router=\"$router\", exported_endpoint=~\".+\"}, \"peer_endpoint\", \"$1\", \"exported_endpoint\", \"(.*)\") or label_replace(mikrotik_wireguard_peer_info{router=\"$router\", exported_endpoint!~\".+\", endpoint=~\".+\"}, \"peer_endpoint\", \"$1\", \"endpoint\", \"(.*)\")) * 8",
+          "legendFormat": "{{interface}} - {{name}} - {{peer_endpoint}}",
           "range": true,
           "refId": "A"
         }
@@ -1596,6 +1596,16 @@
         "defaults": {
           "color": {
             "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
           },
           "mappings": [
             {
@@ -1632,21 +1642,14 @@
       },
       "id": 30,
       "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Last Handshake"
+          }
+        ]
       },
       "pluginVersion": "12.3.0",
       "targets": [
@@ -1656,14 +1659,52 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "(mikrotik_wireguard_peer_latest_handshake{router=\"$router\"} > 0) * 1000",
-          "legendFormat": "{{interface}} | {{name}}",
-          "range": true,
+          "exemplar": false,
+          "expr": "(mikrotik_wireguard_peer_latest_handshake{router=\"$router\"} > 0) * on (router, interface, allowed_address) group_left(name, peer_endpoint) (label_replace(mikrotik_wireguard_peer_info{router=\"$router\", exported_endpoint=~\".+\"}, \"peer_endpoint\", \"$1\", \"exported_endpoint\", \"(.*)\") or label_replace(mikrotik_wireguard_peer_info{router=\"$router\", exported_endpoint!~\".+\", endpoint=~\".+\"}, \"peer_endpoint\", \"$1\", \"endpoint\", \"(.*)\")) * 1000",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
           "refId": "A"
         }
       ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "container": true,
+              "endpoint": true,
+              "exported_endpoint": true,
+              "instance": true,
+              "job": true,
+              "namespace": true,
+              "pod": true,
+              "prometheus": true,
+              "router": true,
+              "service": true
+            },
+            "indexByName": {
+              "Value": 4,
+              "allowed_address": 3,
+              "interface": 0,
+              "name": 1,
+              "peer_endpoint": 2
+            },
+            "renameByName": {
+              "Value": "Last Handshake",
+              "allowed_address": "Allowed Address",
+              "interface": "Interface",
+              "name": "Name",
+              "peer_endpoint": "Endpoint"
+            }
+          }
+        }
+      ],
       "title": "WireGuard Last Handshake",
-      "type": "stat"
+      "type": "table"
     },
     {
       "collapsed": false,

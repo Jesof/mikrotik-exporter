@@ -3,7 +3,7 @@
 
 //! Metrics registry and update logic
 
-use crate::mikrotik::RouterMetrics;
+use crate::mikrotik::{RouterMetrics, WireGuardPeerStats};
 use prometheus_client::encoding::text::encode;
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
@@ -15,7 +15,7 @@ use tokio::sync::Mutex;
 
 use super::labels::{
     ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardInterfaceLabels,
-    WireGuardPeerLabels,
+    WireGuardPeerInfoLabels, WireGuardPeerLabels,
 };
 use super::parsers::parse_uptime_to_seconds;
 
@@ -63,9 +63,13 @@ pub struct MetricsRegistry {
     wireguard_peer_rx_bytes: Family<WireGuardPeerLabels, Gauge>,
     wireguard_peer_tx_bytes: Family<WireGuardPeerLabels, Gauge>,
     wireguard_peer_latest_handshake: Family<WireGuardPeerLabels, Gauge>,
+    wireguard_peer_info: Family<WireGuardPeerInfoLabels, Gauge>,
     prev_iface: Arc<Mutex<HashMap<InterfaceLabels, InterfaceSnapshot>>>,
     prev_conntrack: Arc<Mutex<HashMap<String, HashSet<ConntrackLabels>>>>,
     prev_system_info: Arc<Mutex<HashMap<String, SystemInfoLabels>>>,
+    prev_wireguard_peers: Arc<Mutex<HashMap<String, HashSet<WireGuardPeerLabels>>>>,
+    prev_wireguard_peer_info:
+        Arc<Mutex<HashMap<String, HashMap<WireGuardPeerLabels, WireGuardPeerInfoLabels>>>>,
 }
 
 impl MetricsRegistry {
@@ -224,6 +228,13 @@ impl MetricsRegistry {
             wireguard_peer_latest_handshake.clone(),
         );
 
+        let wireguard_peer_info = Family::<WireGuardPeerInfoLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_wireguard_peer_info",
+            "Static WireGuard peer info (value=1)",
+            wireguard_peer_info.clone(),
+        );
+
         Self {
             registry: Arc::new(Mutex::new(registry)),
             interface_rx_bytes,
@@ -250,9 +261,12 @@ impl MetricsRegistry {
             wireguard_peer_rx_bytes,
             wireguard_peer_tx_bytes,
             wireguard_peer_latest_handshake,
+            wireguard_peer_info,
             prev_iface: Arc::new(Mutex::new(HashMap::new())),
             prev_conntrack: Arc::new(Mutex::new(HashMap::new())),
             prev_system_info: Arc::new(Mutex::new(HashMap::new())),
+            prev_wireguard_peers: Arc::new(Mutex::new(HashMap::new())),
+            prev_wireguard_peer_info: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -400,18 +414,57 @@ impl MetricsRegistry {
         }
 
         // Update WireGuard peer metrics
+        let mut deduped_peers = HashMap::new();
+        let should_replace = |existing: &WireGuardPeerStats, candidate: &WireGuardPeerStats| match (
+            candidate.latest_handshake,
+            existing.latest_handshake,
+        ) {
+            (Some(candidate_ts), Some(existing_ts)) => {
+                if candidate_ts != existing_ts {
+                    candidate_ts > existing_ts
+                } else {
+                    candidate.rx_bytes.saturating_add(candidate.tx_bytes)
+                        > existing.rx_bytes.saturating_add(existing.tx_bytes)
+                }
+            }
+            (Some(_), None) => true,
+            (None, Some(_)) => false,
+            (None, None) => {
+                candidate.rx_bytes.saturating_add(candidate.tx_bytes)
+                    > existing.rx_bytes.saturating_add(existing.tx_bytes)
+            }
+        };
         for wg_peer in &metrics.wireguard_peers {
+            let wg_peer_labels = WireGuardPeerLabels {
+                router: metrics.router_name.clone(),
+                interface: wg_peer.interface.clone(),
+                allowed_address: wg_peer.allowed_address.clone(),
+            };
+            if let Some(existing) = deduped_peers.get(&wg_peer_labels) {
+                if should_replace(existing, wg_peer) {
+                    deduped_peers.insert(wg_peer_labels, wg_peer.clone());
+                }
+            } else {
+                deduped_peers.insert(wg_peer_labels, wg_peer.clone());
+            }
+        }
+
+        let mut current_peers = HashSet::new();
+        let mut current_peer_info = HashMap::new();
+        for (wg_peer_labels, wg_peer) in deduped_peers {
+            current_peers.insert(wg_peer_labels.clone());
             let endpoint = wg_peer
                 .endpoint
                 .clone()
                 .unwrap_or_else(|| "unknown".to_string());
-            let wg_peer_labels = WireGuardPeerLabels {
-                router: metrics.router_name.clone(),
-                interface: wg_peer.interface.clone(),
+            let info_labels = WireGuardPeerInfoLabels {
+                router: wg_peer_labels.router.clone(),
+                interface: wg_peer_labels.interface.clone(),
+                allowed_address: wg_peer_labels.allowed_address.clone(),
                 name: wg_peer.name.clone(),
-                allowed_address: wg_peer.allowed_address.clone(),
                 endpoint,
             };
+            current_peer_info.insert(wg_peer_labels.clone(), info_labels.clone());
             #[allow(clippy::cast_possible_wrap)]
             {
                 self.wireguard_peer_rx_bytes
@@ -424,8 +477,56 @@ impl MetricsRegistry {
                     self.wireguard_peer_latest_handshake
                         .get_or_create(&wg_peer_labels)
                         .set(timestamp as i64);
+                } else {
+                    self.wireguard_peer_latest_handshake
+                        .get_or_create(&wg_peer_labels)
+                        .set(0);
+                }
+                self.wireguard_peer_info.get_or_create(&info_labels).set(1);
+            }
+        }
+
+        {
+            let mut prev_peers = self.prev_wireguard_peers.lock().await;
+            let prev_labels = prev_peers
+                .entry(metrics.router_name.clone())
+                .or_insert_with(HashSet::new);
+            for stale in prev_labels.difference(&current_peers) {
+                #[allow(clippy::cast_possible_wrap)]
+                {
+                    self.wireguard_peer_rx_bytes.get_or_create(stale).set(0);
+                    self.wireguard_peer_tx_bytes.get_or_create(stale).set(0);
+                    self.wireguard_peer_latest_handshake
+                        .get_or_create(stale)
+                        .set(0);
                 }
             }
+            *prev_labels = current_peers;
+        }
+
+        {
+            let mut prev_info = self.prev_wireguard_peer_info.lock().await;
+            let prev_map = prev_info
+                .entry(metrics.router_name.clone())
+                .or_insert_with(HashMap::new);
+            for (peer_labels, info_labels) in &current_peer_info {
+                if let Some(old) = prev_map.get(peer_labels) {
+                    if old != info_labels {
+                        self.wireguard_peer_info.get_or_create(old).set(0);
+                    }
+                }
+            }
+            let stale_peers: Vec<_> = prev_map
+                .keys()
+                .filter(|labels| !current_peer_info.contains_key(*labels))
+                .cloned()
+                .collect();
+            for stale in stale_peers {
+                if let Some(old) = prev_map.get(&stale) {
+                    self.wireguard_peer_info.get_or_create(old).set(0);
+                }
+            }
+            *prev_map = current_peer_info;
         }
     }
 

@@ -41,8 +41,15 @@ pub struct WireGuardInterfaceLabels {
 pub struct WireGuardPeerLabels {
     pub router: String,
     pub interface: String,
-    pub name: String,
     pub allowed_address: String,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct WireGuardPeerInfoLabels {
+    pub router: String,
+    pub interface: String,
+    pub allowed_address: String,
+    pub name: String,
     pub endpoint: String,
 }
 
