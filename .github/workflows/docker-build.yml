@@ -106,13 +106,13 @@ jobs:
             amd64_tags+="${tag}-amd64"$'\n'
           done <<< "$base_tags"
           {
-            echo "base_tags<<'EOF'"
+            echo "base_tags<<EOF"
             echo "$base_tags"
             echo "EOF"
-            echo "arm64_tags<<'EOF'"
+            echo "arm64_tags<<EOF"
             echo "$arm64_tags"
             echo "EOF"
-            echo "amd64_tags<<'EOF'"
+            echo "amd64_tags<<EOF"
             echo "$amd64_tags"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
