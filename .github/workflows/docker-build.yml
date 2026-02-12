@@ -195,7 +195,7 @@ jobs:
               "${tag}-arm64" \
               "${tag}-amd64"
           done <<< "${{ steps.tags.outputs.base_tags }}"
-          digest=$(docker buildx imagetools inspect "$first_tag" --format '{{.Digest}}')
+          digest=$(docker buildx imagetools inspect "$first_tag" | awk '/^Digest: /{print $2; exit}')
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Generate artifact attestation
