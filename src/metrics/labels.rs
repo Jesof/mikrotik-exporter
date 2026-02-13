@@ -6,9 +6,9 @@
 use prometheus_client::encoding::EncodeLabelSet;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
-pub struct InterfaceLabels {
-    pub router: String,
-    pub interface: String,
+pub(crate) struct InterfaceLabels {
+    pub(crate) router: String,
+    pub(crate) interface: String,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
@@ -17,40 +17,40 @@ pub struct RouterLabels {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
-pub struct SystemInfoLabels {
-    pub router: String,
-    pub version: String,
-    pub board: String,
+pub(crate) struct SystemInfoLabels {
+    pub(crate) router: String,
+    pub(crate) version: String,
+    pub(crate) board: String,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
-pub struct ConntrackLabels {
-    pub router: String,
-    pub src_address: String,
-    pub protocol: String,
-    pub ip_version: String,
+pub(crate) struct ConntrackLabels {
+    pub(crate) router: String,
+    pub(crate) src_address: String,
+    pub(crate) protocol: String,
+    pub(crate) ip_version: String,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
-pub struct WireGuardInterfaceLabels {
-    pub router: String,
-    pub interface: String,
+pub(crate) struct WireGuardInterfaceLabels {
+    pub(crate) router: String,
+    pub(crate) interface: String,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
-pub struct WireGuardPeerLabels {
-    pub router: String,
-    pub interface: String,
-    pub allowed_address: String,
+pub(crate) struct WireGuardPeerLabels {
+    pub(crate) router: String,
+    pub(crate) interface: String,
+    pub(crate) allowed_address: String,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
-pub struct WireGuardPeerInfoLabels {
-    pub router: String,
-    pub interface: String,
-    pub allowed_address: String,
-    pub name: String,
-    pub endpoint: String,
+pub(crate) struct WireGuardPeerInfoLabels {
+    pub(crate) router: String,
+    pub(crate) interface: String,
+    pub(crate) allowed_address: String,
+    pub(crate) name: String,
+    pub(crate) endpoint: String,
 }
 
 #[cfg(test)]

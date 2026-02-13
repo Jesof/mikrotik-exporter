@@ -4,7 +4,8 @@
 //! Per-router collection task
 
 use crate::config::RouterConfig;
-use crate::metrics::{InterfaceLabels, MetricsRegistry, RouterLabels};
+use crate::metrics::labels::InterfaceLabels;
+use crate::metrics::{MetricsRegistry, RouterLabels};
 use crate::mikrotik::{ConnectionPool, MikroTikClient};
 use std::collections::HashSet;
 use std::sync::Arc;

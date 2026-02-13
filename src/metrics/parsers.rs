@@ -8,7 +8,7 @@
 /// Accepts formats like: 1d2h3m4s, 2w1d, 05:23:10, 1h5m, 30s
 ///
 /// Uses saturating arithmetic to prevent integer overflow on malicious/corrupted input.
-pub fn parse_uptime_to_seconds(s: &str) -> u64 {
+pub(crate) fn parse_uptime_to_seconds(s: &str) -> u64 {
     // Accept formats like 1d2h3m4s, 2w1d, 05:23:10, 1h5m, 30s
     if s.contains(':') {
         // HH:MM:SS or MM:SS

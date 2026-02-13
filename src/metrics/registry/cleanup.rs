@@ -20,7 +20,10 @@ impl MetricsRegistry {
     ///
     /// # Arguments
     /// * `current_interfaces` - Set of currently active interface labels
-    pub async fn cleanup_stale_interfaces(&self, current_interfaces: &HashSet<InterfaceLabels>) {
+    pub(crate) async fn cleanup_stale_interfaces(
+        &self,
+        current_interfaces: &HashSet<InterfaceLabels>,
+    ) {
         let stale_interfaces: Vec<InterfaceLabels> = {
             let mut prev = self.prev_iface.lock().await;
             let before_count = prev.len();

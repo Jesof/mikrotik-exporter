@@ -9,19 +9,19 @@ use crate::api::AppState;
 
 /// Health check endpoint response structure
 #[derive(Debug, Serialize, Deserialize)]
-pub struct HealthResponse {
-    pub status: String,
-    pub version: String,
-    pub routers: Vec<RouterHealth>,
+pub(crate) struct HealthResponse {
+    pub(crate) status: String,
+    pub(crate) version: String,
+    pub(crate) routers: Vec<RouterHealth>,
 }
 
 /// Health status for individual routers
 #[derive(Debug, Serialize, Deserialize)]
-pub struct RouterHealth {
-    pub name: String,
-    pub status: String,
-    pub consecutive_errors: u32,
-    pub has_successful_scrape: bool,
+pub(crate) struct RouterHealth {
+    pub(crate) name: String,
+    pub(crate) status: String,
+    pub(crate) consecutive_errors: u32,
+    pub(crate) has_successful_scrape: bool,
 }
 
 /// GET /health

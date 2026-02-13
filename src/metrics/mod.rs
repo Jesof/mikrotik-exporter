@@ -5,18 +5,15 @@
 //!
 //! Contains types for labels, parsers, and Prometheus metrics registry.
 
-mod labels;
+pub(crate) mod labels;
 mod parsers;
 mod registry;
 
 #[cfg(test)]
 mod tests;
 
-/// Labels for interfaces, routers, and system info
-pub use labels::{
-    ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardInterfaceLabels,
-    WireGuardPeerInfoLabels, WireGuardPeerLabels,
-};
+/// Labels for router-level metrics
+pub use labels::RouterLabels;
 
 /// Prometheus metrics registry
 pub use registry::MetricsRegistry;
