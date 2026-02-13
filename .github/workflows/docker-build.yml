@@ -184,18 +184,37 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          retry() {
+            local attempt=1
+            local max_attempts=5
+            local delay=2
+            while true; do
+              "$@" && return 0
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                return 1
+              fi
+              sleep "$delay"
+              delay=$((delay * 2))
+              attempt=$((attempt + 1))
+            done
+          }
           first_tag=""
           while IFS= read -r tag; do
             [ -z "$tag" ] && continue
             if [ -z "$first_tag" ]; then
               first_tag="$tag"
             fi
-            docker buildx imagetools create \
+            retry docker buildx imagetools create \
               -t "$tag" \
               "${tag}-arm64" \
               "${tag}-amd64"
           done <<< "${{ steps.tags.outputs.base_tags }}"
-          digest=$(docker buildx imagetools inspect "$first_tag" | awk '/^Digest: /{print $2; exit}')
+          inspect_output=$(retry docker buildx imagetools inspect "$first_tag")
+          digest=$(printf '%s\n' "$inspect_output" | awk '/^Digest: /{print $2; exit}')
+          if [ -z "$digest" ]; then
+            echo "Digest not found in imagetools inspect output" >&2
+            exit 1
+          fi
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Generate artifact attestation
