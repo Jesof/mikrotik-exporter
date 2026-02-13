@@ -9,7 +9,7 @@
 //! - `GET /health` — health check
 //! - `GET /metrics` — Prometheus metrics
 
-pub mod handlers;
+mod handlers;
 
 use axum::{Router, routing::get};
 use std::sync::Arc;

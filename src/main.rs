@@ -11,7 +11,9 @@
 //! - Waits for shutdown signal
 //! - Runs HTTP server for Prometheus
 
-use mikrotik_exporter::{api, collector, config::Config, error::Result, metrics, mikrotik};
+use mikrotik_exporter::{
+    AppState, Config, ConnectionPool, MetricsRegistry, Result, create_router, start_collection_loop,
+};
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -40,13 +42,13 @@ async fn main() -> Result<()> {
     }
 
     // Create metrics registry
-    let metrics = metrics::MetricsRegistry::new();
+    let metrics = MetricsRegistry::new();
 
     // Create shared connection pool
-    let pool = Arc::new(mikrotik::ConnectionPool::new());
+    let pool = Arc::new(ConnectionPool::new());
 
     // Create application state
-    let state = Arc::new(api::AppState {
+    let state = Arc::new(AppState {
         config: config.clone(),
         metrics: metrics.clone(),
         pool: pool.clone(),
@@ -98,10 +100,10 @@ async fn main() -> Result<()> {
     });
 
     // Start periodic background metrics collection
-    collector::start_collection_loop(shutdown_rx.clone(), Arc::new(config.clone()), metrics, pool);
+    start_collection_loop(shutdown_rx.clone(), Arc::new(config.clone()), metrics, pool);
 
     // Create the router
-    let app = api::create_router(state);
+    let app = create_router(state);
 
     let addr: SocketAddr = config.server_addr.parse().map_err(|e| {
         tracing::error!("Invalid server address '{}': {}", config.server_addr, e);

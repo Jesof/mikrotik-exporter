@@ -19,28 +19,28 @@ use crate::mikrotik::{ConnectionPool, MikroTikClient, SystemResource};
 
 /// Cache for immutable system information (version, board name)
 #[derive(Clone, Default)]
-pub struct SystemInfoCache {
+struct SystemInfoCache {
     cache: Arc<RwLock<HashMap<String, SystemResource>>>,
 }
 
 impl SystemInfoCache {
     #[must_use]
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self::default()
     }
 
-    pub async fn get(&self, router_name: &str) -> Option<SystemResource> {
+    async fn get(&self, router_name: &str) -> Option<SystemResource> {
         let cache = self.cache.read().await;
         cache.get(router_name).cloned()
     }
 
-    pub async fn set(&self, router_name: String, system: SystemResource) {
+    async fn set(&self, router_name: String, system: SystemResource) {
         let mut cache = self.cache.write().await;
         tracing::debug!("Cached system info for router: {}", router_name);
         cache.insert(router_name, system);
     }
 
-    pub async fn cleanup_stale(&self, active_routers: &HashSet<String>) {
+    async fn cleanup_stale(&self, active_routers: &HashSet<String>) {
         let mut cache = self.cache.write().await;
         let before_count = cache.len();
         cache.retain(|router, _| active_routers.contains(router));

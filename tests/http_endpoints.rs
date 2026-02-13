@@ -4,10 +4,8 @@
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use mikrotik_exporter::{
-    api::{self, AppState},
-    config::{Config, RouterConfig},
-    metrics::{MetricsRegistry, RouterLabels},
-    mikrotik::ConnectionPool,
+    AppState, Config, ConnectionPool, InterfaceStats, MetricsRegistry, RouterConfig, RouterLabels,
+    RouterMetrics, SystemResource, create_router,
 };
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -41,7 +39,7 @@ fn test_router(name: &str) -> RouterConfig {
 #[tokio::test]
 async fn metrics_returns_200_with_openmetrics_content_type() {
     let state = make_state(vec![test_router("r1")]);
-    let app = api::create_router(state);
+    let app = create_router(state);
 
     let resp = app
         .oneshot(Request::get("/metrics").body(String::new()).unwrap())
@@ -64,7 +62,7 @@ async fn metrics_returns_200_with_openmetrics_content_type() {
 #[tokio::test]
 async fn metrics_contains_registered_metric_names() {
     let state = make_state(vec![test_router("r1")]);
-    let app = api::create_router(state);
+    let app = create_router(state);
 
     let resp = app
         .oneshot(Request::get("/metrics").body(String::new()).unwrap())
@@ -90,7 +88,7 @@ async fn metrics_contains_registered_metric_names() {
 async fn metrics_contains_router_data_after_update() {
     let state = make_state(vec![test_router("myrouter")]);
 
-    let iface = mikrotik_exporter::mikrotik::InterfaceStats {
+    let iface = InterfaceStats {
         name: "ether1".to_string(),
         rx_bytes: 1000,
         tx_bytes: 2000,
@@ -100,7 +98,7 @@ async fn metrics_contains_router_data_after_update() {
         tx_errors: 0,
         running: true,
     };
-    let system = mikrotik_exporter::mikrotik::SystemResource {
+    let system = SystemResource {
         uptime: "1d".to_string(),
         cpu_load: 42,
         free_memory: 512_000_000,
@@ -108,7 +106,7 @@ async fn metrics_contains_router_data_after_update() {
         version: "7.10".to_string(),
         board_name: "RB750Gr3".to_string(),
     };
-    let metrics = mikrotik_exporter::mikrotik::RouterMetrics {
+    let metrics = RouterMetrics {
         router_name: "myrouter".to_string(),
         interfaces: vec![iface],
         system,
@@ -118,7 +116,7 @@ async fn metrics_contains_router_data_after_update() {
     };
     state.metrics.update_metrics(&metrics).await;
 
-    let app = api::create_router(state);
+    let app = create_router(state);
     let resp = app
         .oneshot(Request::get("/metrics").body(String::new()).unwrap())
         .await
@@ -144,7 +142,7 @@ async fn metrics_contains_router_data_after_update() {
 #[tokio::test]
 async fn health_returns_200_for_empty_config() {
     let state = make_state(vec![]);
-    let app = api::create_router(state);
+    let app = create_router(state);
 
     let resp = app
         .oneshot(Request::get("/health").body(String::new()).unwrap())
@@ -170,7 +168,7 @@ async fn health_returns_200_for_empty_config() {
 #[tokio::test]
 async fn health_returns_unknown_before_first_scrape() {
     let state = make_state(vec![test_router("r1")]);
-    let app = api::create_router(state);
+    let app = create_router(state);
 
     let resp = app
         .oneshot(Request::get("/health").body(String::new()).unwrap())
@@ -207,7 +205,7 @@ async fn health_returns_healthy_after_successful_scrape() {
     };
     state.metrics.record_scrape_success(&label);
 
-    let app = api::create_router(state);
+    let app = create_router(state);
     let resp = app
         .oneshot(Request::get("/health").body(String::new()).unwrap())
         .await
@@ -243,7 +241,7 @@ async fn health_returns_degraded_on_errors_without_success() {
     };
     state.metrics.record_scrape_error(&label);
 
-    let app = api::create_router(state);
+    let app = create_router(state);
     let resp = app
         .oneshot(Request::get("/health").body(String::new()).unwrap())
         .await
@@ -276,7 +274,7 @@ async fn health_returns_degraded_with_multiple_errors() {
     state.metrics.record_scrape_error(&label);
     state.metrics.record_scrape_error(&label);
 
-    let app = api::create_router(state);
+    let app = create_router(state);
     let resp = app
         .oneshot(Request::get("/health").body(String::new()).unwrap())
         .await
@@ -308,7 +306,7 @@ async fn health_multi_router_partial_degradation() {
         router: "bad-r".to_string(),
     });
 
-    let app = api::create_router(state);
+    let app = create_router(state);
     let resp = app
         .oneshot(Request::get("/health").body(String::new()).unwrap())
         .await
@@ -340,7 +338,7 @@ async fn health_multi_router_partial_degradation() {
 #[tokio::test]
 async fn unknown_route_returns_404() {
     let state = make_state(vec![]);
-    let app = api::create_router(state);
+    let app = create_router(state);
 
     let resp = app
         .oneshot(Request::get("/unknown").body(String::new()).unwrap())

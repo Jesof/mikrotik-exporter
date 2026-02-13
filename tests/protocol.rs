@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-use mikrotik_exporter::mikrotik::encode_length;
+use mikrotik_exporter::encode_length;
 
 #[test]
 fn test_encode_length() {

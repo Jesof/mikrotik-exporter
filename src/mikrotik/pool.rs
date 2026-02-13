@@ -53,7 +53,7 @@ pub struct ConnectionPool {
 ///
 /// Ensures connections are always returned to the pool when dropped,
 /// preventing memory leaks from forgetting to call `release_connection`.
-pub struct PooledConnectionGuard {
+pub(crate) struct PooledConnectionGuard {
     connection: Option<RouterOsConnection>,
     pool: ConnectionPool,
     key: String,
