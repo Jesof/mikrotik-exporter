@@ -16,7 +16,7 @@ use super::wireguard::{parse_wireguard_interfaces, parse_wireguard_peers};
 ///
 /// Provides methods to connect to `MikroTik` routers via `RouterOS` API
 /// and collect system and interface metrics.
-pub struct MikroTikClient {
+pub(crate) struct MikroTikClient {
     config: RouterConfig,
     pool: Arc<ConnectionPool>,
 }
@@ -24,7 +24,7 @@ pub struct MikroTikClient {
 impl MikroTikClient {
     /// Creates a new `MikroTik` client with a shared connection pool
     #[must_use]
-    pub fn with_pool(config: RouterConfig, pool: Arc<ConnectionPool>) -> Self {
+    pub(crate) fn with_pool(config: RouterConfig, pool: Arc<ConnectionPool>) -> Self {
         Self { config, pool }
     }
 
@@ -37,7 +37,7 @@ impl MikroTikClient {
     ///
     /// Returns an error if connection, authentication, or data retrieval fails.
     /// On error, metrics are not updated, preserving the last successful values.
-    pub async fn collect_metrics(
+    pub(crate) async fn collect_metrics(
         &self,
     ) -> Result<RouterMetrics, Box<dyn std::error::Error + Send + Sync>> {
         use tokio::time::{Duration, timeout};

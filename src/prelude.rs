@@ -18,4 +18,7 @@ pub use crate::error::{AppError, Result};
 pub use crate::metrics::{MetricsRegistry, RouterLabels};
 
 // MikroTik client
-pub use crate::mikrotik::{ConnectionPool, InterfaceStats, RouterMetrics, SystemResource};
+pub use crate::mikrotik::{
+    ConnectionPool, ConnectionTrackingStats, InterfaceStats, RouterMetrics, SystemResource,
+    WireGuardInterfaceStats, WireGuardPeerStats,
+};

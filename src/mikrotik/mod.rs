@@ -13,15 +13,15 @@ pub(crate) mod types;
 pub(crate) mod wireguard;
 
 /// Client for MikroTik RouterOS API
-pub use client::MikroTikClient;
+pub(crate) use client::MikroTikClient;
 
 /// Connection pool for routers
 pub use pool::ConnectionPool;
 
 /// Types for router metrics and statistics
-pub use types::{InterfaceStats, RouterMetrics, SystemResource};
+pub use types::{ConnectionTrackingStats, InterfaceStats, RouterMetrics, SystemResource};
 
 /// Types for WireGuard metrics and statistics
-pub(crate) use wireguard::WireGuardPeerStats;
+pub use wireguard::{WireGuardInterfaceStats, WireGuardPeerStats};
 
 pub use connection::encode_length;

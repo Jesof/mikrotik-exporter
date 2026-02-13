@@ -42,7 +42,10 @@ pub use collector::start_collection_loop;
 pub use metrics::{MetricsRegistry, RouterLabels};
 
 /// MikroTik connection pool and metric input types
-pub use mikrotik::{ConnectionPool, InterfaceStats, RouterMetrics, SystemResource};
+pub use mikrotik::{
+    ConnectionPool, ConnectionTrackingStats, InterfaceStats, RouterMetrics, SystemResource,
+    WireGuardInterfaceStats, WireGuardPeerStats,
+};
 
 /// RouterOS wire protocol length encoding (public for tests)
 pub use mikrotik::encode_length;

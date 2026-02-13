@@ -86,8 +86,7 @@ impl Default for MetricsRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mikrotik::types::ConnectionTrackingStats;
-    use crate::mikrotik::{InterfaceStats, RouterMetrics, SystemResource};
+    use crate::mikrotik::{ConnectionTrackingStats, InterfaceStats, RouterMetrics, SystemResource};
 
     fn make_router_metrics(
         router_name: &str,

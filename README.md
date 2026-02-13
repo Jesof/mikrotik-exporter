@@ -173,21 +173,42 @@ src/
 ├── prelude.rs              # Re-exports
 ├── api/                    # HTTP handlers
 ├── collector/              # Background metrics collection
+│   ├── cache.rs            # System info cache
+│   └── router_task.rs      # Per-router collection task
 ├── config/                 # Configuration loading
 ├── metrics/                # Prometheus metrics
+│   └── registry/           # init/update/cleanup/scrape split
 └── mikrotik/               # RouterOS API client
+    └── connection/         # auth/protocol/parse split
 ```
 
 ### Использование как библиотеки
 
 ```rust
-use mikrotik_exporter::prelude::*;
+use std::sync::Arc;
+
+use mikrotik_exporter::{
+    AppState, Config, ConnectionPool, MetricsRegistry, Result, create_router,
+    start_collection_loop,
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let config = Config::from_env();
-    let client = MikroTikClient::new(/* ... */);
-    let stats = client.get_interface_stats().await?;
+    let metrics = MetricsRegistry::new();
+    let pool = Arc::new(ConnectionPool::new());
+    let state = Arc::new(AppState {
+        config: Arc::new(config.clone()),
+        metrics: metrics.clone(),
+        pool: pool.clone(),
+    });
+
+    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    start_collection_loop(shutdown_rx, Arc::new(config), metrics, pool);
+
+    let app = create_router(state);
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:9090").await?;
+    axum::serve(listener, app.into_make_service()).await?;
     Ok(())
 }
 ```
