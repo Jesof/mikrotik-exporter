@@ -3,7 +3,7 @@
 
 //! Connection pool for managing RouterOS connections
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -376,6 +376,17 @@ impl ConnectionPool {
             }
             should_keep
         });
+    }
+
+    /// Clean up connection state for routers no longer configured
+    pub async fn cleanup_states(&self, active_keys: &HashSet<String>) {
+        let mut states = self.connection_states.lock().await;
+        let before_count = states.len();
+        states.retain(|key, _| active_keys.contains(key));
+        let removed = before_count - states.len();
+        if removed > 0 {
+            tracing::debug!("Removed {} stale connection state entries", removed);
+        }
     }
 }
 

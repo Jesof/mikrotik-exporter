@@ -9,6 +9,7 @@ mod cleanup;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{RwLock, watch};
 use tokio::task::JoinHandle;
 
@@ -37,6 +38,16 @@ impl SystemInfoCache {
         let mut cache = self.cache.write().await;
         tracing::debug!("Cached system info for router: {}", router_name);
         cache.insert(router_name, system);
+    }
+
+    pub async fn cleanup_stale(&self, active_routers: &HashSet<String>) {
+        let mut cache = self.cache.write().await;
+        let before_count = cache.len();
+        cache.retain(|router, _| active_routers.contains(router));
+        let removed = before_count - cache.len();
+        if removed > 0 {
+            tracing::debug!("Removed {} stale system info cache entries", removed);
+        }
     }
 }
 
@@ -76,6 +87,18 @@ pub fn start_collection_loop(
 
     // Cleanup interval: every 100 collection cycles
     const CLEANUP_EVERY_N_CYCLES: u64 = 100;
+    const STALE_LABEL_TTL: Duration = Duration::from_secs(60 * 60 * 24);
+
+    let active_routers: HashSet<String> = config
+        .routers
+        .iter()
+        .map(|router| router.name.clone())
+        .collect();
+    let active_pool_keys: HashSet<String> = config
+        .routers
+        .iter()
+        .map(|router| format!("{}:{}", router.address, router.username))
+        .collect();
 
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval));
@@ -210,6 +233,12 @@ pub fn start_collection_loop(
             if collection_cycle % CLEANUP_EVERY_N_CYCLES == 0 {
                 let active_ifaces = active_interfaces.lock().await;
                 metrics.cleanup_stale_interfaces(&active_ifaces).await;
+                metrics
+                    .cleanup_expired_dynamic_labels(STALE_LABEL_TTL)
+                    .await;
+                metrics.cleanup_stale_routers(&active_routers).await;
+                system_cache.cleanup_stale(&active_routers).await;
+                pool.cleanup_states(&active_pool_keys).await;
                 tracing::debug!(
                     "Cleanup cycle {} completed (tracked {} active interfaces)",
                     collection_cycle,
