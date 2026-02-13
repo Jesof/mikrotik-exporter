@@ -5,51 +5,22 @@
 //!
 //! Starts background metrics collection, manages connection pool and cleanup.
 
+mod cache;
 mod cleanup;
+mod router_task;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{RwLock, watch};
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
 use crate::config::Config;
 use crate::metrics::{MetricsRegistry, RouterLabels};
-use crate::mikrotik::{ConnectionPool, MikroTikClient, SystemResource};
+use crate::mikrotik::ConnectionPool;
 
-/// Cache for immutable system information (version, board name)
-#[derive(Clone, Default)]
-struct SystemInfoCache {
-    cache: Arc<RwLock<HashMap<String, SystemResource>>>,
-}
-
-impl SystemInfoCache {
-    #[must_use]
-    fn new() -> Self {
-        Self::default()
-    }
-
-    async fn get(&self, router_name: &str) -> Option<SystemResource> {
-        let cache = self.cache.read().await;
-        cache.get(router_name).cloned()
-    }
-
-    async fn set(&self, router_name: String, system: SystemResource) {
-        let mut cache = self.cache.write().await;
-        tracing::debug!("Cached system info for router: {}", router_name);
-        cache.insert(router_name, system);
-    }
-
-    async fn cleanup_stale(&self, active_routers: &HashSet<String>) {
-        let mut cache = self.cache.write().await;
-        let before_count = cache.len();
-        cache.retain(|router, _| active_routers.contains(router));
-        let removed = before_count - cache.len();
-        if removed > 0 {
-            tracing::debug!("Removed {} stale system info cache entries", removed);
-        }
-    }
-}
+use self::cache::SystemInfoCache;
+use self::router_task::spawn_router_collection;
 
 /// Starts the background metrics collection loop
 ///
@@ -124,95 +95,13 @@ pub fn start_collection_loop(
             // Collect metrics from all routers
             let mut tasks = Vec::new();
             for router in &config.routers {
-                let router_config = router.clone();
-                let client = MikroTikClient::with_pool(router_config.clone(), pool.clone());
-                let metrics_ref = metrics.clone();
-                let router_name = router.name.clone();
-                let router_label = RouterLabels {
-                    router: router_name.clone(),
-                };
-                let pool_ref = pool.clone();
-                let cache_ref = system_cache.clone();
-                let active_ifaces = active_interfaces.clone();
-
-                let task = tokio::spawn(async move {
-                    tracing::trace!("Starting metrics collection for router: {}", router_name);
-                    let start = std::time::Instant::now();
-                    match client.collect_metrics().await {
-                        Ok(m) => {
-                            let duration = start.elapsed().as_secs_f64();
-
-                            // Track active interfaces
-                            {
-                                let mut active = active_ifaces.lock().await;
-                                for iface in &m.interfaces {
-                                    active.insert(crate::metrics::InterfaceLabels {
-                                        router: router_name.clone(),
-                                        interface: iface.name.clone(),
-                                    });
-                                }
-                            }
-
-                            metrics_ref.update_metrics(&m).await;
-                            metrics_ref.record_scrape_success(&router_label);
-                            metrics_ref.record_scrape_duration(&router_label, duration);
-
-                            // Cache system info if it's the first time or if it changed
-                            if cache_ref.get(&router_name).await.is_none() {
-                                cache_ref.set(router_name.clone(), m.system.clone()).await;
-                            }
-
-                            // Update connection error count
-                            if let Some((errors, _)) = pool_ref
-                                .get_connection_state(
-                                    &router_config.address,
-                                    &router_config.username,
-                                )
-                                .await
-                            {
-                                metrics_ref.update_connection_errors(&router_label, errors);
-                            }
-
-                            tracing::debug!(
-                                "Collected metrics for router {} in {:.3}s",
-                                router_name,
-                                duration
-                            );
-                            tracing::trace!(
-                                "Router {} metrics: {} interfaces, CPU: {}%, Memory: {}/{} bytes",
-                                router_name,
-                                m.interfaces.len(),
-                                m.system.cpu_load,
-                                m.system.free_memory,
-                                m.system.total_memory
-                            );
-                        }
-                        Err(e) => {
-                            let duration = start.elapsed().as_secs_f64();
-                            metrics_ref.record_scrape_error(&router_label);
-                            metrics_ref.record_scrape_duration(&router_label, duration);
-
-                            // Update connection error count
-                            if let Some((errors, _)) = pool_ref
-                                .get_connection_state(
-                                    &router_config.address,
-                                    &router_config.username,
-                                )
-                                .await
-                            {
-                                metrics_ref.update_connection_errors(&router_label, errors);
-                            }
-
-                            tracing::warn!(
-                                "Failed to collect metrics for {} in {:.3}s: {}",
-                                router_name,
-                                duration,
-                                e
-                            );
-                            tracing::trace!("Error details for {}: {:?}", router_name, e);
-                        }
-                    }
-                });
+                let task = spawn_router_collection(
+                    router.clone(),
+                    pool.clone(),
+                    metrics.clone(),
+                    system_cache.clone(),
+                    active_interfaces.clone(),
+                );
                 tasks.push(task);
             }
 
