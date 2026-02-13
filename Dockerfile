@@ -21,7 +21,9 @@ ARG TARGETARCH
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target,id=target-${TARGETARCH} \
-    sh -c 'mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release --locked && rm -rf src target/release/deps/mikrotik* target/release/mikrotik*'
+    mkdir src && echo "fn main() {}" > src/main.rs && \
+    cargo build --release --locked && \
+    rm -rf src target/release/deps/mikrotik* target/release/mikrotik*
 
 # Copy actual source code
 COPY src ./src
@@ -31,7 +33,8 @@ COPY clippy.toml rustfmt.toml ./
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target,id=target-${TARGETARCH} \
-    sh -c 'cargo build --release --locked && cp target/release/mikrotik-exporter /app/mikrotik-exporter'
+    cargo build --release --locked && \
+    cp target/release/mikrotik-exporter /app/mikrotik-exporter
 
 # Runtime stage
 FROM alpine:3.19

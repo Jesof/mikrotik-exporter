@@ -126,8 +126,10 @@ jobs:
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ inputs.cache_scope }}
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}
+          cache-from: |
+            type=gha,scope=${{ inputs.cache_scope }}-${{ inputs.platforms }}
+            type=gha,scope=main-${{ inputs.platforms }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-${{ inputs.platforms }}
 
       - name: Build Docker image (single arch, push)
         id: build
@@ -142,8 +144,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ inputs.cache_scope }}
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}
+          cache-from: |
+            type=gha,scope=${{ inputs.cache_scope }}-${{ inputs.platforms }}
+            type=gha,scope=main-${{ inputs.platforms }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-${{ inputs.platforms }}
 
       - name: Build Docker image (arm64, push)
         if: >-
@@ -157,8 +161,10 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.arm64_tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ inputs.cache_scope }}
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}
+          cache-from: |
+            type=gha,scope=${{ inputs.cache_scope }}-arm64
+            type=gha,scope=main-arm64
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-arm64
 
       - name: Build Docker image (amd64, push)
         if: >-
@@ -172,8 +178,10 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.amd64_tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ inputs.cache_scope }}
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}
+          cache-from: |
+            type=gha,scope=${{ inputs.cache_scope }}-amd64
+            type=gha,scope=main-amd64
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-amd64
 
       - name: Create multi-arch manifest
         id: manifest
