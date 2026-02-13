@@ -56,9 +56,9 @@ pub fn start_collection_loop(
         config.routers.len()
     );
 
-    // Cleanup interval: every 100 collection cycles
-    const CLEANUP_EVERY_N_CYCLES: u64 = 100;
-    const STALE_LABEL_TTL: Duration = Duration::from_secs(60 * 60 * 24);
+    // Cleanup interval: every 20 collection cycles
+    const CLEANUP_EVERY_N_CYCLES: u64 = 20;
+    const STALE_LABEL_TTL: Duration = Duration::from_secs(60 * 30);
 
     let active_routers: HashSet<String> = config
         .routers
