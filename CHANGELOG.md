@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Neighbors metrics support (in development for v0.3.0)
 - POE metrics support (in development for v0.3.0)
 
+## [0.2.2] - 2026-02-15
+
+### Fixed
+- Multi-arch Docker manifest publishing in CI
+- Connection pool initialization and cleanup edge cases
+- Metric initialization (counters now start at 0 instead of NaN or missing)
+
+### Changed
+- Refactored internal module structure for better maintainability
+- Improved documentation and configuration examples
+
 ## [0.2.1] - 2026-02-11
 
 ### Changed

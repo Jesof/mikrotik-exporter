@@ -156,13 +156,20 @@ MIT - см. [LICENSE](LICENSE)
 
 Статус интерфейсов WireGuard доступен через стандартную метрику `mikrotik_interface_running`.
 
-### WireGuard Peers (Labels: router, interface, name, allowed_address, endpoint)
+### WireGuard Peers (Labels: router, interface, allowed_address)
 
-| Метрика                              | Тип   | Описание                                    |
-| ------------------------------------ | ----- | ------------------------------------------- |
-| `mikrotik_wireguard_peer_rx_bytes`   | gauge | Полученные байты от пира                    |
-| `mikrotik_wireguard_peer_tx_bytes`   | gauge | Отправленные байты пиру                     |
+| Метрика                                    | Тип   | Описание                            |
+| ------------------------------------------ | ----- | ----------------------------------- |
+| `mikrotik_wireguard_peer_rx_bytes`         | gauge | Полученные байты от пира            |
+| `mikrotik_wireguard_peer_tx_bytes`         | gauge | Отправленные байты пиру             |
 | `mikrotik_wireguard_peer_latest_handshake` | gauge | Unix timestamp последнего хендшейка |
+| `mikrotik_wireguard_peer_info`             | gauge | Метаданные пира (name, endpoint)    |
+
+### Информация о системе (Labels: router, version, board)
+
+| Метрика                | Тип   | Описание                                      |
+| ---------------------- | ----- | --------------------------------------------- |
+| `mikrotik_system_info` | gauge | Статическая информация о роутере (значение=1) |
 
 ## Архитектура проекта
 
@@ -198,7 +205,7 @@ async fn main() -> Result<()> {
     let metrics = MetricsRegistry::new();
     let pool = Arc::new(ConnectionPool::new());
     let state = Arc::new(AppState {
-        config: Arc::new(config.clone()),
+        config: config.clone(),
         metrics: metrics.clone(),
         pool: pool.clone(),
     });
