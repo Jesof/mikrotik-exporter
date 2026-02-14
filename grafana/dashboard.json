@@ -776,20 +776,7 @@
             ]
           }
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "interface"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 200
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 9,
@@ -826,28 +813,6 @@
         }
       ],
       "title": "Interface Status",
-      "transformations": [
-        {
-          "id": "labelsToFields",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "job": true,
-              "router": true
-            },
-            "indexByName": {},
-            "renameByName": {
-              "Value": "Status",
-              "interface": "Interface"
-            }
-          }
-        }
-      ],
       "type": "table"
     },
     {
@@ -1686,6 +1651,7 @@
           "refId": "A"
         }
       ],
+      "title": "WireGuard Last Handshake",
       "transformations": [
         {
           "id": "organize",
@@ -1704,11 +1670,11 @@
               "service": true
             },
             "indexByName": {
-              "interface": 0,
-              "name": 1,
-              "exported_endpoint": 2,
+              "Value": 4,
               "allowed_address": 3,
-              "Value": 4
+              "exported_endpoint": 2,
+              "interface": 0,
+              "name": 1
             },
             "renameByName": {
               "Value": "Last Handshake",
@@ -1720,7 +1686,6 @@
           }
         }
       ],
-      "title": "WireGuard Last Handshake",
       "type": "table"
     },
     {
@@ -2894,7 +2859,7 @@
           "type": "prometheus",
           "uid": "${DS_VICTORIAMETRICS}"
         },
-        "definition": "label_values(mikrotik_interface_rx_bytes_total{router=\"$router\"}, interface)",
+        "definition": "label_values(mikrotik_interface_running{router=\"$router\"}, interface)",
         "includeAll": true,
         "label": "Interface",
         "multi": true,
@@ -2902,7 +2867,7 @@
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(mikrotik_interface_rx_bytes_total{router=\"$router\"}, interface)",
+          "query": "label_values(mikrotik_interface_running{router=\"$router\"}, interface)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -2932,7 +2897,7 @@
   "timezone": "browser",
   "title": "MikroTik Router Monitoring",
   "uid": "mikrotik-exporter",
-  "version": 8,
+  "version": 40,
   "weekStart": "",
   "id": null
 }

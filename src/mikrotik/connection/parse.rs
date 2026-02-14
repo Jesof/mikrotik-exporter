@@ -41,7 +41,10 @@ pub(crate) fn parse_system(sentences: &[HashMap<String, String>]) -> SystemResou
 pub(crate) fn parse_interfaces(sentences: &[HashMap<String, String>]) -> Vec<InterfaceStats> {
     let mut out = Vec::new();
     for s in sentences {
-        if let Some(name) = s.get("name") {
+        // Only parse entries that have both 'name' and 'type' fields.
+        // This prevents WireGuard peers (which have 'name' or are 'unnamed-peer' but no 'type')
+        // from leaking into interface metrics.
+        if let (Some(name), Some(_type)) = (s.get("name"), s.get("type")) {
             out.push(InterfaceStats {
                 name: name.clone(),
                 rx_bytes: s.get("rx-byte").and_then(|v| v.parse().ok()).unwrap_or(0),
@@ -168,6 +171,7 @@ mod tests {
     fn test_parse_interfaces_complete() {
         let mut iface1 = HashMap::new();
         iface1.insert("name".to_string(), "ether1".to_string());
+        iface1.insert("type".to_string(), "ether".to_string());
         iface1.insert("rx-byte".to_string(), "1000".to_string());
         iface1.insert("tx-byte".to_string(), "2000".to_string());
         iface1.insert("rx-packet".to_string(), "10".to_string());
@@ -189,10 +193,12 @@ mod tests {
     fn test_parse_interfaces_multiple() {
         let mut iface1 = HashMap::new();
         iface1.insert("name".to_string(), "ether1".to_string());
+        iface1.insert("type".to_string(), "ether".to_string());
         iface1.insert("running".to_string(), "true".to_string());
 
         let mut iface2 = HashMap::new();
         iface2.insert("name".to_string(), "ether2".to_string());
+        iface2.insert("type".to_string(), "ether".to_string());
         iface2.insert("running".to_string(), "false".to_string());
 
         let result = parse_interfaces(&[iface1, iface2]);
@@ -208,6 +214,7 @@ mod tests {
     fn test_parse_interfaces_missing_values() {
         let mut iface = HashMap::new();
         iface.insert("name".to_string(), "ether1".to_string());
+        iface.insert("type".to_string(), "ether".to_string());
 
         let result = parse_interfaces(&[iface]);
 
@@ -216,6 +223,27 @@ mod tests {
         assert_eq!(result[0].rx_bytes, 0);
         assert_eq!(result[0].tx_bytes, 0);
         assert!(!result[0].running);
+    }
+
+    #[test]
+    fn test_parse_interfaces_filters_peers() {
+        let mut peer = HashMap::new();
+        peer.insert("name".to_string(), "unnamed-peer".to_string());
+        peer.insert("interface".to_string(), "wg1".to_string());
+        peer.insert("public-key".to_string(), "abc".to_string());
+
+        let result = parse_interfaces(&[peer]);
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_interfaces_no_type() {
+        let mut iface = HashMap::new();
+        iface.insert("name".to_string(), "ether1".to_string());
+        // missing type
+
+        let result = parse_interfaces(&[iface]);
+        assert_eq!(result.len(), 0);
     }
 
     #[test]
