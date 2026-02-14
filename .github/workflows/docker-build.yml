@@ -88,6 +88,13 @@ jobs:
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Sanitize platform for cache
+        id: cache-key
+        shell: bash
+        run: |
+          PLATFORM_CLEAN=$(echo "${{ inputs.platforms }}" | sed 's|linux/||g' | sed 's|,|-|g')
+          echo "platform=${PLATFORM_CLEAN}" >> "$GITHUB_OUTPUT"
+
       - name: Prepare arch tags
         id: tags
         if: >-
@@ -127,9 +134,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
-            type=gha,scope=${{ inputs.cache_scope }}-${{ inputs.platforms }}
-            type=gha,scope=main-${{ inputs.platforms }}
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-${{ inputs.platforms }}
+            type=gha,scope=${{ inputs.cache_scope }}-${{ steps.cache-key.outputs.platform }}
+            type=gha,scope=main-${{ steps.cache-key.outputs.platform }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-${{ steps.cache-key.outputs.platform }}
 
       - name: Build Docker image (single arch, push)
         id: build
@@ -145,9 +152,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
-            type=gha,scope=${{ inputs.cache_scope }}-${{ inputs.platforms }}
-            type=gha,scope=main-${{ inputs.platforms }}
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-${{ inputs.platforms }}
+            type=gha,scope=${{ inputs.cache_scope }}-${{ steps.cache-key.outputs.platform }}
+            type=gha,scope=main-${{ steps.cache-key.outputs.platform }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-${{ steps.cache-key.outputs.platform }}
 
       - name: Build Docker image (arm64, push)
         if: >-
