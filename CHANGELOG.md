@@ -14,6 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Neighbors metrics support (in development for v0.3.0)
 - POE metrics support (in development for v0.3.0)
 
+## [0.2.3] - 2026-02-17
+
+### Added
+- Configuration validation with startup connectivity testing
+- New environment variables for startup connectivity testing:
+  - `STARTUP_CONNECTIVITY_TEST` - Enable/disable startup connectivity testing
+  - `STARTUP_CONNECTIVITY_TIMEOUT_SECS` - Timeout for connectivity tests
+  - `STRICT_STARTUP_MODE` - Fail startup if any router is unreachable
+- Enhanced documentation for public APIs and configuration options
+
+### Changed
+- Optimized metrics registry with DashMap for better concurrency performance
+- Reduced lock contention for read-heavy operations with large numbers of interfaces
+- Improved concurrent access allowing multiple threads to work simultaneously
+- Faster metric updates by removing blocking mutex operations
+- Better cleanup performance for large datasets
+
 ## [0.2.2] - 2026-02-15
 
 ### Fixed

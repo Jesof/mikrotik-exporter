@@ -5,7 +5,7 @@ metadata:
   namespace: monitoring
   labels:
     app: mikrotik-exporter
-    version: v0.2.1
+    version: v0.2.3
 spec:
   replicas: 1
   selector:
@@ -15,7 +15,7 @@ spec:
     metadata:
       labels:
         app: mikrotik-exporter
-        version: v0.2.1
+        version: v0.2.3
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9090"
