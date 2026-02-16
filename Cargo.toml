@@ -63,6 +63,9 @@ prometheus-client = "0.24.0"
 # Secure credential handling
 secrecy = { version = "0.10.0", features = ["serde"] }
 
+# Concurrent hash maps for metrics optimization
+dashmap = "6.1.0"
+
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
