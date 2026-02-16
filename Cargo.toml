@@ -4,8 +4,15 @@ version = "0.2.3"
 edition = "2024"
 authors = ["Jesof <jesof@me.com>"]
 license = "MIT"
+description = "Prometheus exporter for MikroTik RouterOS devices"
 repository = "https://github.com/Jesof/mikrotik-exporter"
 readme = "README.md"
+keywords = ["prometheus", "mikrotik", "routeros", "exporter", "networking"]
+categories = [
+    "network-programming",
+    "asynchronous",
+    "web-programming::http-server",
+]
 exclude = ["target"]
 
 [profile.dev]
