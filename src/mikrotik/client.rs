@@ -62,10 +62,38 @@ impl MikroTikClient {
     ///
     /// This method attempts to establish a connection to the router
     /// and authenticate to verify it is reachable and accessible.
+    /// It's typically used for startup connectivity testing.
     ///
     /// # Errors
     ///
     /// Returns an error if connection or authentication fails.
+    /// The error will contain details about the failure reason.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use mikrotik_exporter::{RouterConfig, ConnectionPool};
+    /// # use std::sync::Arc;
+    /// # let router_config = RouterConfig {
+    /// #     name: "test".to_string(),
+    /// #     address: "192.168.1.1:8728".to_string(),
+    /// #     username: "admin".to_string(),
+    /// #     password: "password".to_string().into(),
+    /// # };
+    /// use mikrotik_exporter::mikrotik::{MikroTikClient};
+    ///
+    /// let pool = Arc::new(ConnectionPool::new());
+    /// let client = MikroTikClient::with_pool(router_config, pool);
+    ///
+    /// // Test connectivity with 10-second timeout
+    /// match client.test_connection().await {
+    ///     Ok(()) => println!("Successfully connected to router"),
+    ///     Err(e) => eprintln!("Failed to connect to router: {}", e),
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub(crate) async fn test_connection(
         &self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
