@@ -1,6 +1,6 @@
 [package]
 name = "mikrotik-exporter"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 authors = ["Jesof <jesof@me.com>"]
 license = "MIT"
@@ -62,6 +62,9 @@ prometheus-client = "0.24.0"
 
 # Secure credential handling
 secrecy = { version = "0.10.0", features = ["serde"] }
+
+# Concurrent hash maps for metrics optimization
+dashmap = "6.1.0"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

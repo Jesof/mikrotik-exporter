@@ -31,20 +31,23 @@ impl MetricsRegistry {
     #[allow(clippy::similar_names)] // rx/tx naming pattern is intentional and clear
     pub async fn update_metrics(&self, metrics: &RouterMetrics) {
         {
-            let mut prev = self.prev_iface.lock().await;
             for iface in &metrics.interfaces {
                 let labels = InterfaceLabels {
                     router: metrics.router_name.clone(),
                     interface: iface.name.clone(),
                 };
-                let snapshot = prev.get(&labels).copied().unwrap_or(InterfaceSnapshot {
-                    rx_bytes: iface.rx_bytes,
-                    tx_bytes: iface.tx_bytes,
-                    rx_packets: iface.rx_packets,
-                    tx_packets: iface.tx_packets,
-                    rx_errors: iface.rx_errors,
-                    tx_errors: iface.tx_errors,
-                });
+                let snapshot = self
+                    .prev_iface
+                    .get(&labels)
+                    .map(|entry| *entry.value())
+                    .unwrap_or(InterfaceSnapshot {
+                        rx_bytes: iface.rx_bytes,
+                        tx_bytes: iface.tx_bytes,
+                        rx_packets: iface.rx_packets,
+                        tx_packets: iface.tx_packets,
+                        rx_errors: iface.rx_errors,
+                        tx_errors: iface.tx_errors,
+                    });
                 let dx_rx_bytes = iface.rx_bytes.saturating_sub(snapshot.rx_bytes);
                 let dx_tx_bytes = iface.tx_bytes.saturating_sub(snapshot.tx_bytes);
                 let dx_rx_packets = iface.rx_packets.saturating_sub(snapshot.rx_packets);
@@ -72,7 +75,7 @@ impl MetricsRegistry {
                 self.interface_running
                     .get_or_create(&labels)
                     .set(i64::from(iface.running));
-                prev.insert(
+                self.prev_iface.insert(
                     labels,
                     InterfaceSnapshot {
                         rx_bytes: iface.rx_bytes,
@@ -112,20 +115,19 @@ impl MetricsRegistry {
             board: metrics.system.board_name.clone(),
         };
         {
-            let mut prev = self.prev_system_info.lock().await;
-            if let Some(old) = prev.get(&metrics.router_name) {
-                if *old != info_labels {
-                    self.system_info.get_or_create(old).set(0);
+            if let Some(old) = self.prev_system_info.get(&metrics.router_name) {
+                if *old.value() != info_labels {
+                    self.system_info.get_or_create(old.value()).set(0);
                 }
             }
-            prev.insert(metrics.router_name.clone(), info_labels.clone());
+            self.prev_system_info
+                .insert(metrics.router_name.clone(), info_labels.clone());
         }
         self.system_info.get_or_create(&info_labels).set(1);
 
         // Update connection tracking metrics
         let now = Instant::now();
         let mut current_conntrack = HashSet::new();
-        let mut conntrack_seen = self.conntrack_last_seen.lock().await;
         for ct in &metrics.connection_tracking {
             let ct_labels = ConntrackLabels {
                 router: metrics.router_name.clone(),
@@ -138,13 +140,14 @@ impl MetricsRegistry {
             self.connection_tracking_count
                 .get_or_create(&ct_labels)
                 .set(ct.connection_count as i64);
-            conntrack_seen.insert(ct_labels, now);
+            self.conntrack_last_seen.insert(ct_labels, now);
         }
         {
-            let mut prev_map = self.prev_conntrack.lock().await;
-            let prev_labels = prev_map
+            let mut prev_map_entry = self
+                .prev_conntrack
                 .entry(metrics.router_name.clone())
-                .or_insert_with(HashSet::new);
+                .or_default();
+            let prev_labels = prev_map_entry.value_mut();
             for stale in prev_labels.difference(&current_conntrack) {
                 self.connection_tracking_count.get_or_create(stale).set(0);
             }
@@ -172,14 +175,14 @@ impl MetricsRegistry {
                     candidate_ts > existing_ts
                 } else {
                     candidate.rx_bytes.saturating_add(candidate.tx_bytes)
-                        > existing.rx_bytes.saturating_add(existing.tx_bytes)
+                        > existing.rx_bytes.saturating_add(existing.rx_bytes)
                 }
             }
             (Some(_), None) => true,
             (None, Some(_)) => false,
             (None, None) => {
                 candidate.rx_bytes.saturating_add(candidate.tx_bytes)
-                    > existing.rx_bytes.saturating_add(existing.tx_bytes)
+                    > existing.rx_bytes.saturating_add(existing.rx_bytes)
             }
         };
         for wg_peer in &metrics.wireguard_peers {
@@ -199,8 +202,6 @@ impl MetricsRegistry {
 
         let mut current_peers = HashSet::new();
         let mut current_peer_info = HashMap::new();
-        let mut peer_seen = self.wireguard_peer_last_seen.lock().await;
-        let mut peer_info_seen = self.wireguard_peer_info_last_seen.lock().await;
         for (wg_peer_labels, wg_peer) in deduped_peers {
             current_peers.insert(wg_peer_labels.clone());
             let endpoint = wg_peer
@@ -234,15 +235,16 @@ impl MetricsRegistry {
                 }
                 self.wireguard_peer_info.get_or_create(&info_labels).set(1);
             }
-            peer_seen.insert(wg_peer_labels, now);
-            peer_info_seen.insert(info_labels, now);
+            self.wireguard_peer_last_seen.insert(wg_peer_labels, now);
+            self.wireguard_peer_info_last_seen.insert(info_labels, now);
         }
 
         {
-            let mut prev_peers = self.prev_wireguard_peers.lock().await;
-            let prev_labels = prev_peers
+            let mut prev_peers_entry = self
+                .prev_wireguard_peers
                 .entry(metrics.router_name.clone())
-                .or_insert_with(HashSet::new);
+                .or_default();
+            let prev_labels = prev_peers_entry.value_mut();
             for stale in prev_labels.difference(&current_peers) {
                 #[allow(clippy::cast_possible_wrap)]
                 {
@@ -257,10 +259,11 @@ impl MetricsRegistry {
         }
 
         {
-            let mut prev_info = self.prev_wireguard_peer_info.lock().await;
-            let prev_map = prev_info
+            let mut prev_info_entry = self
+                .prev_wireguard_peer_info
                 .entry(metrics.router_name.clone())
-                .or_insert_with(HashMap::new);
+                .or_default();
+            let prev_map = prev_info_entry.value_mut();
             for (peer_labels, info_labels) in &current_peer_info {
                 if let Some(old) = prev_map.get(peer_labels) {
                     if old != info_labels {

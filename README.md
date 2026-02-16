@@ -41,6 +41,9 @@ kubectl apply -k k8s/
 SERVER_ADDR=0.0.0.0:9090                    # HTTP server bind address
 ROUTERS_CONFIG=[{...}]                      # JSON массив роутеров (рекомендуется)
 COLLECTION_INTERVAL_SECONDS=30              # Интервал сбора метрик
+STARTUP_CONNECTIVITY_TEST=false             # Проверка доступности роутеров при запуске
+STARTUP_CONNECTIVITY_TIMEOUT_SECS=10        # Таймаут проверки доступности (в секундах)
+STRICT_STARTUP_MODE=false                   # Завершать работу при недоступности роутеров
 RUST_LOG=info                               # Уровень логирования
 ROUTEROS_ADDRESS=192.168.88.1:8728          # Legacy: адрес RouterOS API (один роутер)
 ROUTEROS_USERNAME=admin                     # Legacy: пользователь (default: admin)
@@ -49,6 +52,23 @@ ROUTEROS_PASSWORD=                          # Legacy: пароль (default: п�
 
 Если `ROUTERS_CONFIG` не задан, используется legacy-конфигурация
 `ROUTEROS_ADDRESS/ROUTEROS_USERNAME/ROUTEROS_PASSWORD` с именем роутера `default`.
+
+### Проверка доступности роутеров при запуске
+
+Новые опции позволяют проверить доступность всех сконфигурированных роутеров при запуске сервиса:
+
+- `STARTUP_CONNECTIVITY_TEST=true` - включает проверку доступности роутеров при запуске
+- `STARTUP_CONNECTIVITY_TIMEOUT_SECS=10` - таймаут для каждой проверки (по умолчанию 10 секунд)
+- `STRICT_STARTUP_MODE=true` - завершает работу сервиса с кодом ошибки, если какой-либо роутер недоступен
+
+Пример использования:
+```bash
+# Проверить доступность роутеров при запуске, но продолжить работу даже если некоторые недоступны
+STARTUP_CONNECTIVITY_TEST=true ./mikrotik-exporter
+
+# Проверить доступность роутеров и завершить работу, если хотя бы один недоступен
+STARTUP_CONNECTIVITY_TEST=true STRICT_STARTUP_MODE=true ./mikrotik-exporter
+```
 
 ### Формат ROUTERS_CONFIG
 

@@ -8,6 +8,52 @@
 //! This library provides functionality to collect metrics from MikroTik routers
 //! via the RouterOS API and expose them in Prometheus format.
 //!
+//! ## Features
+//!
+//! - **Multi-router support**: Collect metrics from multiple MikroTik devices
+//! - **Asynchronous architecture**: Efficient concurrent collection using connection pooling
+//! - **Comprehensive metrics**: Interface statistics, system resources, connection tracking, WireGuard
+//! - **Built-in connection pooling**: Automatic connection management with exponential backoff
+//! - **Delta calculation**: Automatic counter delta calculation for accurate rate metrics
+//! - **Startup connectivity testing**: Optional connectivity verification during application startup
+//! - **Health checking**: Built-in health endpoint with router status monitoring
+//!
+//! ## Quick Start
+//!
+//! ```rust,no_run
+//! use std::sync::Arc;
+//! use tokio::sync::watch;
+//! use mikrotik_exporter::{
+//!     AppState, Config, ConnectionPool, MetricsRegistry, Result, create_router,
+//!     start_collection_loop,
+//! };
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<()> {
+//!     let config = Config::from_env();
+//!     let metrics = MetricsRegistry::new();
+//!     let pool = Arc::new(ConnectionPool::new());
+//!     let state = Arc::new(AppState {
+//!         config: config.clone(),
+//!         metrics: metrics.clone(),
+//!         pool: pool.clone(),
+//!     });
+//!
+//!     let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+//!     start_collection_loop(shutdown_rx, Arc::new(config), metrics, pool);
+//!
+//!     let app = create_router(state);
+//!     let listener = tokio::net::TcpListener::bind("0.0.0.0:9090").await?;
+//!     axum::serve(listener, app.into_make_service()).await?;
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ## Configuration
+//!
+//! Configuration can be loaded from environment variables using `Config::from_env()`.
+//! See `Config` documentation for available options including startup connectivity testing.
+//!
 //! ## Main modules
 //! - `api`: HTTP API handlers
 //! - `collector`: metrics collection and processing
@@ -16,6 +62,13 @@
 //! - `metrics`: metrics parsing and registry
 //! - `mikrotik`: MikroTik device interaction
 //! - `prelude`: commonly used types and traits
+//!
+//! ## Performance Optimizations
+//!
+//! - **DashMap-based metrics registry**: Lock-free concurrent access for better performance
+//! - **Efficient delta calculations**: Minimal overhead for counter metric processing
+//! - **Connection pooling**: Reuse connections to reduce authentication overhead
+//! - **Incremental cleanup**: Periodic cleanup of stale metrics to prevent memory growth
 
 mod api;
 mod collector;

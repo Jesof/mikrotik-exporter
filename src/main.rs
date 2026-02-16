@@ -41,6 +41,41 @@ async fn main() -> Result<()> {
         tracing::info!("  - Router '{}' at {}", router.name, router.address);
     }
 
+    // Perform startup connectivity testing if enabled
+    if config.startup_connectivity_test && !config.routers.is_empty() {
+        tracing::info!(
+            "Performing startup connectivity tests (timeout: {}s{})",
+            config.startup_connectivity_timeout_secs,
+            if config.strict_startup_mode {
+                ", strict mode enabled"
+            } else {
+                ""
+            }
+        );
+
+        let failed_routers = config
+            .test_router_connectivity(config.startup_connectivity_timeout_secs)
+            .await;
+
+        if !failed_routers.is_empty() {
+            tracing::warn!(
+                "Connectivity test failed for {} router(s): {:?}",
+                failed_routers.len(),
+                failed_routers
+            );
+
+            if config.strict_startup_mode {
+                tracing::error!(
+                    "Exiting due to strict startup mode - {} router(s) are unreachable",
+                    failed_routers.len()
+                );
+                std::process::exit(1);
+            }
+        } else {
+            tracing::info!("All router connectivity tests passed");
+        }
+    }
+
     // Create metrics registry
     let metrics = MetricsRegistry::new();
 

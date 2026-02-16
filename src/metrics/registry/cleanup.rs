@@ -25,16 +25,21 @@ impl MetricsRegistry {
         current_interfaces: &HashSet<InterfaceLabels>,
     ) {
         let stale_interfaces: Vec<InterfaceLabels> = {
-            let mut prev = self.prev_iface.lock().await;
-            let before_count = prev.len();
-            let stale: Vec<_> = prev
-                .keys()
-                .filter(|labels| !current_interfaces.contains(*labels))
-                .cloned()
+            let before_count = self.prev_iface.len();
+            let stale: Vec<_> = self
+                .prev_iface
+                .iter()
+                .filter(|entry| !current_interfaces.contains(entry.key()))
+                .map(|entry| entry.key().clone())
                 .collect();
-            prev.retain(|labels, _| current_interfaces.contains(labels));
-            let after_count = prev.len();
-            let removed = before_count - after_count;
+
+            // Remove stale entries
+            for label in &stale {
+                self.prev_iface.remove(label);
+            }
+
+            let after_count = self.prev_iface.len();
+            let removed = before_count.saturating_sub(after_count);
             if removed > 0 {
                 tracing::debug!("Cleaned up {} stale interface snapshots", removed);
             }
@@ -63,27 +68,33 @@ impl MetricsRegistry {
         let now = Instant::now();
 
         let stale_conntrack: Vec<ConntrackLabels> = {
-            let mut last_seen = self.conntrack_last_seen.lock().await;
-            let stale: Vec<_> = last_seen
+            let stale: Vec<_> = self
+                .conntrack_last_seen
                 .iter()
-                .filter(|(_, ts)| now.duration_since(**ts) > ttl)
-                .map(|(label, _)| label.clone())
+                .filter(|entry| now.duration_since(*entry.value()) > ttl)
+                .map(|entry| entry.key().clone())
                 .collect();
+
+            // Remove stale entries
             for label in &stale {
-                last_seen.remove(label);
+                self.conntrack_last_seen.remove(label);
             }
             stale
         };
         if !stale_conntrack.is_empty() {
-            let mut prev_map = self.prev_conntrack.lock().await;
+            // Clean up prev_conntrack entries for stale labels
             for label in &stale_conntrack {
-                self.connection_tracking_count.remove(label);
-                if let Some(set) = prev_map.get_mut(&label.router) {
+                if let Some(mut set) = self.prev_conntrack.get_mut(&label.router) {
                     set.remove(label);
                     if set.is_empty() {
-                        prev_map.remove(&label.router);
+                        drop(set); // Release the mutable borrow
+                        self.prev_conntrack.remove(&label.router);
                     }
                 }
+            }
+
+            for label in &stale_conntrack {
+                self.connection_tracking_count.remove(label);
             }
             tracing::debug!(
                 "Expired {} conntrack labels via TTL cleanup",
@@ -92,29 +103,35 @@ impl MetricsRegistry {
         }
 
         let stale_peers: Vec<WireGuardPeerLabels> = {
-            let mut last_seen = self.wireguard_peer_last_seen.lock().await;
-            let stale: Vec<_> = last_seen
+            let stale: Vec<_> = self
+                .wireguard_peer_last_seen
                 .iter()
-                .filter(|(_, ts)| now.duration_since(**ts) > ttl)
-                .map(|(label, _)| label.clone())
+                .filter(|entry| now.duration_since(*entry.value()) > ttl)
+                .map(|entry| entry.key().clone())
                 .collect();
+
+            // Remove stale entries
             for label in &stale {
-                last_seen.remove(label);
+                self.wireguard_peer_last_seen.remove(label);
             }
             stale
         };
         if !stale_peers.is_empty() {
-            let mut prev_map = self.prev_wireguard_peers.lock().await;
+            // Clean up prev_wireguard_peers entries for stale labels
+            for label in &stale_peers {
+                if let Some(mut set) = self.prev_wireguard_peers.get_mut(&label.router) {
+                    set.remove(label);
+                    if set.is_empty() {
+                        drop(set); // Release the mutable borrow
+                        self.prev_wireguard_peers.remove(&label.router);
+                    }
+                }
+            }
+
             for label in &stale_peers {
                 self.wireguard_peer_rx_bytes.remove(label);
                 self.wireguard_peer_tx_bytes.remove(label);
                 self.wireguard_peer_latest_handshake.remove(label);
-                if let Some(set) = prev_map.get_mut(&label.router) {
-                    set.remove(label);
-                    if set.is_empty() {
-                        prev_map.remove(&label.router);
-                    }
-                }
             }
             tracing::debug!(
                 "Expired {} wireguard peer labels via TTL cleanup",
@@ -123,27 +140,43 @@ impl MetricsRegistry {
         }
 
         let stale_peer_info: Vec<WireGuardPeerInfoLabels> = {
-            let mut last_seen = self.wireguard_peer_info_last_seen.lock().await;
-            let stale: Vec<_> = last_seen
+            let stale: Vec<_> = self
+                .wireguard_peer_info_last_seen
                 .iter()
-                .filter(|(_, ts)| now.duration_since(**ts) > ttl)
-                .map(|(label, _)| label.clone())
+                .filter(|entry| now.duration_since(*entry.value()) > ttl)
+                .map(|entry| entry.key().clone())
                 .collect();
+
+            // Remove stale entries
             for label in &stale {
-                last_seen.remove(label);
+                self.wireguard_peer_info_last_seen.remove(label);
             }
             stale
         };
         if !stale_peer_info.is_empty() {
-            let mut prev_map = self.prev_wireguard_peer_info.lock().await;
+            // Clean up prev_wireguard_peer_info entries for stale labels
+            // We need to iterate through all entries to find and remove the matching labels
             for label in &stale_peer_info {
-                self.wireguard_peer_info.remove(label);
-                if let Some(map) = prev_map.get_mut(&label.router) {
-                    map.retain(|_, info| info != label);
+                if let Some(mut map) = self.prev_wireguard_peer_info.get_mut(&label.router) {
+                    let keys_to_remove: Vec<_> = map
+                        .iter()
+                        .filter(|(_, info)| *info == label)
+                        .map(|(key, _)| key.clone())
+                        .collect();
+
+                    for key in keys_to_remove {
+                        map.remove(&key);
+                    }
+
                     if map.is_empty() {
-                        prev_map.remove(&label.router);
+                        drop(map); // Release the mutable borrow
+                        self.prev_wireguard_peer_info.remove(&label.router);
                     }
                 }
+            }
+
+            for label in &stale_peer_info {
+                self.wireguard_peer_info.remove(label);
             }
             tracing::debug!(
                 "Expired {} wireguard peer info labels via TTL cleanup",
@@ -157,13 +190,17 @@ impl MetricsRegistry {
         let mut stale_routers = HashSet::new();
 
         let stale_interfaces: Vec<InterfaceLabels> = {
-            let mut prev_iface = self.prev_iface.lock().await;
-            let stale: Vec<_> = prev_iface
-                .keys()
-                .filter(|labels| !active_routers.contains(&labels.router))
-                .cloned()
+            let stale: Vec<_> = self
+                .prev_iface
+                .iter()
+                .filter(|entry| !active_routers.contains(&entry.key().router))
+                .map(|entry| entry.key().clone())
                 .collect();
-            prev_iface.retain(|labels, _| active_routers.contains(&labels.router));
+
+            // Remove stale entries
+            for label in &stale {
+                self.prev_iface.remove(label);
+            }
             stale
         };
         for label in &stale_interfaces {
@@ -177,33 +214,33 @@ impl MetricsRegistry {
             self.interface_running.remove(label);
         }
 
-        let stale_system: Vec<SystemInfoLabels> = {
-            let mut prev_system = self.prev_system_info.lock().await;
+        // Clean up system info for stale routers
+        let stale_system: Vec<(String, SystemInfoLabels)> = {
             let mut stale = Vec::new();
-            prev_system.retain(|router, labels| {
+            self.prev_system_info.retain(|router, labels| {
                 if active_routers.contains(router) {
                     true
                 } else {
                     stale_routers.insert(router.clone());
-                    stale.push(labels.clone());
+                    stale.push((router.clone(), labels.clone()));
                     false
                 }
             });
             stale
         };
-        for label in &stale_system {
+        for (_, label) in &stale_system {
             self.system_info.remove(label);
         }
 
+        // Clean up conntrack for stale routers
         let stale_conntrack: Vec<ConntrackLabels> = {
-            let mut prev_map = self.prev_conntrack.lock().await;
             let mut stale = Vec::new();
-            prev_map.retain(|router, labels| {
+            self.prev_conntrack.retain(|router, set| {
                 if active_routers.contains(router) {
                     true
                 } else {
                     stale_routers.insert(router.clone());
-                    stale.extend(labels.iter().cloned());
+                    stale.extend(set.iter().cloned());
                     false
                 }
             });
@@ -213,15 +250,15 @@ impl MetricsRegistry {
             self.connection_tracking_count.remove(label);
         }
 
+        // Clean up wireguard peers for stale routers
         let stale_peers: Vec<WireGuardPeerLabels> = {
-            let mut prev_map = self.prev_wireguard_peers.lock().await;
             let mut stale = Vec::new();
-            prev_map.retain(|router, labels| {
+            self.prev_wireguard_peers.retain(|router, set| {
                 if active_routers.contains(router) {
                     true
                 } else {
                     stale_routers.insert(router.clone());
-                    stale.extend(labels.iter().cloned());
+                    stale.extend(set.iter().cloned());
                     false
                 }
             });
@@ -233,10 +270,10 @@ impl MetricsRegistry {
             self.wireguard_peer_latest_handshake.remove(label);
         }
 
+        // Clean up wireguard peer info for stale routers
         let stale_peer_info: Vec<WireGuardPeerInfoLabels> = {
-            let mut prev_map = self.prev_wireguard_peer_info.lock().await;
             let mut stale = Vec::new();
-            prev_map.retain(|router, map| {
+            self.prev_wireguard_peer_info.retain(|router, map| {
                 if active_routers.contains(router) {
                     true
                 } else {
@@ -267,14 +304,36 @@ impl MetricsRegistry {
             self.connection_consecutive_errors.remove(&router_labels);
         }
 
-        let mut conntrack_seen = self.conntrack_last_seen.lock().await;
-        conntrack_seen.retain(|label, _| active_routers.contains(&label.router));
+        // Clean up last seen maps
+        let stale_conntrack_labels: Vec<_> = self
+            .conntrack_last_seen
+            .iter()
+            .filter(|entry| !active_routers.contains(&entry.key().router))
+            .map(|entry| entry.key().clone())
+            .collect();
+        for label in stale_conntrack_labels {
+            self.conntrack_last_seen.remove(&label);
+        }
 
-        let mut peer_seen = self.wireguard_peer_last_seen.lock().await;
-        peer_seen.retain(|label, _| active_routers.contains(&label.router));
+        let stale_peer_labels: Vec<_> = self
+            .wireguard_peer_last_seen
+            .iter()
+            .filter(|entry| !active_routers.contains(&entry.key().router))
+            .map(|entry| entry.key().clone())
+            .collect();
+        for label in stale_peer_labels {
+            self.wireguard_peer_last_seen.remove(&label);
+        }
 
-        let mut peer_info_seen = self.wireguard_peer_info_last_seen.lock().await;
-        peer_info_seen.retain(|label, _| active_routers.contains(&label.router));
+        let stale_peer_info_labels: Vec<_> = self
+            .wireguard_peer_info_last_seen
+            .iter()
+            .filter(|entry| !active_routers.contains(&entry.key().router))
+            .map(|entry| entry.key().clone())
+            .collect();
+        for label in stale_peer_info_labels {
+            self.wireguard_peer_info_last_seen.remove(&label);
+        }
 
         if !stale_interfaces.is_empty()
             || !stale_system.is_empty()

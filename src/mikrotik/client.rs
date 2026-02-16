@@ -58,6 +58,75 @@ impl MikroTikClient {
         }
     }
 
+    /// Test connectivity to the router
+    ///
+    /// This method attempts to establish a connection to the router
+    /// and authenticate to verify it is reachable and accessible.
+    /// It's typically used for startup connectivity testing.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if connection or authentication fails.
+    /// The error will contain details about the failure reason.
+    ///
+    /// This method is used internally by the configuration validation system
+    /// to test router connectivity during application startup when the
+    /// `STARTUP_CONNECTIVITY_TEST` configuration option is enabled.
+    pub(crate) async fn test_connection(
+        &self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        use tokio::time::{Duration, timeout};
+
+        const TEST_CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
+
+        match timeout(TEST_CONNECTION_TIMEOUT, self.test_connection_real()).await {
+            Ok(result) => result,
+            Err(_) => {
+                let err = format!(
+                    "Router '{}' connection test timeout (>10s)",
+                    self.config.name
+                );
+                tracing::error!("{}", err);
+                Err(err.into())
+            }
+        }
+    }
+
+    async fn test_connection_real(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Get connection from pool (returns RAII guard that auto-releases on drop)
+        let mut guard = self
+            .pool
+            .get_connection(
+                &self.config.address,
+                &self.config.username,
+                self.config.password.expose_secret(),
+            )
+            .await?;
+
+        let conn = guard.get_mut();
+
+        // Execute a minimal command to test connectivity
+        let result = conn.command("/system/resource/print", &[]).await;
+
+        // Record connection state BEFORE dropping guard to prevent race condition
+        if result.is_ok() {
+            self.pool
+                .record_success(&self.config.address, &self.config.username)
+                .await;
+        } else {
+            self.pool
+                .record_error(&self.config.address, &self.config.username)
+                .await;
+        }
+
+        // Explicitly drop guard AFTER state is recorded
+        drop(guard);
+
+        // Process the result
+        let _sentences = result?;
+        Ok(())
+    }
+
     async fn collect_real(
         &self,
     ) -> Result<RouterMetrics, Box<dyn std::error::Error + Send + Sync>> {

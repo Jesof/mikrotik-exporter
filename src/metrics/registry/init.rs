@@ -7,11 +7,11 @@ use crate::metrics::labels::{
     ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardPeerInfoLabels,
     WireGuardPeerLabels,
 };
+use dashmap::DashMap;
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -207,14 +207,14 @@ impl MetricsRegistry {
             wireguard_peer_tx_bytes,
             wireguard_peer_latest_handshake,
             wireguard_peer_info,
-            prev_iface: Arc::new(Mutex::new(HashMap::new())),
-            prev_conntrack: Arc::new(Mutex::new(HashMap::new())),
-            prev_system_info: Arc::new(Mutex::new(HashMap::new())),
-            prev_wireguard_peers: Arc::new(Mutex::new(HashMap::new())),
-            prev_wireguard_peer_info: Arc::new(Mutex::new(HashMap::new())),
-            conntrack_last_seen: Arc::new(Mutex::new(HashMap::new())),
-            wireguard_peer_last_seen: Arc::new(Mutex::new(HashMap::new())),
-            wireguard_peer_info_last_seen: Arc::new(Mutex::new(HashMap::new())),
+            prev_iface: Arc::new(DashMap::new()),
+            prev_conntrack: Arc::new(DashMap::new()),
+            prev_system_info: Arc::new(DashMap::new()),
+            prev_wireguard_peers: Arc::new(DashMap::new()),
+            prev_wireguard_peer_info: Arc::new(DashMap::new()),
+            conntrack_last_seen: Arc::new(DashMap::new()),
+            wireguard_peer_last_seen: Arc::new(DashMap::new()),
+            wireguard_peer_info_last_seen: Arc::new(DashMap::new()),
         }
     }
 }

@@ -12,6 +12,7 @@ use crate::metrics::labels::{
     ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardPeerInfoLabels,
     WireGuardPeerLabels,
 };
+use dashmap::DashMap;
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::gauge::Gauge;
@@ -66,15 +67,15 @@ pub struct MetricsRegistry {
     wireguard_peer_tx_bytes: Family<WireGuardPeerLabels, Gauge>,
     wireguard_peer_latest_handshake: Family<WireGuardPeerLabels, Gauge>,
     wireguard_peer_info: Family<WireGuardPeerInfoLabels, Gauge>,
-    prev_iface: Arc<Mutex<HashMap<InterfaceLabels, InterfaceSnapshot>>>,
-    prev_conntrack: Arc<Mutex<HashMap<String, HashSet<ConntrackLabels>>>>,
-    prev_system_info: Arc<Mutex<HashMap<String, SystemInfoLabels>>>,
-    prev_wireguard_peers: Arc<Mutex<HashMap<String, HashSet<WireGuardPeerLabels>>>>,
+    prev_iface: Arc<DashMap<InterfaceLabels, InterfaceSnapshot>>,
+    prev_conntrack: Arc<DashMap<String, HashSet<ConntrackLabels>>>,
+    prev_system_info: Arc<DashMap<String, SystemInfoLabels>>,
+    prev_wireguard_peers: Arc<DashMap<String, HashSet<WireGuardPeerLabels>>>,
     prev_wireguard_peer_info:
-        Arc<Mutex<HashMap<String, HashMap<WireGuardPeerLabels, WireGuardPeerInfoLabels>>>>,
-    conntrack_last_seen: Arc<Mutex<HashMap<ConntrackLabels, Instant>>>,
-    wireguard_peer_last_seen: Arc<Mutex<HashMap<WireGuardPeerLabels, Instant>>>,
-    wireguard_peer_info_last_seen: Arc<Mutex<HashMap<WireGuardPeerInfoLabels, Instant>>>,
+        Arc<DashMap<String, HashMap<WireGuardPeerLabels, WireGuardPeerInfoLabels>>>,
+    conntrack_last_seen: Arc<DashMap<ConntrackLabels, Instant>>,
+    wireguard_peer_last_seen: Arc<DashMap<WireGuardPeerLabels, Instant>>,
+    wireguard_peer_info_last_seen: Arc<DashMap<WireGuardPeerInfoLabels, Instant>>,
 }
 
 impl Default for MetricsRegistry {
