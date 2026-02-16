@@ -78,6 +78,12 @@ pub struct Config {
     pub server_addr: String,
     pub routers: Vec<RouterConfig>,
     pub collection_interval_secs: u64,
+    /// Whether to perform connectivity testing during startup
+    pub startup_connectivity_test: bool,
+    /// Timeout for connectivity tests during startup (in seconds)
+    pub startup_connectivity_timeout_secs: u64,
+    /// Whether to fail startup if any router is unreachable
+    pub strict_startup_mode: bool,
 }
 
 impl Default for Config {
@@ -86,6 +92,9 @@ impl Default for Config {
             server_addr: defaults::SERVER_ADDR.to_string(),
             routers: vec![],
             collection_interval_secs: 30,
+            startup_connectivity_test: false,
+            startup_connectivity_timeout_secs: 10,
+            strict_startup_mode: false,
         }
     }
 }
@@ -170,10 +179,72 @@ impl Config {
             );
         }
 
+        // Load startup connectivity test configuration
+        let startup_connectivity_test = std::env::var("STARTUP_CONNECTIVITY_TEST")
+            .ok()
+            .and_then(|v| v.parse::<bool>().ok())
+            .unwrap_or(false);
+
+        let startup_connectivity_timeout_secs = std::env::var("STARTUP_CONNECTIVITY_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(10);
+
+        let strict_startup_mode = std::env::var("STRICT_STARTUP_MODE")
+            .ok()
+            .and_then(|v| v.parse::<bool>().ok())
+            .unwrap_or(false);
+
         Config {
             server_addr,
             routers,
             collection_interval_secs,
+            startup_connectivity_test,
+            startup_connectivity_timeout_secs,
+            strict_startup_mode,
         }
+    }
+
+    /// Test connectivity to all configured routers
+    ///
+    /// This method attempts to establish connections to all configured routers
+    /// to verify they are reachable and accessible.
+    ///
+    /// # Arguments
+    /// * `timeout_secs` - Timeout for each connectivity test in seconds
+    ///
+    /// # Returns
+    /// Returns a vector of router names that failed connectivity tests
+    pub async fn test_router_connectivity(&self, timeout_secs: u64) -> Vec<String> {
+        use crate::mikrotik::{ConnectionPool, MikroTikClient};
+        use std::sync::Arc;
+        use tokio::time::{Duration, timeout};
+
+        let pool = Arc::new(ConnectionPool::new());
+        let mut failed_routers = Vec::new();
+
+        for router in &self.routers {
+            let client = MikroTikClient::with_pool(router.clone(), pool.clone());
+            let timeout_duration = Duration::from_secs(timeout_secs);
+
+            match timeout(timeout_duration, client.test_connection()).await {
+                Ok(Ok(())) => {
+                    tracing::info!("Successfully connected to router '{}'", router.name);
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!("Failed to connect to router '{}': {}", router.name, e);
+                    failed_routers.push(router.name.clone());
+                }
+                Err(_) => {
+                    tracing::warn!(
+                        "Timeout connecting to router '{}' (>{timeout_secs}s)",
+                        router.name
+                    );
+                    failed_routers.push(router.name.clone());
+                }
+            }
+        }
+
+        failed_routers
     }
 }

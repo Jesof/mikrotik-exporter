@@ -45,11 +45,14 @@ mod tests {
             server_addr: "127.0.0.1:9090".to_string(),
             routers: vec![RouterConfig {
                 name: "test-router".to_string(),
-                address: "192.168.1.1".to_string(),
+                address: "192.168.1.1:8728".to_string(),
                 username: "admin".to_string(),
                 password: "password".to_string().into(),
             }],
             collection_interval_secs: 30,
+            startup_connectivity_test: false,
+            startup_connectivity_timeout_secs: 10,
+            strict_startup_mode: false,
         };
 
         let metrics = MetricsRegistry::new();
