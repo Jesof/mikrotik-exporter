@@ -1,10 +1,20 @@
 # MikroTik Prometheus Exporter
 
+[![Crates.io](https://img.shields.io/crates/v/mikrotik-exporter.svg)](https://crates.io/crates/mikrotik-exporter)
+[![GitHub release](https://img.shields.io/github/v/release/jesof/mikrotik-exporter.svg)](https://github.com/jesof/mikrotik-exporter/releases)
+[![Grafana](https://img.shields.io/badge/Grafana-24875-orange.svg?logo=grafana)](https://grafana.com/grafana/dashboards/24875-mikrotik-router-monitoring/)
+[![Docs.rs](https://docs.rs/mikrotik-exporter/badge.svg)](https://docs.rs/mikrotik-exporter)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://github.com/jesof/mikrotik-exporter/actions/workflows/rust.yml/badge.svg)](https://github.com/jesof/mikrotik-exporter/actions/workflows/rust.yml)
+
 Prometheus exporter для MikroTik RouterOS API с поддержкой множественных роутеров и асинхронной архитектурой.
 
 ## Quick Start
 
 ```bash
+# Cargo
+cargo install mikrotik-exporter
+
 # Docker
 docker run -p 9090:9090 \
   -e ROUTERS_CONFIG='[{"name":"router1","address":"192.168.88.1:8728","username":"admin","password":"pass"}]' \
@@ -95,7 +105,7 @@ STARTUP_CONNECTIVITY_TEST=true STRICT_STARTUP_MODE=true ./mikrotik-exporter
 - [Kubernetes](DEPLOYMENT.md#kubernetes)
 - [Docker & Docker Compose](EXAMPLES.md#docker-compose---production-stack)
 - [Prometheus интеграция](DEPLOYMENT.md#prometheus)
-- [Grafana dashboard](DEPLOYMENT.md#grafana)
+- [Grafana Dashboard (ID: 24875)](https://grafana.com/grafana/dashboards/24875-mikrotik-router-monitoring/)
 
 ## Требования к RouterOS
 
@@ -210,6 +220,13 @@ src/
 ```
 
 ### Использование как библиотеки
+
+Добавьте в ваш `Cargo.toml`:
+
+```toml
+[dependencies]
+mikrotik-exporter = "0.2"
+```
 
 ```rust
 use std::sync::Arc;

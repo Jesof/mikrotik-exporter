@@ -8,6 +8,27 @@
 //! This library provides functionality to collect metrics from MikroTik routers
 //! via the RouterOS API and expose them in Prometheus format.
 //!
+//! ## Installation
+//!
+//! To use this library in your project, add it to your `Cargo.toml`:
+//!
+//! ```toml
+//! [dependencies]
+//! mikrotik-exporter = "0.2"
+//! ```
+//!
+//! To install the exporter as a binary, use cargo:
+//!
+//! ```bash
+//! cargo install mikrotik-exporter
+//! ```
+//!
+//! ## Grafana Dashboard
+//!
+//! A pre-configured Grafana dashboard is available:
+//! - **ID:** `24875`
+//! - **URL:** [Grafana Dashboard #24875](https://grafana.com/grafana/dashboards/24875-mikrotik-router-monitoring/)
+//!
 //! ## Features
 //!
 //! - **Multi-router support**: Collect metrics from multiple MikroTik devices

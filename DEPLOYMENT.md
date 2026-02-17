@@ -340,6 +340,12 @@ spec:
 
 ## Grafana
 
+### Официальный Dashboard
+
+Дашборд доступен в официальном каталоге Grafana:
+- **ID:** `24875`
+- **URL:** [https://grafana.com/grafana/dashboards/24875](https://grafana.com/grafana/dashboards/24875-mikrotik-router-monitoring/)
+
 ### Импорт Dashboard
 
 #### Через UI
