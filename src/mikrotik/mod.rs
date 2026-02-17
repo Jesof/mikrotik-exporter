@@ -6,6 +6,7 @@
 //! Implements connection to MikroTik routers via RouterOS API,
 //! authentication, and collection of system/interface metrics.
 
+mod certificates;
 mod client;
 mod connection;
 mod pool;
@@ -23,5 +24,8 @@ pub use types::{ConnectionTrackingStats, InterfaceStats, RouterMetrics, SystemRe
 
 /// Types for WireGuard metrics and statistics
 pub use wireguard::{WireGuardInterfaceStats, WireGuardPeerStats};
+
+/// Certificate parsing utilities
+pub(crate) use certificates::parse_certificates;
 
 pub use connection::encode_length;

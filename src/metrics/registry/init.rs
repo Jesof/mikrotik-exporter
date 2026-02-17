@@ -4,8 +4,8 @@
 //! Registry initialization and metric registration
 
 use crate::metrics::labels::{
-    ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardPeerInfoLabels,
-    WireGuardPeerLabels,
+    CertificateLabels, ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels,
+    WireGuardPeerInfoLabels, WireGuardPeerLabels,
 };
 use dashmap::DashMap;
 use prometheus_client::metrics::counter::Counter;
@@ -180,6 +180,15 @@ impl MetricsRegistry {
             wireguard_peer_info.clone(),
         );
 
+        // Certificate metrics
+
+        let certificate_days_until_expiry = Family::<CertificateLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_certificate_days_until_expiry",
+            "Days until certificate expiry",
+            certificate_days_until_expiry.clone(),
+        );
+
         Self {
             registry: Arc::new(Mutex::new(registry)),
             interface_rx_bytes,
@@ -207,14 +216,17 @@ impl MetricsRegistry {
             wireguard_peer_tx_bytes,
             wireguard_peer_latest_handshake,
             wireguard_peer_info,
+            certificate_days_until_expiry,
             prev_iface: Arc::new(DashMap::new()),
             prev_conntrack: Arc::new(DashMap::new()),
             prev_system_info: Arc::new(DashMap::new()),
             prev_wireguard_peers: Arc::new(DashMap::new()),
             prev_wireguard_peer_info: Arc::new(DashMap::new()),
+            prev_certificates: Arc::new(DashMap::new()),
             conntrack_last_seen: Arc::new(DashMap::new()),
             wireguard_peer_last_seen: Arc::new(DashMap::new()),
             wireguard_peer_info_last_seen: Arc::new(DashMap::new()),
+            certificate_last_seen: Arc::new(DashMap::new()),
         }
     }
 }

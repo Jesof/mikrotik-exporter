@@ -190,6 +190,7 @@ async fn test_metrics_update_and_retrieval() {
         connection_tracking: Vec::new(),
         wireguard_interfaces: vec![],
         wireguard_peers: vec![],
+        certificate_stats: vec![],
     };
 
     // Update metrics

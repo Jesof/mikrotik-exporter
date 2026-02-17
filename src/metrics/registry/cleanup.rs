@@ -4,8 +4,8 @@
 //! Cleanup helpers for stale and expired metric labels
 
 use crate::metrics::labels::{
-    ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardPeerInfoLabels,
-    WireGuardPeerLabels,
+    CertificateLabels, ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels,
+    WireGuardPeerInfoLabels, WireGuardPeerLabels,
 };
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
@@ -183,6 +183,39 @@ impl MetricsRegistry {
                 stale_peer_info.len()
             );
         }
+
+        let stale_certificates: Vec<CertificateLabels> = {
+            let stale: Vec<_> = self
+                .certificate_last_seen
+                .iter()
+                .filter(|entry| now.duration_since(*entry.value()) > ttl)
+                .map(|entry| entry.key().clone())
+                .collect();
+
+            for label in &stale {
+                self.certificate_last_seen.remove(label);
+            }
+            stale
+        };
+        if !stale_certificates.is_empty() {
+            for label in &stale_certificates {
+                if let Some(mut set) = self.prev_certificates.get_mut(&label.router) {
+                    set.remove(label);
+                    if set.is_empty() {
+                        drop(set);
+                        self.prev_certificates.remove(&label.router);
+                    }
+                }
+            }
+
+            for label in &stale_certificates {
+                self.certificate_days_until_expiry.remove(label);
+            }
+            tracing::debug!(
+                "Expired {} certificate labels via TTL cleanup",
+                stale_certificates.len()
+            );
+        }
     }
 
     /// Clean up cached state for routers that are no longer configured
@@ -288,6 +321,24 @@ impl MetricsRegistry {
             self.wireguard_peer_info.remove(label);
         }
 
+        // Clean up certificates for stale routers
+        let stale_certificates: Vec<CertificateLabels> = {
+            let mut stale = Vec::new();
+            self.prev_certificates.retain(|router, set| {
+                if active_routers.contains(router) {
+                    true
+                } else {
+                    stale_routers.insert(router.clone());
+                    stale.extend(set.iter().cloned());
+                    false
+                }
+            });
+            stale
+        };
+        for label in &stale_certificates {
+            self.certificate_days_until_expiry.remove(label);
+        }
+
         for router in &stale_routers {
             let router_labels = RouterLabels {
                 router: router.clone(),
@@ -335,19 +386,31 @@ impl MetricsRegistry {
             self.wireguard_peer_info_last_seen.remove(&label);
         }
 
+        let stale_certificate_labels: Vec<_> = self
+            .certificate_last_seen
+            .iter()
+            .filter(|entry| !active_routers.contains(&entry.key().router))
+            .map(|entry| entry.key().clone())
+            .collect();
+        for label in stale_certificate_labels {
+            self.certificate_last_seen.remove(&label);
+        }
+
         if !stale_interfaces.is_empty()
             || !stale_system.is_empty()
             || !stale_conntrack.is_empty()
             || !stale_peers.is_empty()
             || !stale_peer_info.is_empty()
+            || !stale_certificates.is_empty()
         {
             tracing::debug!(
-                "Removed stale router data: interfaces={}, system_info={}, conntrack={}, wg_peers={}, wg_peer_info={}",
+                "Removed stale router data: interfaces={}, system_info={}, conntrack={}, wg_peers={}, wg_peer_info={}, certificates={}",
                 stale_interfaces.len(),
                 stale_system.len(),
                 stale_conntrack.len(),
                 stale_peers.len(),
-                stale_peer_info.len()
+                stale_peer_info.len(),
+                stale_certificates.len()
             );
         }
     }

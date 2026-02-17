@@ -70,6 +70,9 @@ prometheus-client = "0.24.0"
 # Secure credential handling
 secrecy = { version = "0.10.0", features = ["serde"] }
 
+# Date/time parsing for certificate expiration
+chrono = { version = "0.4", features = ["serde"] }
+
 # Concurrent hash maps for metrics optimization
 dashmap = "6.1.0"
 

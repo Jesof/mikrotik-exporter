@@ -53,6 +53,12 @@ pub(crate) struct WireGuardPeerInfoLabels {
     pub(crate) endpoint: String,
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub(crate) struct CertificateLabels {
+    pub(crate) router: String,
+    pub(crate) name: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -9,8 +9,8 @@ mod scrape;
 mod update;
 
 use crate::metrics::labels::{
-    ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardPeerInfoLabels,
-    WireGuardPeerLabels,
+    CertificateLabels, ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels,
+    WireGuardPeerInfoLabels, WireGuardPeerLabels,
 };
 use dashmap::DashMap;
 use prometheus_client::metrics::counter::Counter;
@@ -67,15 +67,19 @@ pub struct MetricsRegistry {
     wireguard_peer_tx_bytes: Family<WireGuardPeerLabels, Gauge>,
     wireguard_peer_latest_handshake: Family<WireGuardPeerLabels, Gauge>,
     wireguard_peer_info: Family<WireGuardPeerInfoLabels, Gauge>,
+    // certificate metrics
+    certificate_days_until_expiry: Family<CertificateLabels, Gauge>,
     prev_iface: Arc<DashMap<InterfaceLabels, InterfaceSnapshot>>,
     prev_conntrack: Arc<DashMap<String, HashSet<ConntrackLabels>>>,
     prev_system_info: Arc<DashMap<String, SystemInfoLabels>>,
     prev_wireguard_peers: Arc<DashMap<String, HashSet<WireGuardPeerLabels>>>,
     prev_wireguard_peer_info:
         Arc<DashMap<String, HashMap<WireGuardPeerLabels, WireGuardPeerInfoLabels>>>,
+    prev_certificates: Arc<DashMap<String, HashSet<CertificateLabels>>>,
     conntrack_last_seen: Arc<DashMap<ConntrackLabels, Instant>>,
     wireguard_peer_last_seen: Arc<DashMap<WireGuardPeerLabels, Instant>>,
     wireguard_peer_info_last_seen: Arc<DashMap<WireGuardPeerInfoLabels, Instant>>,
+    certificate_last_seen: Arc<DashMap<CertificateLabels, Instant>>,
 }
 
 impl Default for MetricsRegistry {
@@ -101,6 +105,7 @@ mod tests {
             connection_tracking: Vec::new(),
             wireguard_interfaces: Vec::new(),
             wireguard_peers: Vec::new(),
+            certificate_stats: Vec::new(),
         }
     }
 

@@ -4,8 +4,8 @@
 //! Metric update logic for router snapshots
 
 use crate::metrics::labels::{
-    ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardInterfaceLabels,
-    WireGuardPeerInfoLabels, WireGuardPeerLabels,
+    CertificateLabels, ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels,
+    WireGuardInterfaceLabels, WireGuardPeerInfoLabels, WireGuardPeerLabels,
 };
 use crate::metrics::parsers::parse_uptime_to_seconds;
 use crate::mikrotik::{RouterMetrics, WireGuardPeerStats};
@@ -282,6 +282,35 @@ impl MetricsRegistry {
                 }
             }
             *prev_map = current_peer_info;
+        }
+
+        // Update certificate metrics
+        let now = Instant::now();
+        let mut current_certificates = HashSet::new();
+        for cert in &metrics.certificate_stats {
+            let cert_labels = CertificateLabels {
+                router: metrics.router_name.clone(),
+                name: cert.name.clone(),
+            };
+            current_certificates.insert(cert_labels.clone());
+            #[allow(clippy::cast_possible_wrap)]
+            self.certificate_days_until_expiry
+                .get_or_create(&cert_labels)
+                .set(cert.days_until_expiry);
+            self.certificate_last_seen.insert(cert_labels, now);
+        }
+        {
+            let mut prev_certs_entry = self
+                .prev_certificates
+                .entry(metrics.router_name.clone())
+                .or_default();
+            let prev_labels = prev_certs_entry.value_mut();
+            for stale in prev_labels.difference(&current_certificates) {
+                self.certificate_days_until_expiry
+                    .get_or_create(stale)
+                    .set(0);
+            }
+            *prev_labels = current_certificates;
         }
     }
 }

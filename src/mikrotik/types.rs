@@ -38,6 +38,13 @@ pub struct ConnectionTrackingStats {
     pub ip_version: String,
 }
 
+/// Certificate information from a MikroTik router
+#[derive(Debug, Clone)]
+pub struct CertificateStats {
+    pub name: String,
+    pub days_until_expiry: i64,
+}
+
 /// Complete metrics snapshot from a router
 #[derive(Debug, Clone)]
 pub struct RouterMetrics {
@@ -47,6 +54,7 @@ pub struct RouterMetrics {
     pub connection_tracking: Vec<ConnectionTrackingStats>,
     pub wireguard_interfaces: Vec<WireGuardInterfaceStats>,
     pub wireguard_peers: Vec<WireGuardPeerStats>,
+    pub certificate_stats: Vec<CertificateStats>,
 }
 
 #[cfg(test)]
@@ -125,6 +133,10 @@ mod tests {
                 tx_bytes: 2048,
                 latest_handshake: None,
             }],
+            certificate_stats: vec![CertificateStats {
+                name: "cert1".to_string(),
+                days_until_expiry: 30,
+            }],
         };
 
         assert_eq!(metrics.router_name, "main-router");
@@ -133,6 +145,9 @@ mod tests {
         assert_eq!(metrics.system.version, "7.10");
         assert_eq!(metrics.wireguard_interfaces.len(), 1);
         assert_eq!(metrics.wireguard_peers.len(), 1);
+        assert_eq!(metrics.certificate_stats.len(), 1);
+        assert_eq!(metrics.certificate_stats[0].name, "cert1");
+        assert_eq!(metrics.certificate_stats[0].days_until_expiry, 30);
     }
 
     #[test]

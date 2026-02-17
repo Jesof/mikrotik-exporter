@@ -116,6 +116,7 @@ async fn metrics_contains_router_data_after_update() {
         connection_tracking: Vec::new(),
         wireguard_interfaces: vec![],
         wireguard_peers: vec![],
+        certificate_stats: vec![],
     };
     state.metrics.update_metrics(&metrics).await;
 
@@ -170,6 +171,7 @@ async fn metrics_correctly_calculates_interface_counters() {
         connection_tracking: Vec::new(),
         wireguard_interfaces: vec![],
         wireguard_peers: vec![],
+        certificate_stats: vec![],
     };
     state.metrics.update_metrics(&metrics1).await;
 
@@ -191,6 +193,7 @@ async fn metrics_correctly_calculates_interface_counters() {
         connection_tracking: Vec::new(),
         wireguard_interfaces: vec![],
         wireguard_peers: vec![],
+        certificate_stats: vec![],
     };
     state.metrics.update_metrics(&metrics2).await;
 
