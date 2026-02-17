@@ -3,8 +3,6 @@
 
 //! Type definitions for MikroTik metrics
 
-use super::wireguard::{WireGuardInterfaceStats, WireGuardPeerStats};
-
 /// Statistics for a network interface
 #[derive(Debug, Clone)]
 pub struct InterfaceStats {
@@ -43,6 +41,25 @@ pub struct ConnectionTrackingStats {
 pub struct CertificateStats {
     pub name: String,
     pub days_until_expiry: i64,
+}
+
+/// Statistics for a WireGuard interface
+#[derive(Debug, Clone, PartialEq)]
+pub struct WireGuardInterfaceStats {
+    pub name: String,
+    pub enabled: bool,
+}
+
+/// Statistics for a WireGuard peer
+#[derive(Debug, Clone, PartialEq)]
+pub struct WireGuardPeerStats {
+    pub interface: String,
+    pub name: String,
+    pub allowed_address: String,
+    pub endpoint: Option<String>,
+    pub rx_bytes: u64,
+    pub tx_bytes: u64,
+    pub latest_handshake: Option<u64>,
 }
 
 /// Complete metrics snapshot from a router

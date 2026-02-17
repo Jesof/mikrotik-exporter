@@ -7,16 +7,18 @@ use crate::config::RouterConfig;
 use secrecy::ExposeSecret;
 use std::sync::Arc;
 
-use super::connection::{parse_connection_tracking, parse_interfaces, parse_system};
-use super::parse_certificates;
 use super::pool::ConnectionPool;
+use super::responses::{
+    parse_certificates, parse_connection_tracking, parse_interfaces, parse_system,
+    parse_wireguard_interfaces, parse_wireguard_peers,
+};
 use super::types::RouterMetrics;
-use super::wireguard::{parse_wireguard_interfaces, parse_wireguard_peers};
 
 /// `MikroTik` `RouterOS` API client
 ///
 /// Provides methods to connect to `MikroTik` routers via `RouterOS` API
-/// and collect system and interface metrics.
+/// and collect system resources, interface statistics, connection tracking,
+/// WireGuard peers, and certificate information.
 pub(crate) struct MikroTikClient {
     config: RouterConfig,
     pool: Arc<ConnectionPool>,

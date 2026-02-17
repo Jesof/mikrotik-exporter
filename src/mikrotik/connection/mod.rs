@@ -4,7 +4,6 @@
 //! Low-level RouterOS API connection handling
 
 mod auth;
-mod parse;
 mod protocol;
 
 use std::collections::HashMap;
@@ -13,7 +12,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
-pub(crate) use parse::{parse_connection_tracking, parse_interfaces, parse_system};
 pub use protocol::encode_length;
 use protocol::read_length;
 

@@ -3,15 +3,10 @@
 
 //! Certificate parsing utilities
 
+use crate::mikrotik::types::CertificateStats;
 use chrono::{NaiveDate, Utc};
 use std::collections::HashMap;
 
-use super::types::CertificateStats;
-
-/// Parse certificate data from RouterOS API response
-///
-/// Extracts certificate information including name and expiration date,
-/// then calculates days until expiry.
 pub(crate) fn parse_certificates(sentences: &[HashMap<String, String>]) -> Vec<CertificateStats> {
     let mut certificates = Vec::new();
 
