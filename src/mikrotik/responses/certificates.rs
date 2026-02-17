@@ -16,9 +16,14 @@ pub(crate) fn parse_certificates(sentences: &[HashMap<String, String>]) -> Vec<C
             _ => continue,
         };
 
-        let expiry_str = match sentence.get("expiration") {
+        // Try to get expiration date from "invalid-after" field first (new format)
+        // Fall back to "expiration" field (legacy format)
+        let expiry_str = match sentence.get("invalid-after") {
             Some(exp) if !exp.is_empty() => exp,
-            _ => continue,
+            _ => match sentence.get("expiration") {
+                Some(exp) if !exp.is_empty() => exp,
+                _ => continue,
+            },
         };
 
         let days_until_expiry = parse_certificate_expiry(expiry_str);
@@ -43,6 +48,40 @@ fn parse_certificate_expiry(expiry_str: &str) -> i64 {
     }
 
     let date_part = parts[0];
+
+    // Try to parse ISO format first (YYYY-MM-DD)
+    if let Some(days) = parse_iso_date_format(date_part) {
+        return days;
+    }
+
+    // Fall back to legacy format (MMM/DD/YYYY)
+    parse_legacy_date_format(date_part)
+}
+
+fn parse_iso_date_format(date_part: &str) -> Option<i64> {
+    let date_components: Vec<&str> = date_part.split('-').collect();
+    if date_components.len() != 3 {
+        return None;
+    }
+
+    let year = date_components[0].parse::<i32>().ok()?;
+    let month = date_components[1].parse::<u32>().ok()?;
+    let day = date_components[2].parse::<u32>().ok()?;
+
+    let expiry_date = NaiveDate::from_ymd_opt(year, month, day)?;
+    let current_date = Utc::now().date_naive();
+    let duration = expiry_date.signed_duration_since(current_date);
+    let days = duration.num_days();
+
+    // Skip expired certificates
+    if days <= 0 {
+        return Some(0);
+    }
+
+    Some(days)
+}
+
+fn parse_legacy_date_format(date_part: &str) -> i64 {
     let date_components: Vec<&str> = date_part.split('/').collect();
     if date_components.len() != 3 {
         return 0;
@@ -100,7 +139,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_certificates() {
+    fn test_parse_certificates_legacy_format() {
         let mut sentence1 = HashMap::new();
         sentence1.insert("name".to_string(), "cert1".to_string());
         // Use a future date that's definitely in the future
@@ -117,6 +156,50 @@ mod tests {
         assert_eq!(certificates.len(), 2);
         assert_eq!(certificates[0].name, "cert1");
         assert_eq!(certificates[1].name, "cert2");
+    }
+
+    #[test]
+    fn test_parse_certificates_new_format() {
+        let mut sentence1 = HashMap::new();
+        sentence1.insert("name".to_string(), "cert1".to_string());
+        // Use a future date that's definitely in the future in ISO format
+        sentence1.insert(
+            "invalid-after".to_string(),
+            "2030-01-01 12:00:00".to_string(),
+        );
+
+        let mut sentence2 = HashMap::new();
+        sentence2.insert("name".to_string(), "cert2".to_string());
+        // Use another future date in ISO format
+        sentence2.insert(
+            "invalid-after".to_string(),
+            "2029-12-31 23:59:59".to_string(),
+        );
+
+        let sentences = vec![sentence1, sentence2];
+        let certificates = parse_certificates(&sentences);
+
+        assert_eq!(certificates.len(), 2);
+        assert_eq!(certificates[0].name, "cert1");
+        assert_eq!(certificates[1].name, "cert2");
+    }
+
+    #[test]
+    fn test_parse_certificates_prefer_new_format() {
+        let mut sentence = HashMap::new();
+        sentence.insert("name".to_string(), "cert1".to_string());
+        // Both fields present - should prefer "invalid-after"
+        sentence.insert(
+            "invalid-after".to_string(),
+            "2030-01-01 12:00:00".to_string(),
+        );
+        sentence.insert("expiration".to_string(), "Jan/01/2025 12:00:00".to_string());
+
+        let sentences = vec![sentence];
+        let certificates = parse_certificates(&sentences);
+
+        assert_eq!(certificates.len(), 1);
+        assert_eq!(certificates[0].name, "cert1");
     }
 
     #[test]

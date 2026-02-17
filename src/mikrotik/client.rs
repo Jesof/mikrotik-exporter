@@ -150,7 +150,7 @@ impl MikroTikClient {
         let conntrack_v6_result = conn.command("/ipv6/firewall/connection/print", &[]).await;
         let wireguard_interfaces_result = conn.command("/interface/wireguard/print", &[]).await;
         let wireguard_peers_result = conn.command("/interface/wireguard/peers/print", &[]).await;
-        let certificates_result = conn.command("/certificate/print", &[]).await;
+        let certificates_result = conn.command("/certificate/print", &[".detail"]).await;
 
         // Record connection state BEFORE dropping guard to prevent race condition
         let success = system_result.is_ok() && interfaces_result.is_ok();

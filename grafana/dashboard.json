@@ -19,6 +19,12 @@
     },
     {
       "type": "panel",
+      "id": "bargauge",
+      "name": "Bar gauge",
+      "version": ""
+    },
+    {
+      "type": "panel",
       "id": "gauge",
       "name": "Gauge",
       "version": ""
@@ -559,7 +565,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_system_cpu_load{router=\"$router\"}",
+          "expr": "mikrotik_system_cpu_load{router=\"$router\"}[$__rate_interval]",
           "legendFormat": "{{router}}",
           "range": true,
           "refId": "A"
@@ -695,7 +701,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_system_free_memory_bytes{router=\"$router\"}",
+          "expr": "mikrotik_system_free_memory_bytes{router=\"$router\"}[$__rate_interval]",
           "legendFormat": "Free",
           "range": true,
           "refId": "A"
@@ -706,7 +712,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_system_total_memory_bytes{router=\"$router\"} - mikrotik_system_free_memory_bytes{router=\"$router\"}",
+          "expr": "mikrotik_system_total_memory_bytes{router=\"$router\"}[$__rate_interval] - mikrotik_system_free_memory_bytes{router=\"$router\"}[$__rate_interval]",
           "legendFormat": "Used",
           "range": true,
           "refId": "B"
@@ -1427,7 +1433,7 @@
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
-          "sortBy": "Last",
+          "sortBy": "Mean",
           "sortDesc": true
         },
         "tooltip": {
@@ -1529,7 +1535,7 @@
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
-          "sortBy": "Last",
+          "sortBy": "Mean",
           "sortDesc": true
         },
         "tooltip": {
@@ -1629,7 +1635,7 @@
         "showHeader": true,
         "sortBy": [
           {
-            "desc": false,
+            "desc": true,
             "displayName": "Last Handshake"
           }
         ]
@@ -1766,7 +1772,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "sum(mikrotik_connection_tracking_count{router=\"$router\"})",
+          "expr": "sum(mikrotik_connection_tracking_count{router=\"$router\"}[$__rate_interval])",
           "legendFormat": "Total Connections",
           "range": true,
           "refId": "A"
@@ -1868,7 +1874,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "sum by (protocol) (mikrotik_connection_tracking_count{router=\"$router\"})",
+          "expr": "sum by (protocol) (mikrotik_connection_tracking_count{router=\"$router\"}[$__rate_interval])",
           "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A"
@@ -1985,7 +1991,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "topk(20, sum by (src_address) (mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv4\"}))",
+          "expr": "topk(20, sum by (src_address) (mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv4\"}[$__rate_interval]))",
           "instant": true,
           "interval": "",
           "legendFormat": "{{src_address}}",
@@ -2104,7 +2110,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "topk(20, sum by (src_address) (mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv6\"}))",
+          "expr": "topk(20, sum by (src_address) (mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv6\"}[$__rate_interval]))",
           "instant": true,
           "interval": "",
           "legendFormat": "{{src_address}}",
@@ -2197,7 +2203,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "topk(20, mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv4\"})",
+          "expr": "topk(20, mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv4\"}[$__rate_interval])",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -2313,7 +2319,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "topk(20, mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv6\"})",
+          "expr": "topk(20, mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv6\"}[$__rate_interval])",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -2348,12 +2354,111 @@
       "type": "table"
     },
     {
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 105
+      },
+      "id": 152,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_VICTORIAMETRICS}"
+          },
+          "description": "Дней до истечения сертификатов",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 30
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 90
+                  },
+                  {
+                    "color": "green",
+                    "value": 180
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 24,
+            "x": 0,
+            "y": 59
+          },
+          "id": 151,
+          "options": {
+            "displayMode": "lcd",
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "maxVizHeight": 300,
+            "minVizHeight": 16,
+            "minVizWidth": 8,
+            "namePlacement": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showUnfilled": true,
+            "sizing": "auto",
+            "valueMode": "color"
+          },
+          "pluginVersion": "12.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_VICTORIAMETRICS}"
+              },
+              "editorMode": "code",
+              "expr": "mikrotik_certificate_days_until_expiry{router=\"$router\"}",
+              "legendFormat": "{{name}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Certificate Expiry Timeline",
+          "type": "bargauge"
+        }
+      ],
+      "title": "Certificates",
+      "type": "row"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 106
       },
       "id": 104,
       "panels": [],
@@ -2431,7 +2536,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 106
+        "y": 107
       },
       "id": 14,
       "options": {
@@ -2460,7 +2565,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_scrape_duration_milliseconds{router=\"$router\"}",
+          "expr": "mikrotik_scrape_duration_milliseconds{router=\"$router\"}[$__rate_interval]",
           "legendFormat": "{{router}}",
           "range": true,
           "refId": "A"
@@ -2512,7 +2617,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 106
+        "y": 107
       },
       "id": 18,
       "options": {
@@ -2610,7 +2715,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 114
+        "y": 115
       },
       "id": 17,
       "options": {
@@ -2695,7 +2800,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 114
+        "y": 115
       },
       "id": 15,
       "options": {
@@ -2773,7 +2878,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 114
+        "y": 115
       },
       "id": 16,
       "options": {
@@ -2811,7 +2916,7 @@
       "type": "stat"
     }
   ],
-  "preload": false,
+  "preload": true,
   "refresh": "30s",
   "schemaVersion": 42,
   "tags": [
@@ -2897,7 +3002,7 @@
   "timezone": "browser",
   "title": "MikroTik Router Monitoring",
   "uid": "mikrotik-exporter",
-  "version": 40,
+  "version": 8,
   "weekStart": "",
   "id": null
 }
