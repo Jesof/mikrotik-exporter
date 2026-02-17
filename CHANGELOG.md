@@ -8,11 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Certificate expiration monitoring metrics
 - DHCP metrics support (in development for v0.3.0)
 - Route metrics support (in development for v0.3.0)
 - Firewall metrics support (in development for v0.3.0)
 - Neighbors metrics support (in development for v0.3.0)
 - POE metrics support (in development for v0.3.0)
+
+### Changed
+- Refactored MikroTik response parsing into dedicated module for better maintainability
 
 ## [0.2.4] - 2026-02-17
 

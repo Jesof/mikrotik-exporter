@@ -85,7 +85,14 @@ fn parse_certificate_expiry(expiry_str: &str) -> i64 {
 
     let current_date = Utc::now().date_naive();
     let duration = expiry_date.signed_duration_since(current_date);
-    duration.num_days()
+    let days = duration.num_days();
+
+    // Skip expired certificates (return 0 to indicate they should be skipped)
+    if days <= 0 {
+        return 0;
+    }
+
+    days
 }
 
 #[cfg(test)]
@@ -96,11 +103,13 @@ mod tests {
     fn test_parse_certificates() {
         let mut sentence1 = HashMap::new();
         sentence1.insert("name".to_string(), "cert1".to_string());
-        sentence1.insert("expiration".to_string(), "Jan/01/2025 12:00:00".to_string());
+        // Use a future date that's definitely in the future
+        sentence1.insert("expiration".to_string(), "Jan/01/2030 12:00:00".to_string());
 
         let mut sentence2 = HashMap::new();
         sentence2.insert("name".to_string(), "cert2".to_string());
-        sentence2.insert("expiration".to_string(), "Dec/31/2024 23:59:59".to_string());
+        // Use another future date
+        sentence2.insert("expiration".to_string(), "Dec/31/2029 23:59:59".to_string());
 
         let sentences = vec![sentence1, sentence2];
         let certificates = parse_certificates(&sentences);
@@ -108,6 +117,38 @@ mod tests {
         assert_eq!(certificates.len(), 2);
         assert_eq!(certificates[0].name, "cert1");
         assert_eq!(certificates[1].name, "cert2");
+    }
+
+    #[test]
+    fn test_parse_certificates_with_expired() {
+        let mut sentence = HashMap::new();
+        sentence.insert("name".to_string(), "expired-cert".to_string());
+        sentence.insert("expiration".to_string(), "Jan/01/2020 12:00:00".to_string());
+
+        let sentences = vec![sentence];
+        let certificates = parse_certificates(&sentences);
+
+        // Expired certificates should be skipped (days_until_expiry would be <= 0)
+        assert_eq!(certificates.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_certificate_expiry_valid() {
+        // Test a future date
+        let future_date = "Dec/31/2030 23:59:59";
+        let days = parse_certificate_expiry(future_date);
+        // Should be a positive number of days in the future
+        assert!(days > 0);
+    }
+
+    #[test]
+    fn test_parse_certificate_expiry_invalid_format() {
+        // Test various invalid formats
+        assert_eq!(parse_certificate_expiry(""), 0);
+        assert_eq!(parse_certificate_expiry("invalid-format"), 0);
+        assert_eq!(parse_certificate_expiry("13/01/2025"), 0); // Invalid month
+        assert_eq!(parse_certificate_expiry("Jan/32/2025"), 0); // Invalid day
+        assert_eq!(parse_certificate_expiry("Jan/01/invalid"), 0); // Invalid year
     }
 
     #[test]

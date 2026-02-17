@@ -29,17 +29,18 @@ kubectl apply -k k8s/
 
 ## Метрики
 
-| Метрика                                 | Тип     | Описание               |
-| --------------------------------------- | ------- | ---------------------- |
-| `mikrotik_interface_rx_bytes`           | counter | Полученные байты       |
-| `mikrotik_interface_tx_bytes`           | counter | Отправленные байты     |
-| `mikrotik_system_cpu_load`              | gauge   | Загрузка CPU (%)       |
-| `mikrotik_system_free_memory_bytes`     | gauge   | Свободная память       |
-| `mikrotik_scrape_duration_milliseconds` | gauge   | Длительность сбора     |
-| `mikrotik_connection_pool_size`         | gauge   | Размер пула соединений |
-| `mikrotik_connection_tracking_count`    | gauge   | Connection tracking    |
-| `mikrotik_wireguard_peer_rx_bytes`      | gauge   | WireGuard RX bytes     |
-| `mikrotik_wireguard_peer_tx_bytes`      | gauge   | WireGuard TX bytes     |
+| Метрика                                 | Тип     | Описание                        |
+| --------------------------------------- | ------- | ------------------------------- |
+| `mikrotik_interface_rx_bytes`           | counter | Полученные байты                |
+| `mikrotik_interface_tx_bytes`           | counter | Отправленные байты              |
+| `mikrotik_system_cpu_load`              | gauge   | Загрузка CPU (%)                |
+| `mikrotik_system_free_memory_bytes`     | gauge   | Свободная память                |
+| `mikrotik_scrape_duration_milliseconds` | gauge   | Длительность сбора              |
+| `mikrotik_connection_pool_size`         | gauge   | Размер пула соединений          |
+| `mikrotik_connection_tracking_count`    | gauge   | Connection tracking             |
+| `mikrotik_wireguard_peer_rx_bytes`      | gauge   | WireGuard RX bytes              |
+| `mikrotik_wireguard_peer_tx_bytes`      | gauge   | WireGuard TX bytes              |
+| `mikrotik_certificate_days_until_expiry`| gauge   | Дней до истечения сертификатов  |
 
 [Полный список метрик →](#полный-список-метрик)
 
@@ -209,6 +210,12 @@ MIT - см. [LICENSE](LICENSE)
 | `mikrotik_wireguard_peer_latest_handshake` | gauge | Unix timestamp последнего хендшейка |
 | `mikrotik_wireguard_peer_info`             | gauge | Метаданные пира (name, endpoint)    |
 
+### Сертификаты (Labels: router, name)
+
+| Метрика                                     | Тип   | Описание                             |
+| ------------------------------------------- | ----- | ------------------------------------ |
+| `mikrotik_certificate_days_until_expiry`    | gauge | Дней до истечения срока действия     |
+
 ### Информация о системе (Labels: router, version, board)
 
 | Метрика                | Тип   | Описание                                      |
@@ -223,14 +230,25 @@ src/
 ├── main.rs                 # Точка входа
 ├── prelude.rs              # Re-exports
 ├── api/                    # HTTP handlers
+│   └── handlers/           # Health and metrics endpoints
 ├── collector/              # Background metrics collection
 │   ├── cache.rs            # System info cache
-│   └── router_task.rs      # Per-router collection task
+│   ├── router_task.rs      # Per-router collection task
+│   └── cleanup.rs          # Periodic cleanup task
 ├── config/                 # Configuration loading
+├── error.rs                # Error types
 ├── metrics/                # Prometheus metrics
-│   └── registry/           # init/update/cleanup/scrape split
+│   ├── labels.rs           # Label definitions
+│   ├── parsers.rs          # Response parsers
+│   ├── registry/           # Metrics registry (init/update/cleanup/scrape)
+│   └── tests.rs            # Metric tests
 └── mikrotik/               # RouterOS API client
-    └── connection/         # auth/protocol/parse split
+    ├── client.rs           # Client implementation
+    ├── connection/         # Connection handling (auth/protocol)
+    ├── pool.rs             # Connection pool
+    ├── responses/          # Response parsers
+    ├── types.rs            # Type definitions
+    └── mod.rs              # Module exports
 ```
 
 ### Использование как библиотеки

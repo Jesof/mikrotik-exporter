@@ -96,4 +96,20 @@ mod tests {
         assert_eq!(encode_length(0x4000), vec![0xC0, 0x40, 0x00]);
         assert_eq!(encode_length(0x1F_FFFF), vec![0xDF, 0xFF, 0xFF]);
     }
+
+    #[test]
+    fn test_encode_length_extremely_large() {
+        // Let's verify the actual encoding for this value
+        // 0x10_0000_0000 = 68719476736
+        // According to the encoding logic:
+        // First byte: 0xF0 | ((68719476736 >> 32) & 0x07) = 0xF0 | (16 & 0x07) = 0xF0 | 0 = 0xF0
+        // Second byte: (68719476736 >> 24) & 0xFF = 0
+        // Third byte: (68719476736 >> 16) & 0xFF = 0
+        // Fourth byte: (68719476736 >> 8) & 0xFF = 0
+        // Fifth byte: 68719476736 & 0xFF = 0
+        assert_eq!(
+            encode_length(0x10_0000_0000),
+            vec![0xF0, 0x00, 0x00, 0x00, 0x00]
+        );
+    }
 }
