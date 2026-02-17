@@ -68,6 +68,23 @@ fn decode_length(bytes: &[u8]) -> usize {
     }
 }
 
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn encode_decode_roundtrip_proptest(value in 0usize..0xFFFF_FFFF) {
+            let encoded = encode_length(value);
+            let decoded = decode_length(&encoded);
+            prop_assert_eq!(decoded, value,
+                "Roundtrip failed for {}: encoded as {:?}, decoded as {}",
+                value, encoded, decoded);
+        }
+    }
+}
+
 #[test]
 fn test_encode_decode_roundtrip() {
     let test_values: Vec<usize> = vec![

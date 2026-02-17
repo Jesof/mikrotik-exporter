@@ -140,6 +140,101 @@ async fn metrics_contains_router_data_after_update() {
     assert!(body.contains("mikrotik_system_cpu_load"));
 }
 
+#[tokio::test]
+async fn metrics_correctly_calculates_interface_counters() {
+    let state = make_state(vec![test_router("router1")]);
+
+    // First update with initial values
+    let iface = InterfaceStats {
+        name: "ether1".to_string(),
+        rx_bytes: 1000,
+        tx_bytes: 2000,
+        rx_packets: 10,
+        tx_packets: 20,
+        rx_errors: 1,
+        tx_errors: 2,
+        running: true,
+    };
+    let system = SystemResource {
+        uptime: "1d".to_string(),
+        cpu_load: 42,
+        free_memory: 512_000_000,
+        total_memory: 1_024_000_000,
+        version: "7.10".to_string(),
+        board_name: "RB750Gr3".to_string(),
+    };
+    let metrics1 = RouterMetrics {
+        router_name: "router1".to_string(),
+        interfaces: vec![iface],
+        system: system.clone(),
+        connection_tracking: Vec::new(),
+        wireguard_interfaces: vec![],
+        wireguard_peers: vec![],
+    };
+    state.metrics.update_metrics(&metrics1).await;
+
+    // Second update with incremented values
+    let iface2 = InterfaceStats {
+        name: "ether1".to_string(),
+        rx_bytes: 3000, // +2000
+        tx_bytes: 5000, // +3000
+        rx_packets: 25, // +15
+        tx_packets: 35, // +15
+        rx_errors: 1,   // +0
+        tx_errors: 4,   // +2
+        running: true,
+    };
+    let metrics2 = RouterMetrics {
+        router_name: "router1".to_string(),
+        interfaces: vec![iface2],
+        system,
+        connection_tracking: Vec::new(),
+        wireguard_interfaces: vec![],
+        wireguard_peers: vec![],
+    };
+    state.metrics.update_metrics(&metrics2).await;
+
+    let app = create_router(state);
+    let resp = app
+        .oneshot(Request::get("/metrics").body(String::new()).unwrap())
+        .await
+        .unwrap();
+
+    let body = String::from_utf8(
+        resp.into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .to_vec(),
+    )
+    .unwrap();
+
+    // Check that delta values are correctly calculated
+    assert!(body.contains(
+        "mikrotik_interface_rx_bytes_total{router=\"router1\",interface=\"ether1\"} 2000"
+    ));
+    assert!(body.contains(
+        "mikrotik_interface_tx_bytes_total{router=\"router1\",interface=\"ether1\"} 3000"
+    ));
+    assert!(body.contains(
+        "mikrotik_interface_rx_packets_total{router=\"router1\",interface=\"ether1\"} 15"
+    ));
+    assert!(body.contains(
+        "mikrotik_interface_tx_packets_total{router=\"router1\",interface=\"ether1\"} 15"
+    ));
+    assert!(
+        body.contains(
+            "mikrotik_interface_rx_errors_total{router=\"router1\",interface=\"ether1\"} 0"
+        )
+    );
+    assert!(
+        body.contains(
+            "mikrotik_interface_tx_errors_total{router=\"router1\",interface=\"ether1\"} 2"
+        )
+    );
+}
+
 // --- /health endpoint ---
 
 #[tokio::test]
@@ -349,4 +444,68 @@ async fn unknown_route_returns_404() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn health_returns_degraded_when_all_routers_fail() {
+    let state = make_state(vec![test_router("fail1"), test_router("fail2")]);
+
+    // Record errors for both routers
+    state.metrics.record_scrape_error(&RouterLabels {
+        router: "fail1".to_string(),
+    });
+    state.metrics.record_scrape_error(&RouterLabels {
+        router: "fail2".to_string(),
+    });
+
+    let app = create_router(state);
+    let resp = app
+        .oneshot(Request::get("/health").body(String::new()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = String::from_utf8(
+        resp.into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .to_vec(),
+    )
+    .unwrap();
+
+    let health: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(health["status"], "degraded");
+
+    let routers = health["routers"].as_array().unwrap();
+    assert_eq!(routers.len(), 2);
+    assert_eq!(routers[0]["status"], "degraded");
+    assert_eq!(routers[1]["status"], "degraded");
+}
+
+#[tokio::test]
+async fn metrics_endpoint_handles_empty_router_list() {
+    let state = make_state(vec![]);
+    let app = create_router(state);
+
+    let resp = app
+        .oneshot(Request::get("/metrics").body(String::new()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = String::from_utf8(
+        resp.into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .to_vec(),
+    )
+    .unwrap();
+
+    // Should contain base metrics even with no routers
+    assert!(body.contains("mikrotik_connection_pool_size"));
+    assert!(body.contains("mikrotik_connection_pool_active"));
 }
