@@ -108,12 +108,12 @@ jobs:
           tool: cargo-tarpaulin
       - name: Generate coverage
         run: cargo tarpaulin --out Xml --output-dir coverage
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          files: ./coverage/cobertura.xml
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+          name: coverage-report
+          path: ./coverage
+          if-no-files-found: error
 
   deny:
     name: Cargo Deny
@@ -143,7 +143,7 @@ jobs:
 
   docker-build:
     name: Docker Build and Push
-    needs: [check, test, fmt, clippy, deny, coverage, security-audit]
+    needs: [check, test, fmt, clippy, coverage, deny, security-audit]
     if: >-
       github.event_name != 'schedule' &&
       (github.event_name == 'pull_request' ||
