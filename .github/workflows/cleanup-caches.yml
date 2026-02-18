@@ -16,17 +16,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Cleanup Rust caches
+      - name: Cleanup all caches older than 7 days
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
             const oneWeekAgo = new Date();
             oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
             
+            console.log(`Deleting caches older than: ${oneWeekAgo.toISOString()}`);
+            
             const caches = await github.rest.actions.getActionsCacheList({
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
+            
+            let deletedCount = 0;
             
             for (const cache of caches.data.actions_caches) {
               const cacheCreated = new Date(cache.created_at);
@@ -41,43 +45,11 @@ jobs:
                     cache_id: cache.id,
                   });
                   console.log(`Successfully deleted cache: ${cache.key}`);
+                  deletedCount++;
                 } catch (error) {
                   console.error(`Failed to delete cache: ${cache.key}`, error.message);
                 }
               }
             }
-
-      - name: Cleanup Docker caches
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
-        with:
-          script: |
-            // Для Docker кешей используем тот же подход, но фильтруем по ключевым словам
-            const oneWeekAgo = new Date();
-            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
             
-            const caches = await github.rest.actions.getActionsCacheList({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-            
-            for (const cache of caches.data.actions_caches) {
-              // Фильтр для Docker кешей (обычно содержат префиксы или ключевые слова)
-              if (cache.key.includes('docker') || cache.key.includes('buildx') || cache.key.includes('gha')) {
-                const cacheCreated = new Date(cache.created_at);
-                
-                // Удаление кешей, созданных более недели назад
-                if (cacheCreated < oneWeekAgo) {
-                  console.log(`Deleting Docker cache: ${cache.key} created at ${cache.created_at}`);
-                  try {
-                    await github.rest.actions.deleteActionsCacheById({
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      cache_id: cache.id,
-                    });
-                    console.log(`Successfully deleted Docker cache: ${cache.key}`);
-                  } catch (error) {
-                    console.error(`Failed to delete Docker cache: ${cache.key}`, error.message);
-                  }
-                }
-              }
-            }
+            console.log(`Total caches deleted: ${deletedCount}`);
