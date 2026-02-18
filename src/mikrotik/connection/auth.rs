@@ -7,6 +7,22 @@ use md5::compute as md5_compute;
 
 use super::RouterOsConnection;
 
+fn build_legacy_response(
+    password: &str,
+    challenge_hex: &str,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let challenge = hex::decode(challenge_hex)?;
+
+    let mut data = Vec::with_capacity(1 + password.len() + challenge.len());
+    data.push(0u8);
+    data.extend_from_slice(password.as_bytes());
+    data.extend_from_slice(&challenge);
+    let digest = md5_compute(&data);
+    let mut response = String::from("00");
+    response.push_str(&hex::encode(digest.0));
+    Ok(response)
+}
+
 impl RouterOsConnection {
     pub(crate) async fn login(
         &mut self,
@@ -58,16 +74,7 @@ impl RouterOsConnection {
         }
         let challenge_hex = challenge_hex.ok_or("No challenge 'ret' received")?;
         tracing::trace!("Challenge received, length: {}", challenge_hex.len());
-        let challenge = hex::decode(&challenge_hex)?;
-
-        // Build MD5 hash of 0 + password + challenge
-        let mut data = Vec::with_capacity(1 + password.len() + challenge.len());
-        data.push(0u8);
-        data.extend_from_slice(password.as_bytes());
-        data.extend_from_slice(&challenge);
-        let digest = md5_compute(&data);
-        let mut response = String::from("00");
-        response.push_str(&hex::encode(digest.0));
+        let response = build_legacy_response(password, &challenge_hex)?;
 
         let login_sentences = self
             .raw_command(vec![
@@ -84,5 +91,23 @@ impl RouterOsConnection {
         }
         tracing::debug!("Login successful (legacy method)");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_legacy_response;
+
+    #[test]
+    fn test_build_legacy_response_known_values() {
+        let response = build_legacy_response("secret", "0f0e0d0c0b0a09080706050403020100")
+            .expect("response should build");
+        assert_eq!(response, "006207c72a4341e4f21771ae7f77036fed");
+    }
+
+    #[test]
+    fn test_build_legacy_response_invalid_hex() {
+        let result = build_legacy_response("secret", "zz");
+        assert!(result.is_err());
     }
 }
