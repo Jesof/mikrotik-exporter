@@ -62,6 +62,7 @@ pub(crate) struct CertificateLabels {
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct FirewallRuleLabels {
     pub(crate) router: String,
+    pub(crate) rule_id: String,
     pub(crate) chain: String,
     pub(crate) action: String,
     pub(crate) ip_version: String,
@@ -181,6 +182,7 @@ mod tests {
     fn test_firewall_rule_labels_creation() {
         let labels = FirewallRuleLabels {
             router: "router1".to_string(),
+            rule_id: "*1".to_string(),
             chain: "forward".to_string(),
             action: "accept".to_string(),
             ip_version: "ipv4".to_string(),
@@ -188,6 +190,7 @@ mod tests {
         };
 
         assert_eq!(labels.router, "router1");
+        assert_eq!(labels.rule_id, "*1");
         assert_eq!(labels.chain, "forward");
         assert_eq!(labels.action, "accept");
         assert_eq!(labels.ip_version, "ipv4");
@@ -197,6 +200,7 @@ mod tests {
     fn test_firewall_rule_labels_equality() {
         let labels1 = FirewallRuleLabels {
             router: "router1".to_string(),
+            rule_id: "*1".to_string(),
             chain: "input".to_string(),
             action: "drop".to_string(),
             ip_version: "ipv6".to_string(),
@@ -205,6 +209,7 @@ mod tests {
 
         let labels2 = FirewallRuleLabels {
             router: "router1".to_string(),
+            rule_id: "*1".to_string(),
             chain: "input".to_string(),
             action: "drop".to_string(),
             ip_version: "ipv6".to_string(),
@@ -218,6 +223,7 @@ mod tests {
     fn test_firewall_rule_labels_inequality() {
         let labels1 = FirewallRuleLabels {
             router: "router1".to_string(),
+            rule_id: "*1".to_string(),
             chain: "output".to_string(),
             action: "reject".to_string(),
             ip_version: "ipv4".to_string(),
@@ -226,8 +232,9 @@ mod tests {
 
         let labels2 = FirewallRuleLabels {
             router: "router1".to_string(),
+            rule_id: "*2".to_string(),
             chain: "output".to_string(),
-            action: "accept".to_string(), // Different action
+            action: "reject".to_string(),
             ip_version: "ipv4".to_string(),
             section: "filter".to_string(),
         };
@@ -241,6 +248,7 @@ mod tests {
 
         let labels1 = FirewallRuleLabels {
             router: "router1".to_string(),
+            rule_id: "*1".to_string(),
             chain: "forward".to_string(),
             action: "accept".to_string(),
             ip_version: "ipv4".to_string(),
@@ -249,6 +257,7 @@ mod tests {
 
         let labels2 = FirewallRuleLabels {
             router: "router1".to_string(),
+            rule_id: "*1".to_string(),
             chain: "forward".to_string(),
             action: "accept".to_string(),
             ip_version: "ipv4".to_string(),

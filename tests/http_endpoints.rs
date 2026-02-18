@@ -118,6 +118,7 @@ async fn metrics_contains_router_data_after_update() {
         wireguard_peers: vec![],
         certificate_stats: vec![],
         firewall_rules: vec![mikrotik_exporter::FirewallRuleStats {
+            id: "*1".to_string(),
             chain: "forward".to_string(),
             action: "accept".to_string(),
             bytes: 1024,
@@ -181,6 +182,7 @@ async fn metrics_correctly_calculates_interface_counters() {
         wireguard_peers: vec![],
         certificate_stats: vec![],
         firewall_rules: vec![mikrotik_exporter::FirewallRuleStats {
+            id: "*1".to_string(),
             chain: "forward".to_string(),
             action: "accept".to_string(),
             bytes: 1024,
@@ -211,6 +213,7 @@ async fn metrics_correctly_calculates_interface_counters() {
         wireguard_peers: vec![],
         certificate_stats: vec![],
         firewall_rules: vec![mikrotik_exporter::FirewallRuleStats {
+            id: "*1".to_string(),
             chain: "forward".to_string(),
             action: "accept".to_string(),
             bytes: 1024,

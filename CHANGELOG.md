@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated documentation and usage examples to reflect the new `section` label
 - Updated Grafana dashboard to work with the new `section` label for better visualization of firewall rules
 
+### Fixed
+- Added `rule_id` label to firewall metrics to uniquely identify each firewall rule. Previously, rules with the same `chain`/`action`/`section` were aggregated into a single metric, causing incorrect values when multiple rules had identical labels
+
 ## [0.2.5] - 2026-02-18
 ### Added
 - Certificate expiration monitoring metrics with `mikrotik_certificate_days_until_expiry` gauge

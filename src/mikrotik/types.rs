@@ -65,6 +65,7 @@ pub struct WireGuardPeerStats {
 /// Statistics for firewall rules
 #[derive(Debug, Clone)]
 pub struct FirewallRuleStats {
+    pub id: String,
     pub chain: String,
     pub action: String,
     pub bytes: u64,
@@ -167,6 +168,7 @@ mod tests {
                 days_until_expiry: 30,
             }],
             firewall_rules: vec![FirewallRuleStats {
+                id: "*1".to_string(),
                 chain: "forward".to_string(),
                 action: "accept".to_string(),
                 bytes: 1024,
@@ -186,6 +188,7 @@ mod tests {
         assert_eq!(metrics.certificate_stats[0].name, "cert1");
         assert_eq!(metrics.certificate_stats[0].days_until_expiry, 30);
         assert_eq!(metrics.firewall_rules.len(), 1);
+        assert_eq!(metrics.firewall_rules[0].id, "*1");
         assert_eq!(metrics.firewall_rules[0].chain, "forward");
         assert_eq!(metrics.firewall_rules[0].action, "accept");
         assert_eq!(metrics.firewall_rules[0].bytes, 1024);

@@ -319,6 +319,7 @@ impl MetricsRegistry {
         for rule in &metrics.firewall_rules {
             let rule_labels = FirewallRuleLabels {
                 router: metrics.router_name.clone(),
+                rule_id: rule.id.clone(),
                 chain: rule.chain.clone(),
                 action: rule.action.clone(),
                 ip_version: rule.ip_version.clone(),

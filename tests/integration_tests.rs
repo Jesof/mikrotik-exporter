@@ -193,6 +193,7 @@ async fn test_metrics_update_and_retrieval() {
         wireguard_peers: vec![],
         certificate_stats: vec![],
         firewall_rules: vec![FirewallRuleStats {
+            id: "*1".to_string(),
             chain: "forward".to_string(),
             action: "accept".to_string(),
             bytes: 1024,
