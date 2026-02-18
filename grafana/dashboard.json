@@ -19,12 +19,6 @@
     },
     {
       "type": "panel",
-      "id": "bargauge",
-      "name": "Bar gauge",
-      "version": ""
-    },
-    {
-      "type": "panel",
       "id": "gauge",
       "name": "Gauge",
       "version": ""
@@ -2354,7 +2348,7 @@
       "type": "table"
     },
     {
-      "collapsed": true,
+      "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -2362,95 +2356,230 @@
         "y": 105
       },
       "id": 152,
-      "panels": [
+      "panels": [],
+      "title": "Certificates",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "description": "Подробная информация о сертификатах",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": false,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false,
+            "wrapHeaderText": false,
+            "wrapText": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 30
+              },
+              {
+                "color": "yellow",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 180
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "__name__"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom.viz",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "container"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom.viz",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "endpoint"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom.viz",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "instance"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom.viz",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "job"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom.viz",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "namespace"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom.viz",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pod"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom.viz",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "prometheus"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom.viz",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "service"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom.viz",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "d"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 106
+      },
+      "id": 151,
+      "options": {
+        "cellHeight": "sm",
+        "enablePagination": false,
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Days Until Expiry"
+          }
+        ]
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_VICTORIAMETRICS}"
           },
-          "description": "Дней до истечения сертификатов",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "red",
-                    "value": 0
-                  },
-                  {
-                    "color": "orange",
-                    "value": 30
-                  },
-                  {
-                    "color": "yellow",
-                    "value": 90
-                  },
-                  {
-                    "color": "green",
-                    "value": 180
-                  }
-                ]
-              },
-              "unit": "none"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 7,
-            "w": 24,
-            "x": 0,
-            "y": 59
-          },
-          "id": 151,
-          "options": {
-            "displayMode": "lcd",
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": false
-            },
-            "maxVizHeight": 300,
-            "minVizHeight": 16,
-            "minVizWidth": 8,
-            "namePlacement": "auto",
-            "orientation": "horizontal",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showUnfilled": true,
-            "sizing": "auto",
-            "valueMode": "color"
-          },
-          "pluginVersion": "12.3.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_VICTORIAMETRICS}"
-              },
-              "editorMode": "code",
-              "expr": "mikrotik_certificate_days_until_expiry{router=\"$router\"}",
-              "legendFormat": "{{name}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Certificate Expiry Timeline",
-          "type": "bargauge"
+          "editorMode": "code",
+          "expr": "mikrotik_certificate_days_until_expiry{router=\"$router\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
         }
       ],
-      "title": "Certificates",
-      "type": "row"
+      "title": "Certificate Details",
+      "type": "table"
     },
     {
       "collapsed": false,
@@ -2458,7 +2587,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 106
+        "y": 113
       },
       "id": 104,
       "panels": [],
@@ -2536,7 +2665,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 107
+        "y": 114
       },
       "id": 14,
       "options": {
@@ -2617,7 +2746,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 107
+        "y": 114
       },
       "id": 18,
       "options": {
@@ -2715,7 +2844,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 115
+        "y": 122
       },
       "id": 17,
       "options": {
@@ -2800,7 +2929,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 115
+        "y": 122
       },
       "id": 15,
       "options": {
@@ -2878,7 +3007,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 115
+        "y": 122
       },
       "id": 16,
       "options": {
@@ -3002,7 +3131,7 @@
   "timezone": "browser",
   "title": "MikroTik Router Monitoring",
   "uid": "mikrotik-exporter",
-  "version": 8,
+  "version": 18,
   "weekStart": "",
   "id": null
 }
