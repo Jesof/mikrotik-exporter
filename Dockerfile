@@ -17,22 +17,21 @@ COPY Cargo.toml Cargo.lock ./
 
 ARG TARGETARCH
 
-# Create dummy src to cache dependencies
+# Pre-build dependencies (no cleanup)
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target,id=target-${TARGETARCH} \
+    --mount=type=cache,target=/app/target,id=target-${TARGETARCH},sharing=locked \
     mkdir src && echo "fn main() {}" > src/main.rs && \
-    cargo build --release --locked && \
-    rm -rf src target/release/deps/mikrotik* target/release/mikrotik*
+    cargo build --release --locked
 
 # Copy actual source code
 COPY src ./src
 COPY clippy.toml rustfmt.toml ./
 
-# Build for release
+# Build for release with improved caching
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target,id=target-${TARGETARCH} \
+    --mount=type=cache,target=/app/target,id=target-${TARGETARCH},sharing=locked \
     cargo build --release --locked && \
     cp target/release/mikrotik-exporter /app/mikrotik-exporter
 
