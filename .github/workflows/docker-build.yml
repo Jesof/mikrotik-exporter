@@ -36,8 +36,8 @@ on:
         default: manual
 
 concurrency:
-  group: docker-build-${{ github.ref }}
-  cancel-in-progress: true
+  group: docker-build-${{ github.sha }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
