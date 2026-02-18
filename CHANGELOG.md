@@ -10,10 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.5] - 2026-02-18
 
 ### Added
-- Certificate expiration monitoring metrics
+- Certificate expiration monitoring metrics with `mikrotik_certificate_days_until_expiry` gauge
+- Support for parsing both ISO (YYYY-MM-DD) and legacy (MMM/DD/YYYY) certificate date formats
+- Comprehensive integration tests with environment variable support
+- Property-based testing for protocol encoding/decoding
+- Certificate cleanup logic to prevent memory leaks
 
 ### Changed
-- Refactored MikroTik response parsing into dedicated module for better maintainability
+- Refactored MikroTik response parsing into dedicated `responses` module for better maintainability
+- Improved certificate parser to support both ISO (YYYY-MM-DD) and legacy (MMM/DD/YYYY) date formats
+- Enhanced Grafana dashboard with certificate expiry timeline panel
+- Updated MikroTik client to use `/certificate/print .detail` command
+- Moved WireGuard types to `types.rs` for consistency
+- Cleaned up `connection/` module (now only TCP + protocol)
+- Improved integration test coverage and added property-based testing
+- Query performance improvements in dashboard queries
+
+### Fixed
+- Test failures in `test_encode_length_extremely_large`
+- Certificate parsing with actual dates in tests
+- Sorting issues in WireGuard peer table
+- Connection pool tests to use public API
 
 ## [0.2.4] - 2026-02-17
 
