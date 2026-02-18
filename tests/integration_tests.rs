@@ -198,6 +198,7 @@ async fn test_metrics_update_and_retrieval() {
             bytes: 1024,
             packets: 5,
             ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
         }],
     };
 

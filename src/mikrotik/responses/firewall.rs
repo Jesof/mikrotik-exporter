@@ -11,12 +11,14 @@ use std::collections::HashMap;
 /// # Arguments
 /// * `sentences` - Slice of HashMap<String, String> representing API responses
 /// * `ip_version` - IP version string ("ipv4" or "ipv6")
+/// * `section` - Firewall section ("filter", "nat", "mangle", "raw")
 ///
 /// # Returns
 /// Vector of FirewallRuleStats parsed from the API responses
 pub(crate) fn parse_firewall_rules(
     sentences: &[HashMap<String, String>],
     ip_version: &str,
+    section: &str,
 ) -> Vec<FirewallRuleStats> {
     let mut out = Vec::new();
 
@@ -34,6 +36,7 @@ pub(crate) fn parse_firewall_rules(
                 bytes: s.get("bytes").and_then(|v| v.parse().ok()).unwrap_or(0),
                 packets: s.get("packets").and_then(|v| v.parse().ok()).unwrap_or(0),
                 ip_version: ip_version.to_string(),
+                section: section.to_string(),
             });
         }
     }
@@ -53,7 +56,7 @@ mod tests {
         rule1.insert("bytes".to_string(), "1024".to_string());
         rule1.insert("packets".to_string(), "5".to_string());
 
-        let result = parse_firewall_rules(&[rule1], "ipv4");
+        let result = parse_firewall_rules(&[rule1], "ipv4", "filter");
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].chain, "input");
@@ -61,6 +64,7 @@ mod tests {
         assert_eq!(result[0].bytes, 1024);
         assert_eq!(result[0].packets, 5);
         assert_eq!(result[0].ip_version, "ipv4");
+        assert_eq!(result[0].section, "filter");
     }
 
     #[test]
@@ -77,7 +81,7 @@ mod tests {
         rule2.insert("bytes".to_string(), "2048".to_string());
         rule2.insert("packets".to_string(), "10".to_string());
 
-        let result = parse_firewall_rules(&[rule1, rule2], "ipv6");
+        let result = parse_firewall_rules(&[rule1, rule2], "ipv6", "filter");
 
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].chain, "input");
@@ -91,6 +95,7 @@ mod tests {
         assert_eq!(result[1].bytes, 2048);
         assert_eq!(result[1].packets, 10);
         assert_eq!(result[1].ip_version, "ipv6");
+        assert_eq!(result[1].section, "filter");
     }
 
     #[test]
@@ -100,7 +105,7 @@ mod tests {
         rule.insert("action".to_string(), "accept".to_string());
         // Missing bytes and packets
 
-        let result = parse_firewall_rules(&[rule], "ipv4");
+        let result = parse_firewall_rules(&[rule], "ipv4", "filter");
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].chain, "input");
@@ -108,6 +113,7 @@ mod tests {
         assert_eq!(result[0].bytes, 0); // Should default to 0
         assert_eq!(result[0].packets, 0); // Should default to 0
         assert_eq!(result[0].ip_version, "ipv4");
+        assert_eq!(result[0].section, "filter");
     }
 
     #[test]
@@ -119,7 +125,7 @@ mod tests {
         rule.insert("packets".to_string(), "5".to_string());
         rule.insert("disabled".to_string(), "true".to_string());
 
-        let result = parse_firewall_rules(&[rule], "ipv4");
+        let result = parse_firewall_rules(&[rule], "ipv4", "filter");
 
         assert_eq!(result.len(), 0); // Disabled rule should be skipped
     }
@@ -131,7 +137,7 @@ mod tests {
         rule.insert("bytes".to_string(), "1024".to_string());
         rule.insert("packets".to_string(), "5".to_string());
 
-        let result = parse_firewall_rules(&[rule], "ipv4");
+        let result = parse_firewall_rules(&[rule], "ipv4", "filter");
 
         assert_eq!(result.len(), 0); // Rule without chain should be skipped
     }
@@ -143,14 +149,14 @@ mod tests {
         rule.insert("bytes".to_string(), "1024".to_string());
         rule.insert("packets".to_string(), "5".to_string());
 
-        let result = parse_firewall_rules(&[rule], "ipv4");
+        let result = parse_firewall_rules(&[rule], "ipv4", "filter");
 
         assert_eq!(result.len(), 0); // Rule without action should be skipped
     }
 
     #[test]
     fn test_parse_firewall_rules_empty() {
-        let result = parse_firewall_rules(&[], "ipv4");
+        let result = parse_firewall_rules(&[], "ipv4", "filter");
         assert_eq!(result.len(), 0);
     }
 }

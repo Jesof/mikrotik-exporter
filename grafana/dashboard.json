@@ -2453,8 +2453,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_firewall_rule_bytes{router=\"$router\"}[$__rate_interval]) * 8",
-          "legendFormat": "{{chain}} - {{action}} ({{ip_version}})",
+          "expr": "rate(mikrotik_firewall_rule_bytes{router=\"$router\",section=~\"$section\"}[$__rate_interval]) * 8",
+          "legendFormat": "{{section}}/{{chain}} - {{action}} ({{ip_version}})",
           "range": true,
           "refId": "A"
         }
@@ -2555,8 +2555,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_firewall_rule_packets{router=\"$router\"}[$__rate_interval])",
-          "legendFormat": "{{chain}} - {{action}} ({{ip_version}})",
+          "expr": "rate(mikrotik_firewall_rule_packets{router=\"$router\",section=~\"$section\"}[$__rate_interval])",
+          "legendFormat": "{{section}}/{{chain}} - {{action}} ({{ip_version}})",
           "range": true,
           "refId": "A"
         }
@@ -2650,7 +2650,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "mikrotik_firewall_rule_bytes{router=\"$router\"}",
+          "expr": "mikrotik_firewall_rule_bytes{router=\"$router\",section=~\"$section\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -2664,7 +2664,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "mikrotik_firewall_rule_packets{router=\"$router\"}",
+          "expr": "mikrotik_firewall_rule_packets{router=\"$router\",section=~\"$section\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -2698,12 +2698,13 @@
               "service": true
             },
             "indexByName": {
-              "Value #A": 4,
-              "Value #B": 5,
+              "Value #A": 5,
+              "Value #B": 6,
               "action": 2,
               "chain": 0,
-              "ip_version": 3,
-              "router": 1
+              "ip_version": 4,
+              "router": 1,
+              "section": 3
             },
             "renameByName": {
               "Value #A": "Bytes",
@@ -2711,7 +2712,8 @@
               "action": "Action",
               "chain": "Chain",
               "ip_version": "IP Version",
-              "router": "Router"
+              "router": "Router",
+              "section": "Section"
             }
           }
         }
@@ -3473,6 +3475,28 @@
         "query": {
           "qryType": 1,
           "query": "label_values(mikrotik_interface_running{router=\"$router\"}, interface)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_VICTORIAMETRICS}"
+        },
+        "definition": "label_values(mikrotik_firewall_rule_bytes, section)",
+        "includeAll": true,
+        "label": "Firewall Section",
+        "multi": true,
+        "name": "section",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mikrotik_firewall_rule_bytes, section)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,

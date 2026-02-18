@@ -322,6 +322,7 @@ impl MetricsRegistry {
                 chain: rule.chain.clone(),
                 action: rule.action.clone(),
                 ip_version: rule.ip_version.clone(),
+                section: rule.section.clone(),
             };
             current_firewall_rules.insert(rule_labels.clone());
 

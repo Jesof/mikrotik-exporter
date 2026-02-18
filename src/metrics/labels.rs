@@ -65,6 +65,7 @@ pub(crate) struct FirewallRuleLabels {
     pub(crate) chain: String,
     pub(crate) action: String,
     pub(crate) ip_version: String,
+    pub(crate) section: String,
 }
 
 #[cfg(test)]
@@ -183,6 +184,7 @@ mod tests {
             chain: "forward".to_string(),
             action: "accept".to_string(),
             ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
         };
 
         assert_eq!(labels.router, "router1");
@@ -198,6 +200,7 @@ mod tests {
             chain: "input".to_string(),
             action: "drop".to_string(),
             ip_version: "ipv6".to_string(),
+            section: "filter".to_string(),
         };
 
         let labels2 = FirewallRuleLabels {
@@ -205,6 +208,7 @@ mod tests {
             chain: "input".to_string(),
             action: "drop".to_string(),
             ip_version: "ipv6".to_string(),
+            section: "filter".to_string(),
         };
 
         assert_eq!(labels1, labels2);
@@ -217,6 +221,7 @@ mod tests {
             chain: "output".to_string(),
             action: "reject".to_string(),
             ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
         };
 
         let labels2 = FirewallRuleLabels {
@@ -224,6 +229,7 @@ mod tests {
             chain: "output".to_string(),
             action: "accept".to_string(), // Different action
             ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
         };
 
         assert_ne!(labels1, labels2);
@@ -238,6 +244,7 @@ mod tests {
             chain: "forward".to_string(),
             action: "accept".to_string(),
             ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
         };
 
         let labels2 = FirewallRuleLabels {
@@ -245,6 +252,7 @@ mod tests {
             chain: "forward".to_string(),
             action: "accept".to_string(),
             ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
         };
 
         let mut map = HashMap::new();

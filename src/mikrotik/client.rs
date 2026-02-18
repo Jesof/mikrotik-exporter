@@ -206,36 +206,44 @@ impl MikroTikClient {
         firewall_rules.extend(parse_firewall_rules(
             &firewall_filter_v4_result.unwrap_or_default(),
             "ipv4",
+            "filter",
         ));
         firewall_rules.extend(parse_firewall_rules(
             &firewall_nat_v4_result.unwrap_or_default(),
             "ipv4",
+            "nat",
         ));
         firewall_rules.extend(parse_firewall_rules(
             &firewall_mangle_v4_result.unwrap_or_default(),
             "ipv4",
+            "mangle",
         ));
         firewall_rules.extend(parse_firewall_rules(
             &firewall_raw_v4_result.unwrap_or_default(),
             "ipv4",
+            "raw",
         ));
 
         // Parse IPv6 firewall rules
         firewall_rules.extend(parse_firewall_rules(
             &firewall_filter_v6_result.unwrap_or_default(),
             "ipv6",
+            "filter",
         ));
         firewall_rules.extend(parse_firewall_rules(
             &firewall_nat_v6_result.unwrap_or_default(),
             "ipv6",
+            "nat",
         ));
         firewall_rules.extend(parse_firewall_rules(
             &firewall_mangle_v6_result.unwrap_or_default(),
             "ipv6",
+            "mangle",
         ));
         firewall_rules.extend(parse_firewall_rules(
             &firewall_raw_v6_result.unwrap_or_default(),
             "ipv6",
+            "raw",
         ));
 
         Ok(RouterMetrics {

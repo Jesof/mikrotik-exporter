@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Firewall rule metrics with byte and packet counters:
-  - `mikrotik_firewall_rule_bytes{chain, action, ip_version}`
-  - `mikrotik_firewall_rule_packets{chain, action, ip_version}`
+  - `mikrotik_firewall_rule_bytes{chain, action, ip_version, section}`
+  - `mikrotik_firewall_rule_packets{chain, action, ip_version, section}`
 - Support for collecting firewall rules from all RouterOS firewall tables:
   - `/ip/firewall/filter` and `/ipv6/firewall/filter`
   - `/ip/firewall/nat` and `/ipv6/firewall/nat`
@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic delta calculation for firewall rule counters with proper reset handling
 - IPv4 and IPv6 support for all firewall rule metrics
 - Automatic cleanup of stale firewall rule labels
+
+### Changed
+- Added `section` label to firewall metrics to distinguish rules by firewall section (filter, nat, mangle, raw)
+- Updated documentation and usage examples to reflect the new `section` label
+- Updated Grafana dashboard to work with the new `section` label for better visualization of firewall rules
 
 ## [0.2.5] - 2026-02-18
 ### Added

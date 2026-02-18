@@ -41,6 +41,9 @@
 //! ### Certificate Metrics (Gauges)
 //! - `certificate_days_until_expiry`: Certificate expiration countdown
 //!
+//! ### Firewall Metrics (Counters)
+//! - `firewall_rule_bytes/packets`: Firewall rule match counters by section (filter, nat, mangle, raw)
+//!
 //! ### Scrape Status (Counters)
 //! - `scrape_success/errors`: Collection success/failure counts
 //! - `scrape_duration_milliseconds`: Collection timing
@@ -192,6 +195,7 @@ mod tests {
                 bytes: 1024,
                 packets: 5,
                 ip_version: "ipv4".to_string(),
+                section: "filter".to_string(),
             }],
         }
     }

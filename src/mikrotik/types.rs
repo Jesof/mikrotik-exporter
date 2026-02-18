@@ -70,6 +70,7 @@ pub struct FirewallRuleStats {
     pub bytes: u64,
     pub packets: u64,
     pub ip_version: String,
+    pub section: String,
 }
 
 /// Complete metrics snapshot from a router
@@ -171,6 +172,7 @@ mod tests {
                 bytes: 1024,
                 packets: 5,
                 ip_version: "ipv4".to_string(),
+                section: "filter".to_string(),
             }],
         };
 
@@ -189,6 +191,7 @@ mod tests {
         assert_eq!(metrics.firewall_rules[0].bytes, 1024);
         assert_eq!(metrics.firewall_rules[0].packets, 5);
         assert_eq!(metrics.firewall_rules[0].ip_version, "ipv4");
+        assert_eq!(metrics.firewall_rules[0].section, "filter");
     }
 
     #[test]

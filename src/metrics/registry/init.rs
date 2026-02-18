@@ -69,13 +69,13 @@ impl MetricsRegistry {
         let firewall_rule_bytes = Family::<FirewallRuleLabels, Counter>::default();
         registry.register(
             "mikrotik_firewall_rule_bytes",
-            "Bytes matched by firewall rule",
+            "Bytes matched by firewall rule (by section: filter, nat, mangle, raw)",
             firewall_rule_bytes.clone(),
         );
         let firewall_rule_packets = Family::<FirewallRuleLabels, Counter>::default();
         registry.register(
             "mikrotik_firewall_rule_packets",
-            "Packets matched by firewall rule",
+            "Packets matched by firewall rule (by section: filter, nat, mangle, raw)",
             firewall_rule_packets.clone(),
         );
 

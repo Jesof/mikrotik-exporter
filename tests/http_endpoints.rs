@@ -123,6 +123,7 @@ async fn metrics_contains_router_data_after_update() {
             bytes: 1024,
             packets: 5,
             ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
         }],
     };
     state.metrics.update_metrics(&metrics).await;
@@ -185,6 +186,7 @@ async fn metrics_correctly_calculates_interface_counters() {
             bytes: 1024,
             packets: 5,
             ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
         }],
     };
     state.metrics.update_metrics(&metrics1).await;
@@ -214,6 +216,7 @@ async fn metrics_correctly_calculates_interface_counters() {
             bytes: 1024,
             packets: 5,
             ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
         }],
     };
     state.metrics.update_metrics(&metrics2).await;

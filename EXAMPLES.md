@@ -567,6 +567,34 @@ mikrotik_interface_running == 0
 rate(mikrotik_interface_rx_errors[5m]) > 10 or rate(mikrotik_interface_tx_errors[5m]) > 10
 ```
 
+### Правила фаервола
+
+```promql
+# Трафик по правилам фаервола (bits/s)
+rate(mikrotik_firewall_rule_bytes[5m]) * 8
+
+# Пакеты по правилам фаервола (pps)
+rate(mikrotik_firewall_rule_packets[5m])
+
+# Трафик по разделам фаервола
+sum by (section) (rate(mikrotik_firewall_rule_bytes[5m]) * 8)
+
+# Топ-10 правил по трафику
+topk(10, rate(mikrotik_firewall_rule_bytes[5m]) * 8)
+
+# Трафик по правилам в разделе filter
+rate(mikrotik_firewall_rule_bytes{section="filter"}[5m]) * 8
+
+# Трафик по правилам в разделе nat
+rate(mikrotik_firewall_rule_bytes{section="nat"}[5m]) * 8
+
+# Трафик по правилам ACCEPT в разделе filter
+rate(mikrotik_firewall_rule_bytes{section="filter",action="accept"}[5m]) * 8
+
+# Трафик по правилам DROP в разделе filter
+rate(mikrotik_firewall_rule_bytes{section="filter",action="drop"}[5m]) * 8
+```
+
 ---
 
 ## Полезные команды
