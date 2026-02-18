@@ -62,6 +62,16 @@ pub struct WireGuardPeerStats {
     pub latest_handshake: Option<u64>,
 }
 
+/// Statistics for firewall rules
+#[derive(Debug, Clone)]
+pub struct FirewallRuleStats {
+    pub chain: String,
+    pub action: String,
+    pub bytes: u64,
+    pub packets: u64,
+    pub ip_version: String,
+}
+
 /// Complete metrics snapshot from a router
 #[derive(Debug, Clone)]
 pub struct RouterMetrics {
@@ -72,6 +82,7 @@ pub struct RouterMetrics {
     pub wireguard_interfaces: Vec<WireGuardInterfaceStats>,
     pub wireguard_peers: Vec<WireGuardPeerStats>,
     pub certificate_stats: Vec<CertificateStats>,
+    pub firewall_rules: Vec<FirewallRuleStats>,
 }
 
 #[cfg(test)]
@@ -154,6 +165,13 @@ mod tests {
                 name: "cert1".to_string(),
                 days_until_expiry: 30,
             }],
+            firewall_rules: vec![FirewallRuleStats {
+                chain: "forward".to_string(),
+                action: "accept".to_string(),
+                bytes: 1024,
+                packets: 5,
+                ip_version: "ipv4".to_string(),
+            }],
         };
 
         assert_eq!(metrics.router_name, "main-router");
@@ -165,6 +183,12 @@ mod tests {
         assert_eq!(metrics.certificate_stats.len(), 1);
         assert_eq!(metrics.certificate_stats[0].name, "cert1");
         assert_eq!(metrics.certificate_stats[0].days_until_expiry, 30);
+        assert_eq!(metrics.firewall_rules.len(), 1);
+        assert_eq!(metrics.firewall_rules[0].chain, "forward");
+        assert_eq!(metrics.firewall_rules[0].action, "accept");
+        assert_eq!(metrics.firewall_rules[0].bytes, 1024);
+        assert_eq!(metrics.firewall_rules[0].packets, 5);
+        assert_eq!(metrics.firewall_rules[0].ip_version, "ipv4");
     }
 
     #[test]

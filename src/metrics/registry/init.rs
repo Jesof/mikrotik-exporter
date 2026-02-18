@@ -4,8 +4,8 @@
 //! Registry initialization and metric registration
 
 use crate::metrics::labels::{
-    CertificateLabels, ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels,
-    WireGuardPeerInfoLabels, WireGuardPeerLabels,
+    CertificateLabels, ConntrackLabels, FirewallRuleLabels, InterfaceLabels, RouterLabels,
+    SystemInfoLabels, WireGuardPeerInfoLabels, WireGuardPeerLabels,
 };
 use dashmap::DashMap;
 use prometheus_client::metrics::counter::Counter;
@@ -63,6 +63,20 @@ impl MetricsRegistry {
             "mikrotik_interface_running",
             "Interface running status (1=running,0=down)",
             interface_running.clone(),
+        );
+
+        // Firewall rule counters
+        let firewall_rule_bytes = Family::<FirewallRuleLabels, Counter>::default();
+        registry.register(
+            "mikrotik_firewall_rule_bytes",
+            "Bytes matched by firewall rule",
+            firewall_rule_bytes.clone(),
+        );
+        let firewall_rule_packets = Family::<FirewallRuleLabels, Counter>::default();
+        registry.register(
+            "mikrotik_firewall_rule_packets",
+            "Packets matched by firewall rule",
+            firewall_rule_packets.clone(),
         );
 
         let system_cpu_load = Family::<RouterLabels, Gauge>::default();
@@ -197,6 +211,8 @@ impl MetricsRegistry {
             interface_tx_packets,
             interface_rx_errors,
             interface_tx_errors,
+            firewall_rule_bytes,
+            firewall_rule_packets,
             interface_running,
             system_cpu_load,
             system_free_memory,
@@ -218,12 +234,15 @@ impl MetricsRegistry {
             wireguard_peer_info,
             certificate_days_until_expiry,
             prev_iface: Arc::new(DashMap::new()),
+            prev_firewall_rules: Arc::new(DashMap::new()),
             prev_conntrack: Arc::new(DashMap::new()),
             prev_system_info: Arc::new(DashMap::new()),
             prev_wireguard_peers: Arc::new(DashMap::new()),
             prev_wireguard_peer_info: Arc::new(DashMap::new()),
             prev_certificates: Arc::new(DashMap::new()),
+            prev_firewall_rules_by_router: Arc::new(DashMap::new()),
             conntrack_last_seen: Arc::new(DashMap::new()),
+            firewall_rule_last_seen: Arc::new(DashMap::new()),
             wireguard_peer_last_seen: Arc::new(DashMap::new()),
             wireguard_peer_info_last_seen: Arc::new(DashMap::new()),
             certificate_last_seen: Arc::new(DashMap::new()),

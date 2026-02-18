@@ -4,8 +4,8 @@
 //! Cleanup helpers for stale and expired metric labels
 
 use crate::metrics::labels::{
-    CertificateLabels, ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels,
-    WireGuardPeerInfoLabels, WireGuardPeerLabels,
+    CertificateLabels, ConntrackLabels, FirewallRuleLabels, InterfaceLabels, RouterLabels,
+    SystemInfoLabels, WireGuardPeerInfoLabels, WireGuardPeerLabels,
 };
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
@@ -216,6 +216,40 @@ impl MetricsRegistry {
                 stale_certificates.len()
             );
         }
+
+        let stale_firewall_rules: Vec<FirewallRuleLabels> = {
+            let stale: Vec<_> = self
+                .firewall_rule_last_seen
+                .iter()
+                .filter(|entry| now.duration_since(*entry.value()) > ttl)
+                .map(|entry| entry.key().clone())
+                .collect();
+
+            // Remove stale entries
+            for label in &stale {
+                self.firewall_rule_last_seen.remove(label);
+                self.prev_firewall_rules.remove(label);
+                // Remove from router-specific tracking
+                if let Some(mut set) = self.prev_firewall_rules_by_router.get_mut(&label.router) {
+                    set.remove(label);
+                    if set.is_empty() {
+                        drop(set); // Release the mutable borrow
+                        self.prev_firewall_rules_by_router.remove(&label.router);
+                    }
+                }
+            }
+            stale
+        };
+        if !stale_firewall_rules.is_empty() {
+            for label in &stale_firewall_rules {
+                self.firewall_rule_bytes.remove(label);
+                self.firewall_rule_packets.remove(label);
+            }
+            tracing::debug!(
+                "Expired {} firewall rule labels via TTL cleanup",
+                stale_firewall_rules.len()
+            );
+        }
     }
 
     /// Clean up cached state for routers that are no longer configured
@@ -396,21 +430,51 @@ impl MetricsRegistry {
             self.certificate_last_seen.remove(&label);
         }
 
+        // Clean up firewall rules for stale routers
+        let stale_firewall_rules: Vec<_> = self
+            .firewall_rule_last_seen
+            .iter()
+            .filter(|entry| !active_routers.contains(&entry.key().router))
+            .map(|entry| entry.key().clone())
+            .collect();
+        for label in &stale_firewall_rules {
+            self.firewall_rule_last_seen.remove(label);
+            self.prev_firewall_rules.remove(label);
+            self.firewall_rule_bytes.remove(label);
+            self.firewall_rule_packets.remove(label);
+        }
+
+        // Clean up router-specific firewall rules tracking for stale routers
+        let stale_firewall_routers: Vec<_> = self
+            .prev_firewall_rules_by_router
+            .iter()
+            .filter(|entry| !active_routers.contains(entry.key()))
+            .map(|entry| entry.key().clone())
+            .collect();
+        for router in &stale_firewall_routers {
+            stale_routers.insert(router.clone());
+            self.prev_firewall_rules_by_router.remove(router);
+        }
+
         if !stale_interfaces.is_empty()
             || !stale_system.is_empty()
             || !stale_conntrack.is_empty()
             || !stale_peers.is_empty()
             || !stale_peer_info.is_empty()
             || !stale_certificates.is_empty()
+            || !stale_firewall_rules.is_empty()
+            || !stale_firewall_routers.is_empty()
         {
             tracing::debug!(
-                "Removed stale router data: interfaces={}, system_info={}, conntrack={}, wg_peers={}, wg_peer_info={}, certificates={}",
+                "Removed stale router data: interfaces={}, system_info={}, conntrack={}, wg_peers={}, wg_peer_info={}, certificates={}, firewall_rules={}, firewall_routers={}",
                 stale_interfaces.len(),
                 stale_system.len(),
                 stale_conntrack.len(),
                 stale_peers.len(),
                 stale_peer_info.len(),
-                stale_certificates.len()
+                stale_certificates.len(),
+                stale_firewall_rules.len(),
+                stale_firewall_routers.len()
             );
         }
     }

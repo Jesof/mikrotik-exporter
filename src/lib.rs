@@ -14,7 +14,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! mikrotik-exporter = "0.2"
+//! mikrotik-exporter = "0.3"
 //! ```
 //!
 //! To install the exporter as a binary, use cargo:
@@ -117,8 +117,8 @@ pub use metrics::{MetricsRegistry, RouterLabels};
 
 /// MikroTik connection pool and metric input types
 pub use mikrotik::{
-    ConnectionPool, ConnectionTrackingStats, InterfaceStats, RouterMetrics, SystemResource,
-    WireGuardInterfaceStats, WireGuardPeerStats,
+    ConnectionPool, ConnectionTrackingStats, FirewallRuleStats, InterfaceStats, RouterMetrics,
+    SystemResource, WireGuardInterfaceStats, WireGuardPeerStats,
 };
 
 /// RouterOS wire protocol length encoding (public for tests)
