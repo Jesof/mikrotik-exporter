@@ -16,14 +16,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Cleanup all caches older than 7 days
+      - name: Cleanup caches when total size exceeds 8GB
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
-            const oneWeekAgo = new Date();
-            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            // Порог размера кеша (8 ГБ в байтах)
+            const SIZE_THRESHOLD = 8 * 1024 * 1024 * 1024; // 8 ГБ
             
-            console.log(`Deleting caches older than: ${oneWeekAgo.toISOString()}`);
+            console.log(`Size threshold: ${SIZE_THRESHOLD} bytes (${SIZE_THRESHOLD / (1024 * 1024 * 1024)} GB)`);
             
             // Получаем все кеши с обработкой пагинации
             let allCaches = [];
@@ -59,29 +59,49 @@ jobs:
             
             console.log(`Total caches fetched: ${allCaches.length}`);
             
+            // Вычисляем общий размер кеша
+            let totalSize = 0;
+            for (const cache of allCaches) {
+              totalSize += cache.size_in_bytes;
+            }
+            
+            console.log(`Total cache size: ${totalSize} bytes (${(totalSize / (1024 * 1024 * 1024)).toFixed(2)} GB)`);
+            
+            // Если общий размер меньше порогового значения, ничего не удаляем
+            if (totalSize <= SIZE_THRESHOLD) {
+              console.log("Total cache size is below threshold, no caches will be deleted");
+              console.log(`Total caches deleted: 0`);
+              return;
+            }
+            
+            // Сортируем кеши по дате создания (от самых старых к самым новым)
+            allCaches.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+            
+            // Удаляем кеши, начиная с самых старых, пока общий размер не станет меньше порогового значения
             let deletedCount = 0;
+            let freedSize = 0;
             
             for (const cache of allCaches) {
-              const cacheCreated = new Date(cache.created_at);
+              // Проверяем, нужно ли еще удалять кеши
+              if (totalSize - freedSize <= SIZE_THRESHOLD) {
+                break;
+              }
               
-              // Отладочная информация о каждом кеше
-              console.log(`Cache: ${cache.key} created at ${cache.created_at} (${cacheCreated.toISOString()})`);
-              
-              // Удаление кешей, созданных более недели назад
-              if (cacheCreated < oneWeekAgo) {
-                console.log(`Deleting cache: ${cache.key} created at ${cache.created_at}`);
-                try {
-                  await github.rest.actions.deleteActionsCacheById({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    cache_id: cache.id,
-                  });
-                  console.log(`Successfully deleted cache: ${cache.key}`);
-                  deletedCount++;
-                } catch (error) {
-                  console.error(`Failed to delete cache: ${cache.key}`, error.message);
-                }
+              console.log(`Deleting cache: ${cache.key} created at ${cache.created_at} (size: ${cache.size_in_bytes} bytes)`);
+              try {
+                await github.rest.actions.deleteActionsCacheById({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  cache_id: cache.id,
+                });
+                console.log(`Successfully deleted cache: ${cache.key}`);
+                deletedCount++;
+                freedSize += cache.size_in_bytes;
+              } catch (error) {
+                console.error(`Failed to delete cache: ${cache.key}`, error.message);
               }
             }
             
             console.log(`Total caches deleted: ${deletedCount}`);
+            console.log(`Total size freed: ${freedSize} bytes (${(freedSize / (1024 * 1024 * 1024)).toFixed(2)} GB)`);
+            console.log(`Remaining cache size: ${totalSize - freedSize} bytes (${((totalSize - freedSize) / (1024 * 1024 * 1024)).toFixed(2)} GB)`);
