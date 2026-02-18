@@ -4,14 +4,11 @@
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
 
+# Target for musl (used in Docker builds)
+[target.aarch64-unknown-linux-musl]
+linker = "aarch64-linux-gnu-gcc"
+
 # Build optimization for cross-compilation
 [build]
 # Enable incremental compilation to improve rebuild performance
 incremental = true
-
-# Limit the number of codegen units for release builds to reduce compilation time
-codegen-units = 16
-
-# Target-specific settings for ARM64 builds
-[target.'cfg(target_arch = "aarch64")']
-# Increase the default optimization for ARM64 if needed

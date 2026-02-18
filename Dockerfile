@@ -16,14 +16,27 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 
 ARG TARGETARCH
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        RUST_TARGET="x86_64-unknown-linux-musl"; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+        RUST_TARGET="aarch64-unknown-linux-musl"; \
+    else \
+        echo "Unsupported TARGETARCH: $TARGETARCH" && exit 1; \
+    fi && \
+    rustup target add $RUST_TARGET
 
 # Pre-build dependencies (no cleanup)
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target,id=target-${TARGETARCH},sharing=locked \
     --mount=type=cache,target=/root/.cargo/registry \
+    if [ "$TARGETARCH" = "amd64" ]; then \
+        RUST_TARGET="x86_64-unknown-linux-musl"; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+        RUST_TARGET="aarch64-unknown-linux-musl"; \
+    fi && \
     mkdir src && echo "fn main() {}" > src/main.rs && \
-    cargo build --release --locked --target ${TARGETARCH}-unknown-linux-musl
+    cargo build --release --locked --target $RUST_TARGET
 
 # Copy actual source code
 COPY src ./src
@@ -34,8 +47,13 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target,id=target-${TARGETARCH},sharing=locked \
     --mount=type=cache,target=/root/.cargo/registry \
-    cargo build --release --locked --target ${TARGETARCH}-unknown-linux-musl && \
-    cp target/${TARGETARCH}-unknown-linux-musl/release/mikrotik-exporter /app/mikrotik-exporter
+    if [ "$TARGETARCH" = "amd64" ]; then \
+        RUST_TARGET="x86_64-unknown-linux-musl"; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+        RUST_TARGET="aarch64-unknown-linux-musl"; \
+    fi && \
+    cargo build --release --locked --target $RUST_TARGET && \
+    cp target/$RUST_TARGET/release/mikrotik-exporter /app/mikrotik-exporter
 
 # Runtime stage
 FROM alpine:3.19
