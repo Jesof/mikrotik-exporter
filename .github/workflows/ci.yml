@@ -107,7 +107,7 @@ jobs:
         with:
           tool: cargo-tarpaulin
       - name: Generate coverage
-        run: cargo tarpaulin --out Xml --output-dir coverage
+        run: cargo tarpaulin --out Xml --out Html --output-dir coverage
       - name: Upload coverage artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
