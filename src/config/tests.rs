@@ -161,6 +161,146 @@ mod test {
     }
 
     #[test]
+    fn test_router_config_validate_invalid_name_characters() {
+        let config = RouterConfig {
+            name: "test@router!".to_string(),
+            address: "192.168.1.1:8728".to_string(),
+            username: "admin".to_string(),
+            password: "password".to_string().into(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid characters"));
+    }
+
+    #[test]
+    fn test_router_config_validate_valid_name_with_hyphen() {
+        let config = RouterConfig {
+            name: "my-router_01".to_string(),
+            address: "192.168.1.1:8728".to_string(),
+            username: "admin".to_string(),
+            password: "password".to_string().into(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_router_config_validate_invalid_port_zero() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: "192.168.1.1:0".to_string(),
+            username: "admin".to_string(),
+            password: "password".to_string().into(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("port cannot be 0"));
+    }
+
+    #[test]
+    fn test_router_config_validate_invalid_port_non_numeric() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: "192.168.1.1:abc".to_string(),
+            username: "admin".to_string(),
+            password: "password".to_string().into(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("expected numeric value"));
+    }
+
+    #[test]
+    fn test_router_config_validate_invalid_port_out_of_range() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: "192.168.1.1:99999".to_string(),
+            username: "admin".to_string(),
+            password: "password".to_string().into(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("expected numeric value"));
+    }
+
+    #[test]
+    fn test_router_config_validate_address_too_long() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: format!("{}.example.com:8728", "a".repeat(240)),
+            username: "admin".to_string(),
+            password: "password".to_string().into(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("too long"));
+    }
+
+    #[test]
+    fn test_router_config_validate_username_too_long() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: "192.168.1.1:8728".to_string(),
+            username: "a".repeat(65),
+            password: "password".to_string().into(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("too long"));
+    }
+
+    #[test]
+    fn test_router_config_validate_weak_password_warning() {
+        // This test verifies that weak passwords are accepted but logged
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: "192.168.1.1:8728".to_string(),
+            username: "admin".to_string(),
+            password: "short".to_string().into(),
+        };
+
+        let result = config.validate();
+        assert!(
+            result.is_ok(),
+            "Weak passwords should be accepted with a warning"
+        );
+    }
+
+    #[test]
+    fn test_router_config_validate_valid_ipv6_address() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: "[::1]:8728".to_string(),
+            username: "admin".to_string(),
+            password: "password".to_string().into(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_ok(), "IPv6 addresses should be supported");
+    }
+
+    #[test]
+    fn test_router_config_validate_valid_hostname() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: "mikrotik.local:8728".to_string(),
+            username: "admin".to_string(),
+            password: "password".to_string().into(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn test_from_env_defaults_without_router() {
         let _lock = env_lock();
         let _guards = vec![

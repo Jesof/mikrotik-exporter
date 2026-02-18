@@ -5,7 +5,7 @@
 //!
 //! Loads and parses configuration from environment variables and JSON.
 
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 
 #[cfg(test)]
@@ -46,10 +46,45 @@ pub struct RouterConfig {
 
 impl RouterConfig {
     /// Validates router configuration
+    ///
+    /// Performs comprehensive validation of all router configuration fields:
+    /// - Router name must be non-empty and contain only valid characters
+    /// - Address must be in valid 'host:port' format with valid port number
+    /// - Username must be non-empty
+    /// - Password length is checked for security best practices
+    ///
+    /// # Returns
+    /// Returns `Ok(())` if validation passes, or `Err(String)` with a descriptive
+    /// error message if validation fails.
+    ///
+    /// # Examples
+    /// ```
+    /// # use mikrotik_exporter::RouterConfig;
+    /// let config = RouterConfig {
+    ///     name: "my-router".to_string(),
+    ///     address: "192.168.1.1:8728".to_string(),
+    ///     username: "admin".to_string(),
+    ///     password: "password".to_string().into(),
+    /// };
+    /// assert!(config.validate().is_ok());
+    /// ```
     pub fn validate(&self) -> Result<(), String> {
         // Validate name is not empty
         if self.name.trim().is_empty() {
             return Err("Router name cannot be empty".to_string());
+        }
+
+        // Validate name doesn't contain invalid characters for Prometheus labels
+        // Prometheus labels must match [a-zA-Z_][a-zA-Z0-9_]*
+        if !self
+            .name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
+            return Err(format!(
+                "Router name '{}' contains invalid characters. Only alphanumeric, underscore, and hyphen are allowed",
+                self.name
+            ));
         }
 
         // Validate address format (must contain port)
@@ -60,12 +95,62 @@ impl RouterConfig {
             ));
         }
 
+        // Validate port number is valid (1-65535)
+        if let Some(port_str) = self.address.split(':').next_back() {
+            match port_str.parse::<u16>() {
+                Ok(0) => {
+                    return Err(format!(
+                        "Invalid port number in address '{}': port cannot be 0",
+                        self.address
+                    ));
+                }
+                Err(_) => {
+                    return Err(format!(
+                        "Invalid port number in address '{}': expected numeric value 1-65535",
+                        self.address
+                    ));
+                }
+                _ => {}
+            }
+        } else {
+            return Err(format!(
+                "Invalid address format '{}': missing port number",
+                self.address
+            ));
+        }
+
+        // Validate address is not too long (practical limit for DNS names)
+        if self.address.len() > 253 {
+            return Err(format!(
+                "Address '{}' is too long: maximum length is 253 characters",
+                self.address
+            ));
+        }
+
         // Validate username is not empty
         if self.username.trim().is_empty() {
             return Err(format!(
                 "Username cannot be empty for router '{}'",
                 self.name
             ));
+        }
+
+        // Validate username length (RouterOS limit is 64 characters)
+        if self.username.len() > 64 {
+            return Err(format!(
+                "Username for router '{}' is too long: maximum length is 64 characters",
+                self.name
+            ));
+        }
+
+        // Warn about weak password (optional security check)
+        let password_len = self.password.expose_secret().len();
+        if password_len > 0 && password_len < 8 {
+            tracing::warn!(
+                "Router '{}' has a weak password ({} characters): consider using a stronger password",
+                self.name,
+                password_len
+            );
         }
 
         Ok(())

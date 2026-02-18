@@ -3,7 +3,40 @@
 
 //! Metrics collection orchestration module for MikroTik routers
 //!
-//! Starts background metrics collection, manages connection pool and cleanup.
+//! # Architecture
+//!
+//! This module implements the core metrics collection loop that runs in the background
+//! to periodically collect metrics from all configured MikroTik routers.
+//!
+//! ## Components
+//!
+//! - **Main Collection Loop**: Manages the periodic collection schedule and spawns per-router tasks
+//! - **Router Task** (`router_task`): Handles metrics collection for a single router
+//! - **Cache** (`cache`): Caches immutable system information to reduce API calls
+//! - **Cleanup** (`cleanup`): Periodic cleanup of stale connections and metrics
+//!
+//! ## Collection Flow
+//!
+//! 1. The main loop waits for the configured interval (default: 30 seconds)
+//! 2. For each configured router, spawns a collection task using connection pooling
+//! 3. All router tasks run concurrently using `tokio::spawn`
+//! 4. After all tasks complete, updates pool statistics and records cycle duration
+//! 5. Every 20 cycles (10 minutes by default), performs cleanup of:
+//!    - Stale interface metrics for removed interfaces
+//!    - Expired dynamic labels (30-minute TTL)
+//!    - Inactive router metrics
+//!    - Connection pool states for removed routers
+//!
+//! ## Connection Management
+//!
+//! Uses [`ConnectionPool`] for efficient connection reuse with exponential backoff
+//! for failed connections. Connections are automatically returned to the pool via
+//! RAII guards (`PooledConnectionGuard`).
+//!
+//! ## Graceful Shutdown
+//!
+//! The collection loop listens for shutdown signals via `watch::channel` and
+//! gracefully stops collection, waiting for the cleanup task to complete.
 
 mod cache;
 mod cleanup;

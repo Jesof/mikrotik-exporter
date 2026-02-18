@@ -2,6 +2,52 @@
 // Copyright (c) 2025 Jesof
 
 //! Connection pool for managing RouterOS connections
+//!
+//! # Architecture
+//!
+//! This module implements a connection pooling mechanism for RouterOS API connections
+//! to MikroTik devices. It provides efficient connection reuse and handles connection
+//! failures with exponential backoff.
+//!
+//! ## Key Components
+//!
+//! - **ConnectionPool**: Thread-safe pool managing multiple connections using `Arc<Mutex<HashMap>>`
+//! - **PooledConnectionGuard**: RAII guard ensuring connections are always returned to the pool
+//! - **ConnectionState**: Tracks connection health with error counting and backoff logic
+//!
+//! ## Connection Lifecycle
+//!
+//! 1. **Acquisition**: `get_connection()` retrieves or creates a connection
+//!    - Checks connection state for backoff requirements
+//!    - Reuses idle connections from the pool if available
+//!    - Creates new connections when needed with authentication
+//!
+//! 2. **Usage**: Connection is wrapped in `PooledConnectionGuard`
+//!    - Guard provides mutable access via `get_mut()`
+//!    - Ensures connection is returned even on panic/drop
+//!
+//! 3. **Return**: Guard's `Drop` implementation returns connection to pool
+//!    - Uses non-blocking channel to avoid blocking drop
+//!    - Decrements active connection counter atomically
+//!
+//! ## Backoff Strategy
+//!
+//! Implements exponential backoff for failed connections:
+//! - **0-2 errors**: No backoff, immediate retry
+//! - **3-9 errors**: 2^n seconds delay (max 256 seconds)
+//! - **10+ errors**: 1-hour cooldown period
+//!
+//! ## Thread Safety
+//!
+//! - Pool uses `Arc<Mutex<HashMap>>` for thread-safe access
+//! - Active connection count uses `AtomicUsize` for lock-free stats
+//! - Connection returns use `mpsc::UnboundedSender` for async-safe return
+//!
+//! ## Performance Considerations
+//!
+//! - Idle connections expire after 5 minutes (configurable)
+//! - Background task processes returned connections asynchronously
+//! - Active connection tracking prevents pool starvation
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

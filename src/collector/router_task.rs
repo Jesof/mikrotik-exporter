@@ -2,6 +2,42 @@
 // Copyright (c) 2025 Jesof
 
 //! Per-router collection task
+//!
+//! # Purpose
+//!
+//! This module implements the per-router metrics collection logic that runs concurrently
+//! for each configured router in the background.
+//!
+//! ## Collection Process
+//!
+//! 1. **Client Creation**: Creates a `MikroTikClient` with connection pool
+//! 2. **Metrics Collection**: Calls `collect_metrics()` to gather all router data
+//! 3. **Active Interface Tracking**: Records which interfaces are currently active
+//! 4. **Metrics Update**: Updates the shared `MetricsRegistry` with new values
+//! 5. **Scrape Recording**: Records success/failure and duration for monitoring
+//! 6. **System Info Caching**: Caches immutable system information (version, board)
+//! 7. **Error Tracking**: Updates connection error count for health monitoring
+//!
+//! ## Concurrency Model
+//!
+//! - Each router runs in its own `tokio::spawn` task
+//! - Tasks run concurrently without blocking each other
+//! - Shared state (`MetricsRegistry`, `ConnectionPool`) is `Arc` for thread safety
+//! - Active interface tracking uses `Mutex<HashSet>` for safe concurrent updates
+//!
+//! ## Error Handling
+//!
+//! - Collection errors are logged but don't stop the main loop
+//! - Failed collections record scrape errors for monitoring
+//! - Connection errors update consecutive error count for backoff
+//! - Graceful degradation: one router failure doesn't affect others
+//!
+//! ## Performance Tracking
+//!
+//! - Records collection duration for each router
+//! - Logs detailed metrics on success (interface count, CPU, memory)
+//! - Logs warnings with error details on failure
+//! - Trace-level logging for debugging with full error context
 
 use crate::config::RouterConfig;
 use crate::metrics::labels::InterfaceLabels;

@@ -2,6 +2,79 @@
 // Copyright (c) 2025 Jesof
 
 //! Metrics registry and update logic
+//!
+//! # Architecture
+//!
+//! This module implements the core metrics registry that stores and manages all Prometheus
+//! metrics collected from MikroTik routers. It uses a lock-free design for high concurrency.
+//!
+//! ## Key Components
+//!
+//! - **MetricsRegistry**: Central registry containing all metric families
+//! - **Metric Families**: Groups of metrics with the same name and labels
+//!   - **Counters**: Monotonically increasing values (delta-calculated)
+//!   - **Gauges**: Point-in-time values (direct updates)
+//! - **Label Types**: Strongly-typed label structures for each metric category
+//!
+//! ## Metric Categories
+//!
+//! ### Interface Metrics (Counters with Delta Calculation)
+//! - `interface_rx_bytes/tx_bytes`: Network traffic volume
+//! - `interface_rx_packets/tx_packets`: Packet counts
+//! - `interface_rx_errors/tx_errors`: Error counts
+//! - `interface_running`: Interface state gauge
+//!
+//! ### System Metrics (Gauges)
+//! - `system_cpu_load`: Current CPU utilization
+//! - `system_free_memory/total_memory`: Memory statistics
+//! - `system_info`: Router version/board information
+//! - `system_uptime_seconds`: Router uptime
+//!
+//! ### Connection Tracking (Gauges)
+//! - `connection_tracking_count`: Active connections by source/protocol
+//!
+//! ### WireGuard Metrics (Gauges)
+//! - `wireguard_peer_rx_bytes/tx_bytes`: WireGuard traffic
+//! - `wireguard_peer_latest_handshake`: Last handshake timestamp
+//! - `wireguard_peer_info`: Peer configuration state
+//!
+//! ### Certificate Metrics (Gauges)
+//! - `certificate_days_until_expiry`: Certificate expiration countdown
+//!
+//! ### Scrape Status (Counters)
+//! - `scrape_success/errors`: Collection success/failure counts
+//! - `scrape_duration_milliseconds`: Collection timing
+//! - `connection_consecutive_errors`: Connection error tracking
+//!
+//! ## Delta Calculation
+//!
+//! Counter metrics from RouterOS are absolute values. This module automatically
+//! calculates deltas by:
+//! 1. Storing previous snapshot in `prev_iface` DashMap
+//! 2. Computing difference: `current_value - previous_value`
+//! 3. Handling counter resets (router reboot) by detecting decreases
+//! 4. Incrementing Prometheus counter by the delta amount
+//!
+//! ## Dynamic Label Management
+//!
+//! For dynamic entities (interfaces, WireGuard peers, certificates):
+//! - Labels are created on-demand during first collection
+//! - Stale labels are automatically cleaned up after 30 minutes
+//! - Cleanup runs every 20 collection cycles (~10 minutes default)
+//! - Prevents unbounded label growth from removed entities
+//!
+//! ## Thread Safety
+//!
+//! - Registry uses `Arc<Mutex<Registry>>` for safe concurrent access
+//! - Previous snapshots use `DashMap` for lock-free concurrent reads/writes
+//! - All metric updates are atomic and thread-safe
+//!
+//! ## Performance
+//!
+//! - O(1) metric lookup and update operations
+//! - Lock-free reads for previous snapshots via DashMap
+//! - Minimal allocation during hot path (delta calculation)
+//! - Efficient encoding for Prometheus scrape endpoint
 
 mod cleanup;
 mod init;
