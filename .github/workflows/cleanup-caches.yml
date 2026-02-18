@@ -25,15 +25,47 @@ jobs:
             
             console.log(`Deleting caches older than: ${oneWeekAgo.toISOString()}`);
             
-            const caches = await github.rest.actions.getActionsCacheList({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
+            // Получаем все кеши с обработкой пагинации
+            let allCaches = [];
+            let page = 1;
+            let perPage = 100; // Максимальное количество элементов на странице
+            let hasNext = true;
+            
+            while (hasNext) {
+              console.log(`Fetching caches page ${page}...`);
+              const response = await github.rest.actions.getActionsCacheList({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: perPage,
+                page: page
+              });
+              
+              const caches = response.data.actions_caches;
+              console.log(`Received ${caches.length} caches on page ${page}`);
+              
+              if (caches.length === 0) {
+                hasNext = false;
+              } else {
+                allCaches = allCaches.concat(caches);
+                page++;
+              }
+              
+              // Ограничиваем количество страниц для предотвращения бесконечного цикла
+              if (page > 100) {
+                console.log("Reached maximum page limit, stopping pagination");
+                break;
+              }
+            }
+            
+            console.log(`Total caches fetched: ${allCaches.length}`);
             
             let deletedCount = 0;
             
-            for (const cache of caches.data.actions_caches) {
+            for (const cache of allCaches) {
               const cacheCreated = new Date(cache.created_at);
+              
+              // Отладочная информация о каждом кеше
+              console.log(`Cache: ${cache.key} created at ${cache.created_at} (${cacheCreated.toISOString()})`);
               
               // Удаление кешей, созданных более недели назад
               if (cacheCreated < oneWeekAgo) {
