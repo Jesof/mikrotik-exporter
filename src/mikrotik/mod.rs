@@ -21,7 +21,7 @@ pub use pool::ConnectionPool;
 
 /// Types for router metrics and statistics
 pub use types::{
-    ConnectionTrackingStats, InterfaceStats, RouterMetrics, SystemResource,
+    CertificateStats, ConnectionTrackingStats, InterfaceStats, RouterMetrics, SystemResource,
     WireGuardInterfaceStats, WireGuardPeerStats,
 };
 

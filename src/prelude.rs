@@ -19,6 +19,6 @@ pub use crate::metrics::{MetricsRegistry, RouterLabels};
 
 // MikroTik client
 pub use crate::mikrotik::{
-    ConnectionPool, ConnectionTrackingStats, InterfaceStats, RouterMetrics, SystemResource,
-    WireGuardInterfaceStats, WireGuardPeerStats,
+    CertificateStats, ConnectionPool, ConnectionTrackingStats, InterfaceStats, RouterMetrics,
+    SystemResource, WireGuardInterfaceStats, WireGuardPeerStats,
 };
