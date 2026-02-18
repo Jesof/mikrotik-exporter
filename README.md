@@ -257,7 +257,7 @@ src/
 
 ```toml
 [dependencies]
-mikrotik-exporter = "0.2"
+mikrotik-exporter = "0.2.5"
 ```
 
 ```rust
