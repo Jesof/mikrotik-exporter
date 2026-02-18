@@ -241,7 +241,7 @@ mod test {
                 "password": "secret"
             }
         ]"#;
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("ROUTERS_CONFIG", routers_json),
             EnvVarGuard::unset("ROUTEROS_ADDRESS"),
             EnvVarGuard::unset("ROUTEROS_USERNAME"),
@@ -257,7 +257,7 @@ mod test {
     #[test]
     fn test_from_env_legacy_router_defaults() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("ROUTEROS_ADDRESS", "192.168.88.1:8728"),
             EnvVarGuard::unset("ROUTERS_CONFIG"),
             EnvVarGuard::unset("ROUTEROS_USERNAME"),
@@ -274,7 +274,7 @@ mod test {
     #[test]
     fn test_from_env_legacy_router_custom_creds() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("ROUTEROS_ADDRESS", "192.168.88.2:8728"),
             EnvVarGuard::set("ROUTEROS_USERNAME", "root"),
             EnvVarGuard::set("ROUTEROS_PASSWORD", "topsecret"),
