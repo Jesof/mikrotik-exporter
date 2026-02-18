@@ -126,7 +126,9 @@
         "orientation": "horizontal",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -198,7 +200,9 @@
         "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -270,7 +274,9 @@
         "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -334,7 +340,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -426,7 +434,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -525,7 +535,12 @@
       "id": 6,
       "options": {
         "legend": {
-          "calcs": ["last", "min", "mean", "max"],
+          "calcs": [
+            "last",
+            "min",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -656,7 +671,12 @@
       "id": 7,
       "options": {
         "legend": {
-          "calcs": ["last", "min", "mean", "max"],
+          "calcs": [
+            "last",
+            "min",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -863,7 +883,11 @@
       "id": 8,
       "options": {
         "legend": {
-          "calcs": ["last", "mean", "max"],
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
@@ -961,7 +985,11 @@
       "id": 9,
       "options": {
         "legend": {
-          "calcs": ["last", "mean", "max"],
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
@@ -1059,7 +1087,11 @@
       "id": 10,
       "options": {
         "legend": {
-          "calcs": ["last", "mean", "max"],
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
@@ -1157,7 +1189,11 @@
       "id": 11,
       "options": {
         "legend": {
-          "calcs": ["last", "mean", "max"],
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
@@ -1259,7 +1295,9 @@
       "id": 12,
       "options": {
         "legend": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
@@ -1381,7 +1419,11 @@
       "id": 28,
       "options": {
         "legend": {
-          "calcs": ["last", "mean", "max"],
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
@@ -1479,7 +1521,11 @@
       "id": 29,
       "options": {
         "legend": {
-          "calcs": ["last", "mean", "max"],
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
@@ -1702,7 +1748,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1795,7 +1843,11 @@
       "id": 21,
       "options": {
         "legend": {
-          "calcs": ["last", "mean", "max"],
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
@@ -1901,7 +1953,11 @@
         "fullHighlight": false,
         "groupWidth": 0.7,
         "legend": {
-          "calcs": ["last", "mean", "max"],
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
@@ -2016,7 +2072,11 @@
         "fullHighlight": false,
         "groupWidth": 0.7,
         "legend": {
-          "calcs": ["last", "mean", "max"],
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
@@ -2355,7 +2415,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "decbytes"
         },
         "overrides": []
       },
@@ -2368,7 +2428,11 @@
       "id": 154,
       "options": {
         "legend": {
-          "calcs": ["last", "mean", "max"],
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
@@ -2466,7 +2530,11 @@
       "id": 155,
       "options": {
         "legend": {
-          "calcs": ["last", "mean", "max"],
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
@@ -2551,7 +2619,7 @@
               }
             ]
           },
-          "unit": "bps"
+          "unit": "Bps"
         },
         "overrides": []
       },
@@ -2564,7 +2632,11 @@
       "id": 157,
       "options": {
         "legend": {
-          "calcs": ["last", "mean", "max"],
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
@@ -2662,7 +2734,11 @@
       "id": 158,
       "options": {
         "legend": {
-          "calcs": ["last", "mean", "max"],
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
@@ -2812,11 +2888,15 @@
           "options": {
             "fields": {
               "Value #A": {
-                "aggregations": ["sum"],
+                "aggregations": [
+                  "sum"
+                ],
                 "operation": "aggregate"
               },
               "Value #B": {
-                "aggregations": ["sum"],
+                "aggregations": [
+                  "sum"
+                ],
                 "operation": "aggregate"
               },
               "action": {
@@ -3068,7 +3148,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 125
+        "y": 134
       },
       "id": 151,
       "options": {
@@ -3077,7 +3157,9 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": ["sum"],
+          "reducer": [
+            "sum"
+          ],
           "show": false
         },
         "showHeader": true,
@@ -3113,7 +3195,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 132
+        "y": 141
       },
       "id": 104,
       "panels": [],
@@ -3191,12 +3273,17 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 133
+        "y": 142
       },
       "id": 14,
       "options": {
         "legend": {
-          "calcs": ["last", "min", "mean", "max"],
+          "calcs": [
+            "last",
+            "min",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -3267,7 +3354,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 133
+        "y": 142
       },
       "id": 18,
       "options": {
@@ -3275,7 +3362,9 @@
         "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -3363,12 +3452,16 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 141
+        "y": 150
       },
       "id": 17,
       "options": {
         "legend": {
-          "calcs": ["last", "mean", "max"],
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -3444,7 +3537,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 141
+        "y": 150
       },
       "id": 15,
       "options": {
@@ -3454,7 +3547,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -3520,7 +3615,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 141
+        "y": 150
       },
       "id": 16,
       "options": {
@@ -3530,7 +3625,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -3559,7 +3656,11 @@
   "preload": true,
   "refresh": "30s",
   "schemaVersion": 42,
-  "tags": ["mikrotik", "network", "router"],
+  "tags": [
+    "mikrotik",
+    "network",
+    "router"
+  ],
   "templating": {
     "list": [
       {
@@ -3660,7 +3761,7 @@
   "timezone": "browser",
   "title": "MikroTik Router Monitoring",
   "uid": "mikrotik-exporter",
-  "version": 20,
+  "version": 31,
   "weekStart": "",
   "id": null
 }
