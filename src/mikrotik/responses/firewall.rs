@@ -159,7 +159,7 @@ mod tests {
         let result = parse_firewall_rules(&[], "ipv4", "filter");
         assert_eq!(result.len(), 0);
     }
-    
+
     #[test]
     fn test_parse_firewall_rules_with_stats_fields() {
         let mut rule = HashMap::new();
@@ -167,23 +167,23 @@ mod tests {
         rule.insert("action".to_string(), "accept".to_string());
         rule.insert("bytes".to_string(), "1024000".to_string());
         rule.insert("packets".to_string(), "5000".to_string());
-        
+
         let result = parse_firewall_rules(&[rule], "ipv4", "filter");
-        
+
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].bytes, 1024000);
         assert_eq!(result[0].packets, 5000);
     }
-    
+
     #[test]
     fn test_parse_firewall_rules_without_stats_fields() {
         let mut rule = HashMap::new();
         rule.insert("chain".to_string(), "input".to_string());
         rule.insert("action".to_string(), "accept".to_string());
         // No bytes/packets fields
-        
+
         let result = parse_firewall_rules(&[rule], "ipv4", "filter");
-        
+
         assert_eq!(result.len(), 1);
         // Should default to 0 when fields are missing
         assert_eq!(result[0].bytes, 0);
