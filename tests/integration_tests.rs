@@ -13,7 +13,8 @@
 
 use dotenvy::dotenv;
 use mikrotik_exporter::{
-    ConnectionPool, InterfaceStats, MetricsRegistry, RouterLabels, RouterMetrics, SystemResource,
+    ConnectionPool, FirewallRuleStats, InterfaceStats, MetricsRegistry, RouterLabels,
+    RouterMetrics, SystemResource,
 };
 use std::sync::Arc;
 
@@ -191,6 +192,14 @@ async fn test_metrics_update_and_retrieval() {
         wireguard_interfaces: vec![],
         wireguard_peers: vec![],
         certificate_stats: vec![],
+        firewall_rules: vec![FirewallRuleStats {
+            chain: "forward".to_string(),
+            action: "accept".to_string(),
+            bytes: 1024,
+            packets: 5,
+            ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
+        }],
     };
 
     // Update metrics

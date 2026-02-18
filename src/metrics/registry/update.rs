@@ -4,8 +4,8 @@
 //! Metric update logic for router snapshots
 
 use crate::metrics::labels::{
-    CertificateLabels, ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels,
-    WireGuardInterfaceLabels, WireGuardPeerInfoLabels, WireGuardPeerLabels,
+    CertificateLabels, ConntrackLabels, FirewallRuleLabels, InterfaceLabels, RouterLabels,
+    SystemInfoLabels, WireGuardInterfaceLabels, WireGuardPeerInfoLabels, WireGuardPeerLabels,
 };
 use crate::metrics::parsers::parse_uptime_to_seconds;
 use crate::mikrotik::{RouterMetrics, WireGuardPeerStats};
@@ -311,6 +311,75 @@ impl MetricsRegistry {
                     .set(0);
             }
             *prev_labels = current_certificates;
+        }
+
+        // Update firewall rule metrics
+        let now = Instant::now();
+        let mut current_firewall_rules = HashSet::new();
+        for rule in &metrics.firewall_rules {
+            let rule_labels = FirewallRuleLabels {
+                router: metrics.router_name.clone(),
+                chain: rule.chain.clone(),
+                action: rule.action.clone(),
+                ip_version: rule.ip_version.clone(),
+                section: rule.section.clone(),
+            };
+            current_firewall_rules.insert(rule_labels.clone());
+
+            // Get previous values or initialize with current values to handle first collection
+            let prev_values = self
+                .prev_firewall_rules
+                .get(&rule_labels)
+                .map(|entry| *entry.value())
+                .unwrap_or((rule.bytes, rule.packets));
+
+            let (prev_bytes, prev_packets) = prev_values;
+
+            // Calculate deltas, handling counter resets
+            let dx_bytes = if rule.bytes >= prev_bytes {
+                rule.bytes - prev_bytes
+            } else {
+                // Counter reset (router reboot), use current value as delta
+                rule.bytes
+            };
+
+            let dx_packets = if rule.packets >= prev_packets {
+                rule.packets - prev_packets
+            } else {
+                // Counter reset (router reboot), use current value as delta
+                rule.packets
+            };
+
+            // Update Prometheus counters with deltas
+            self.firewall_rule_bytes
+                .get_or_create(&rule_labels)
+                .inc_by(dx_bytes);
+            self.firewall_rule_packets
+                .get_or_create(&rule_labels)
+                .inc_by(dx_packets);
+
+            // Store current values for next iteration
+            self.prev_firewall_rules
+                .insert(rule_labels.clone(), (rule.bytes, rule.packets));
+            self.firewall_rule_last_seen.insert(rule_labels, now);
+        }
+
+        // Clean up stale firewall rules for this router
+        {
+            let mut prev_firewall_rules_entry = self
+                .prev_firewall_rules_by_router
+                .entry(metrics.router_name.clone())
+                .or_default();
+            let prev_labels = prev_firewall_rules_entry.value_mut();
+            for stale in prev_labels.difference(&current_firewall_rules) {
+                // Reset counters for stale labels
+                self.firewall_rule_bytes.get_or_create(stale).inc_by(0);
+                self.firewall_rule_packets.get_or_create(stale).inc_by(0);
+                // Remove from tracking maps
+                self.prev_firewall_rules.remove(stale);
+                self.firewall_rule_last_seen.remove(stale);
+            }
+            *prev_labels = current_firewall_rules;
         }
     }
 }

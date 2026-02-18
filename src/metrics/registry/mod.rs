@@ -41,6 +41,9 @@
 //! ### Certificate Metrics (Gauges)
 //! - `certificate_days_until_expiry`: Certificate expiration countdown
 //!
+//! ### Firewall Metrics (Counters)
+//! - `firewall_rule_bytes/packets`: Firewall rule match counters by section (filter, nat, mangle, raw)
+//!
 //! ### Scrape Status (Counters)
 //! - `scrape_success/errors`: Collection success/failure counts
 //! - `scrape_duration_milliseconds`: Collection timing
@@ -82,8 +85,8 @@ mod scrape;
 mod update;
 
 use crate::metrics::labels::{
-    CertificateLabels, ConntrackLabels, InterfaceLabels, RouterLabels, SystemInfoLabels,
-    WireGuardPeerInfoLabels, WireGuardPeerLabels,
+    CertificateLabels, ConntrackLabels, FirewallRuleLabels, InterfaceLabels, RouterLabels,
+    SystemInfoLabels, WireGuardPeerInfoLabels, WireGuardPeerLabels,
 };
 use dashmap::DashMap;
 use prometheus_client::metrics::counter::Counter;
@@ -115,6 +118,9 @@ pub struct MetricsRegistry {
     interface_tx_packets: Family<InterfaceLabels, Counter>,
     interface_rx_errors: Family<InterfaceLabels, Counter>,
     interface_tx_errors: Family<InterfaceLabels, Counter>,
+    // firewall rule counters (delta-applied)
+    firewall_rule_bytes: Family<FirewallRuleLabels, Counter>,
+    firewall_rule_packets: Family<FirewallRuleLabels, Counter>,
     // gauges
     interface_running: Family<InterfaceLabels, Gauge>,
     system_cpu_load: Family<RouterLabels, Gauge>,
@@ -143,13 +149,16 @@ pub struct MetricsRegistry {
     // certificate metrics
     certificate_days_until_expiry: Family<CertificateLabels, Gauge>,
     prev_iface: Arc<DashMap<InterfaceLabels, InterfaceSnapshot>>,
+    prev_firewall_rules: Arc<DashMap<FirewallRuleLabels, (u64, u64)>>,
     prev_conntrack: Arc<DashMap<String, HashSet<ConntrackLabels>>>,
     prev_system_info: Arc<DashMap<String, SystemInfoLabels>>,
     prev_wireguard_peers: Arc<DashMap<String, HashSet<WireGuardPeerLabels>>>,
     prev_wireguard_peer_info:
         Arc<DashMap<String, HashMap<WireGuardPeerLabels, WireGuardPeerInfoLabels>>>,
     prev_certificates: Arc<DashMap<String, HashSet<CertificateLabels>>>,
+    prev_firewall_rules_by_router: Arc<DashMap<String, HashSet<FirewallRuleLabels>>>,
     conntrack_last_seen: Arc<DashMap<ConntrackLabels, Instant>>,
+    firewall_rule_last_seen: Arc<DashMap<FirewallRuleLabels, Instant>>,
     wireguard_peer_last_seen: Arc<DashMap<WireGuardPeerLabels, Instant>>,
     wireguard_peer_info_last_seen: Arc<DashMap<WireGuardPeerInfoLabels, Instant>>,
     certificate_last_seen: Arc<DashMap<CertificateLabels, Instant>>,
@@ -164,6 +173,7 @@ impl Default for MetricsRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mikrotik::types::FirewallRuleStats;
     use crate::mikrotik::{ConnectionTrackingStats, InterfaceStats, RouterMetrics, SystemResource};
 
     fn make_router_metrics(
@@ -179,6 +189,14 @@ mod tests {
             wireguard_interfaces: Vec::new(),
             wireguard_peers: Vec::new(),
             certificate_stats: Vec::new(),
+            firewall_rules: vec![FirewallRuleStats {
+                chain: "forward".to_string(),
+                action: "accept".to_string(),
+                bytes: 1024,
+                packets: 5,
+                ip_version: "ipv4".to_string(),
+                section: "filter".to_string(),
+            }],
         }
     }
 

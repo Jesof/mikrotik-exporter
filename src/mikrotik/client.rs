@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use super::pool::ConnectionPool;
 use super::responses::{
-    parse_certificates, parse_connection_tracking, parse_interfaces, parse_system,
-    parse_wireguard_interfaces, parse_wireguard_peers,
+    parse_certificates, parse_connection_tracking, parse_firewall_rules, parse_interfaces,
+    parse_system, parse_wireguard_interfaces, parse_wireguard_peers,
 };
 use super::types::RouterMetrics;
 
@@ -152,6 +152,16 @@ impl MikroTikClient {
         let wireguard_peers_result = conn.command("/interface/wireguard/peers/print", &[]).await;
         let certificates_result = conn.command("/certificate/print", &[".detail"]).await;
 
+        // Firewall commands
+        let firewall_filter_v4_result = conn.command("/ip/firewall/filter/print", &[]).await;
+        let firewall_nat_v4_result = conn.command("/ip/firewall/nat/print", &[]).await;
+        let firewall_mangle_v4_result = conn.command("/ip/firewall/mangle/print", &[]).await;
+        let firewall_raw_v4_result = conn.command("/ip/firewall/raw/print", &[]).await;
+        let firewall_filter_v6_result = conn.command("/ipv6/firewall/filter/print", &[]).await;
+        let firewall_nat_v6_result = conn.command("/ipv6/firewall/nat/print", &[]).await;
+        let firewall_mangle_v6_result = conn.command("/ipv6/firewall/mangle/print", &[]).await;
+        let firewall_raw_v6_result = conn.command("/ipv6/firewall/raw/print", &[]).await;
+
         // Record connection state BEFORE dropping guard to prevent race condition
         let success = system_result.is_ok() && interfaces_result.is_ok();
         if success {
@@ -189,6 +199,53 @@ impl MikroTikClient {
         // Parse certificates
         let certificate_stats = parse_certificates(&certificates_result.unwrap_or_default());
 
+        // Parse firewall rules
+        let mut firewall_rules = Vec::new();
+
+        // Parse IPv4 firewall rules
+        firewall_rules.extend(parse_firewall_rules(
+            &firewall_filter_v4_result.unwrap_or_default(),
+            "ipv4",
+            "filter",
+        ));
+        firewall_rules.extend(parse_firewall_rules(
+            &firewall_nat_v4_result.unwrap_or_default(),
+            "ipv4",
+            "nat",
+        ));
+        firewall_rules.extend(parse_firewall_rules(
+            &firewall_mangle_v4_result.unwrap_or_default(),
+            "ipv4",
+            "mangle",
+        ));
+        firewall_rules.extend(parse_firewall_rules(
+            &firewall_raw_v4_result.unwrap_or_default(),
+            "ipv4",
+            "raw",
+        ));
+
+        // Parse IPv6 firewall rules
+        firewall_rules.extend(parse_firewall_rules(
+            &firewall_filter_v6_result.unwrap_or_default(),
+            "ipv6",
+            "filter",
+        ));
+        firewall_rules.extend(parse_firewall_rules(
+            &firewall_nat_v6_result.unwrap_or_default(),
+            "ipv6",
+            "nat",
+        ));
+        firewall_rules.extend(parse_firewall_rules(
+            &firewall_mangle_v6_result.unwrap_or_default(),
+            "ipv6",
+            "mangle",
+        ));
+        firewall_rules.extend(parse_firewall_rules(
+            &firewall_raw_v6_result.unwrap_or_default(),
+            "ipv6",
+            "raw",
+        ));
+
         Ok(RouterMetrics {
             router_name: self.config.name.clone(),
             interfaces,
@@ -197,6 +254,7 @@ impl MikroTikClient {
             wireguard_interfaces,
             wireguard_peers,
             certificate_stats,
+            firewall_rules,
         })
     }
 }

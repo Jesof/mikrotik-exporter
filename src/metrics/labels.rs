@@ -59,6 +59,15 @@ pub(crate) struct CertificateLabels {
     pub(crate) name: String,
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub(crate) struct FirewallRuleLabels {
+    pub(crate) router: String,
+    pub(crate) chain: String,
+    pub(crate) action: String,
+    pub(crate) ip_version: String,
+    pub(crate) section: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,5 +175,89 @@ mod tests {
         let debug_str = format!("{:?}", labels);
         assert!(debug_str.contains("router1"));
         assert!(debug_str.contains("ether1"));
+    }
+
+    #[test]
+    fn test_firewall_rule_labels_creation() {
+        let labels = FirewallRuleLabels {
+            router: "router1".to_string(),
+            chain: "forward".to_string(),
+            action: "accept".to_string(),
+            ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
+        };
+
+        assert_eq!(labels.router, "router1");
+        assert_eq!(labels.chain, "forward");
+        assert_eq!(labels.action, "accept");
+        assert_eq!(labels.ip_version, "ipv4");
+    }
+
+    #[test]
+    fn test_firewall_rule_labels_equality() {
+        let labels1 = FirewallRuleLabels {
+            router: "router1".to_string(),
+            chain: "input".to_string(),
+            action: "drop".to_string(),
+            ip_version: "ipv6".to_string(),
+            section: "filter".to_string(),
+        };
+
+        let labels2 = FirewallRuleLabels {
+            router: "router1".to_string(),
+            chain: "input".to_string(),
+            action: "drop".to_string(),
+            ip_version: "ipv6".to_string(),
+            section: "filter".to_string(),
+        };
+
+        assert_eq!(labels1, labels2);
+    }
+
+    #[test]
+    fn test_firewall_rule_labels_inequality() {
+        let labels1 = FirewallRuleLabels {
+            router: "router1".to_string(),
+            chain: "output".to_string(),
+            action: "reject".to_string(),
+            ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
+        };
+
+        let labels2 = FirewallRuleLabels {
+            router: "router1".to_string(),
+            chain: "output".to_string(),
+            action: "accept".to_string(), // Different action
+            ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
+        };
+
+        assert_ne!(labels1, labels2);
+    }
+
+    #[test]
+    fn test_firewall_rule_labels_hash() {
+        use std::collections::HashMap;
+
+        let labels1 = FirewallRuleLabels {
+            router: "router1".to_string(),
+            chain: "forward".to_string(),
+            action: "accept".to_string(),
+            ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
+        };
+
+        let labels2 = FirewallRuleLabels {
+            router: "router1".to_string(),
+            chain: "forward".to_string(),
+            action: "accept".to_string(),
+            ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
+        };
+
+        let mut map = HashMap::new();
+        map.insert(labels1, 100);
+
+        assert_eq!(map.get(&labels2), Some(&100));
     }
 }
