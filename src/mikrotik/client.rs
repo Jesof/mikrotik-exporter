@@ -153,14 +153,14 @@ impl MikroTikClient {
         let certificates_result = conn.command("/certificate/print", &[".detail"]).await;
 
         // Firewall commands
-        let firewall_filter_v4_result = conn.command("/ip/firewall/filter/print", &[]).await;
-        let firewall_nat_v4_result = conn.command("/ip/firewall/nat/print", &[]).await;
-        let firewall_mangle_v4_result = conn.command("/ip/firewall/mangle/print", &[]).await;
-        let firewall_raw_v4_result = conn.command("/ip/firewall/raw/print", &[]).await;
-        let firewall_filter_v6_result = conn.command("/ipv6/firewall/filter/print", &[]).await;
-        let firewall_nat_v6_result = conn.command("/ipv6/firewall/nat/print", &[]).await;
-        let firewall_mangle_v6_result = conn.command("/ipv6/firewall/mangle/print", &[]).await;
-        let firewall_raw_v6_result = conn.command("/ipv6/firewall/raw/print", &[]).await;
+        let firewall_filter_v4_result = conn.command("/ip/firewall/filter/print", &[".proplist=.id,chain,action,bytes,packets,disabled"]).await;
+        let firewall_nat_v4_result = conn.command("/ip/firewall/nat/print", &[".proplist=.id,chain,action,bytes,packets,disabled"]).await;
+        let firewall_mangle_v4_result = conn.command("/ip/firewall/mangle/print", &[".proplist=.id,chain,action,bytes,packets,disabled"]).await;
+        let firewall_raw_v4_result = conn.command("/ip/firewall/raw/print", &[".proplist=.id,chain,action,bytes,packets,disabled"]).await;
+        let firewall_filter_v6_result = conn.command("/ipv6/firewall/filter/print", &[".proplist=.id,chain,action,bytes,packets,disabled"]).await;
+        let firewall_nat_v6_result = conn.command("/ipv6/firewall/nat/print", &[".proplist=.id,chain,action,bytes,packets,disabled"]).await;
+        let firewall_mangle_v6_result = conn.command("/ipv6/firewall/mangle/print", &[".proplist=.id,chain,action,bytes,packets,disabled"]).await;
+        let firewall_raw_v6_result = conn.command("/ipv6/firewall/raw/print", &[".proplist=.id,chain,action,bytes,packets,disabled"]).await;
 
         // Record connection state BEFORE dropping guard to prevent race condition
         let success = system_result.is_ok() && interfaces_result.is_ok();
