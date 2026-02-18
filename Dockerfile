@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # Build stage
-FROM rust:1.91-alpine AS builder
+FROM --platform=$TARGETPLATFORM rust:1.91-alpine AS builder
 
 # Install build dependencies (disable triggers for QEMU compatibility)
 RUN apk add --no-cache --no-scripts \
@@ -21,8 +21,9 @@ ARG TARGETARCH
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target,id=target-${TARGETARCH},sharing=locked \
+    --mount=type=cache,target=/root/.cargo/registry \
     mkdir src && echo "fn main() {}" > src/main.rs && \
-    cargo build --release --locked
+    cargo build --release --locked --target ${TARGETARCH}-unknown-linux-musl
 
 # Copy actual source code
 COPY src ./src
@@ -32,8 +33,9 @@ COPY clippy.toml rustfmt.toml ./
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target,id=target-${TARGETARCH},sharing=locked \
-    cargo build --release --locked && \
-    cp target/release/mikrotik-exporter /app/mikrotik-exporter
+    --mount=type=cache,target=/root/.cargo/registry \
+    cargo build --release --locked --target ${TARGETARCH}-unknown-linux-musl && \
+    cp target/${TARGETARCH}-unknown-linux-musl/release/mikrotik-exporter /app/mikrotik-exporter
 
 # Runtime stage
 FROM alpine:3.19
