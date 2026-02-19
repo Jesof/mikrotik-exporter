@@ -2436,7 +2436,7 @@
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
-          "sortBy": "Last",
+          "sortBy": "Mean",
           "sortDesc": true
         },
         "tooltip": {
@@ -2454,7 +2454,7 @@
           },
           "editorMode": "code",
           "expr": "mikrotik_firewall_rule_bytes_total{router=\"$router\",section=~\"$section\"}",
-          "legendFormat": "{{rule_id}}: {{section}}/{{chain}} - {{action}} ({{ip_version}})",
+          "legendFormat": "{{section}}/{{chain}} - {{action}} ({{ip_version}})",
           "range": true,
           "refId": "A"
         }
@@ -2538,7 +2538,7 @@
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
-          "sortBy": "Last",
+          "sortBy": "Mean",
           "sortDesc": true
         },
         "tooltip": {
@@ -2640,7 +2640,7 @@
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
-          "sortBy": "Last",
+          "sortBy": "Mean",
           "sortDesc": true
         },
         "tooltip": {
@@ -2658,7 +2658,7 @@
           },
           "editorMode": "code",
           "expr": "rate(mikrotik_firewall_rule_bytes_total{router=\"$router\",section=~\"$section\"}[$__rate_interval])",
-          "legendFormat": "{{rule_id}}: {{section}}/{{chain}} - {{action}}",
+          "legendFormat": "{{section}}/{{chain}} - {{action}} ({{ip_version}})",
           "range": true,
           "refId": "A"
         }
@@ -2742,7 +2742,7 @@
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
-          "sortBy": "Last",
+          "sortBy": "Mean",
           "sortDesc": true
         },
         "tooltip": {
@@ -2760,7 +2760,7 @@
           },
           "editorMode": "code",
           "expr": "rate(mikrotik_firewall_rule_packets_total{router=\"$router\",section=~\"$section\"}[$__rate_interval])",
-          "legendFormat": "{{section}}/{{chain}} - {{action}}",
+          "legendFormat": "{{section}}/{{chain}} - {{action}} ({{ip_version}})",
           "range": true,
           "refId": "A"
         }
@@ -3761,7 +3761,7 @@
   "timezone": "browser",
   "title": "MikroTik Router Monitoring",
   "uid": "mikrotik-exporter",
-  "version": 31,
+  "version": 32,
   "weekStart": "",
   "id": null
 }
