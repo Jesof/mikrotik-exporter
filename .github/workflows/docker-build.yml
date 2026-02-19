@@ -1,5 +1,3 @@
-# GitHub Actions workflow для сборки и публикации Docker образа
-
 name: Docker Build and Push
 
 on:
@@ -47,36 +45,32 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      packages: write
-      attestations: write
-      id-token: write
-
+    outputs:
+      tags: ${{ steps.meta.outputs.tags }}
+      labels: ${{ steps.meta.outputs.labels }}
+      base_tags: ${{ steps.tags.outputs.base_tags }}
+      arm64_tags: ${{ steps.tags.outputs.arm64_tags }}
+      amd64_tags: ${{ steps.tags.outputs.amd64_tags }}
+      should_push: ${{ inputs.push }}
+      build_multiarch: ${{ steps.check.outputs.build_multiarch }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009a67214ff5f5447ce83dd
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-
-      - name: Log in to GitHub Container Registry
-        if: inputs.push
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check if multi-arch build
+        id: check
+        run: |
+          if [[ "${{ inputs.platforms }}" == *"linux/arm64"* && "${{ inputs.platforms }}" == *"linux/amd64"* ]]; then
+            echo "build_multiarch=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_multiarch=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -91,19 +85,9 @@ jobs:
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Sanitize platform for cache
-        id: cache-key
-        shell: bash
-        run: |
-          PLATFORM_CLEAN=$(echo "${{ inputs.platforms }}" | sed 's|linux/||g' | sed 's|,|-|g')
-          echo "platform=${PLATFORM_CLEAN}" >> "$GITHUB_OUTPUT"
-
       - name: Prepare arch tags
         id: tags
-        if: >-
-          inputs.push &&
-          contains(inputs.platforms, 'linux/arm64') &&
-          contains(inputs.platforms, 'linux/amd64')
+        if: inputs.push && steps.check.outputs.build_multiarch == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -127,78 +111,130 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Build Docker image (no push)
+  build-amd64:
+    needs: prepare
+    if: contains(inputs.platforms, 'linux/amd64')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009a67214ff5f5447ce83dd
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      - name: Log in to GitHub Container Registry
+        if: inputs.push
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image (amd64, no push)
         if: ${{ !inputs.push }}
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          platforms: ${{ inputs.platforms }}
-          push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha,scope=${{ inputs.cache_scope }}-${{ steps.cache-key.outputs.platform }}
-            type=gha,scope=main-${{ steps.cache-key.outputs.platform }}
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-${{ steps.cache-key.outputs.platform }}
-
-      - name: Build Docker image (single arch, push)
-        id: build
-        if: >-
-          inputs.push && !(
-          contains(inputs.platforms, 'linux/arm64') &&
-          contains(inputs.platforms, 'linux/amd64'))
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          platforms: ${{ inputs.platforms }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha,scope=${{ inputs.cache_scope }}-${{ steps.cache-key.outputs.platform }}
-            type=gha,scope=main-${{ steps.cache-key.outputs.platform }}
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-${{ steps.cache-key.outputs.platform }}
-
-      - name: Build Docker image (arm64, push)
-        if: >-
-          inputs.push &&
-          contains(inputs.platforms, 'linux/arm64') &&
-          contains(inputs.platforms, 'linux/amd64')
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          platforms: linux/arm64
-          push: true
-          tags: ${{ steps.tags.outputs.arm64_tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha,scope=${{ inputs.cache_scope }}-arm64
-            type=gha,scope=main-arm64
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-arm64
-
-      - name: Build Docker image (amd64, push)
-        if: >-
-          inputs.push &&
-          contains(inputs.platforms, 'linux/arm64') &&
-          contains(inputs.platforms, 'linux/amd64')
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           platforms: linux/amd64
-          push: true
-          tags: ${{ steps.tags.outputs.amd64_tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          push: false
+          tags: ${{ needs.prepare.outputs.tags }}
+          labels: ${{ needs.prepare.outputs.labels }}
           cache-from: |
             type=gha,scope=${{ inputs.cache_scope }}-amd64
             type=gha,scope=main-amd64
           cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-amd64
 
+      - name: Build Docker image (amd64, push)
+        id: build
+        if: inputs.push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ needs.prepare.outputs.build_multiarch == 'true' && needs.prepare.outputs.amd64_tags || needs.prepare.outputs.tags }}
+          labels: ${{ needs.prepare.outputs.labels }}
+          cache-from: |
+            type=gha,scope=${{ inputs.cache_scope }}-amd64
+            type=gha,scope=main-amd64
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-amd64
+
+  build-arm64:
+    needs: prepare
+    if: contains(inputs.platforms, 'linux/arm64')
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009a67214ff5f5447ce83dd
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      - name: Log in to GitHub Container Registry
+        if: inputs.push
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image (arm64, no push)
+        if: ${{ !inputs.push }}
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          platforms: linux/arm64
+          push: false
+          tags: ${{ needs.prepare.outputs.tags }}
+          labels: ${{ needs.prepare.outputs.labels }}
+          cache-from: |
+            type=gha,scope=${{ inputs.cache_scope }}-arm64
+            type=gha,scope=main-arm64
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-arm64
+
+      - name: Build Docker image (arm64, push)
+        id: build
+        if: inputs.push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ needs.prepare.outputs.build_multiarch == 'true' && needs.prepare.outputs.arm64_tags || needs.prepare.outputs.tags }}
+          labels: ${{ needs.prepare.outputs.labels }}
+          cache-from: |
+            type=gha,scope=${{ inputs.cache_scope }}-arm64
+            type=gha,scope=main-arm64
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-arm64
+
+  manifest:
+    needs: [prepare, build-amd64, build-arm64]
+    if: inputs.push && needs.prepare.outputs.build_multiarch == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.create-manifest.outputs.digest }}
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create multi-arch manifest
-        id: manifest
-        if: >-
-          inputs.push &&
-          contains(inputs.platforms, 'linux/arm64') &&
-          contains(inputs.platforms, 'linux/amd64')
+        id: create-manifest
         shell: bash
         run: |
           set -euo pipefail
@@ -226,7 +262,7 @@ jobs:
               -t "$tag" \
               "${tag}-arm64" \
               "${tag}-amd64"
-          done <<< "${{ steps.tags.outputs.base_tags }}"
+          done <<< "${{ needs.prepare.outputs.base_tags }}"
           inspect_output=$(retry docker buildx imagetools inspect "$first_tag")
           digest=$(printf '%s\n' "$inspect_output" | awk '/^Digest: /{print $2; exit}')
           if [ -z "$digest" ]; then
@@ -235,10 +271,30 @@ jobs:
           fi
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
+  attest:
+    needs: [prepare, build-amd64, build-arm64, manifest]
+    if: inputs.push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - name: Determine digest
+        id: digest
+        run: |
+          if [[ "${{ needs.prepare.outputs.build_multiarch }}" == "true" ]]; then
+            echo "value=${{ needs.manifest.outputs.digest }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ inputs.platforms }}" == *"linux/arm64"* ]]; then
+            echo "value=${{ needs.build-arm64.outputs.digest }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ needs.build-amd64.outputs.digest }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Generate artifact attestation
-        if: inputs.push
-        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.manifest.outputs.digest || steps.build.outputs.digest }}
+          subject-digest: ${{ steps.digest.outputs.value }}
           push-to-registry: true
