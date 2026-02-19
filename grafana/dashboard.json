@@ -627,7 +627,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "decbytes"
         },
         "overrides": [
           {
@@ -1406,7 +1406,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "bps"
         },
         "overrides": []
       },
@@ -1427,7 +1427,7 @@
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
-          "sortBy": "Mean",
+          "sortBy": "Last",
           "sortDesc": true
         },
         "tooltip": {
@@ -1508,7 +1508,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "bps"
         },
         "overrides": []
       },
@@ -1529,7 +1529,7 @@
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
-          "sortBy": "Mean",
+          "sortBy": "Last",
           "sortDesc": true
         },
         "tooltip": {
@@ -2415,7 +2415,7 @@
               }
             ]
           },
-          "unit": "decbytes"
+          "unit": "sishort"
         },
         "overrides": []
       },
@@ -2436,7 +2436,7 @@
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
-          "sortBy": "Mean",
+          "sortBy": "Last",
           "sortDesc": true
         },
         "tooltip": {
@@ -2517,7 +2517,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "sishort"
         },
         "overrides": []
       },
@@ -2538,7 +2538,7 @@
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
-          "sortBy": "Mean",
+          "sortBy": "Last",
           "sortDesc": true
         },
         "tooltip": {
@@ -2619,7 +2619,7 @@
               }
             ]
           },
-          "unit": "Bps"
+          "unit": "bps"
         },
         "overrides": []
       },
@@ -2640,7 +2640,7 @@
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
-          "sortBy": "Mean",
+          "sortBy": "Last",
           "sortDesc": true
         },
         "tooltip": {
@@ -2657,13 +2657,13 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_firewall_rule_bytes_total{router=\"$router\",section=~\"$section\"}[$__rate_interval])",
+          "expr": "rate(mikrotik_firewall_rule_bytes_total{router=\"$router\",section=~\"$section\"}[$__rate_interval]) * 8",
           "legendFormat": "{{section}}/{{chain}} - {{action}} ({{ip_version}})",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Firewall Rule Traffic Speed (Bytes/sec)",
+      "title": "Firewall Rule Traffic Speed",
       "type": "timeseries"
     },
     {
@@ -2742,7 +2742,7 @@
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
-          "sortBy": "Mean",
+          "sortBy": "Last",
           "sortDesc": true
         },
         "tooltip": {
@@ -2765,7 +2765,7 @@
           "refId": "A"
         }
       ],
-      "title": "Firewall Rule Packet Speed (Packets/sec)",
+      "title": "Firewall Rule Packet Speed",
       "type": "timeseries"
     },
     {
@@ -3761,7 +3761,7 @@
   "timezone": "browser",
   "title": "MikroTik Router Monitoring",
   "uid": "mikrotik-exporter",
-  "version": 32,
+  "version": 33,
   "weekStart": "",
   "id": null
 }
