@@ -59,6 +59,7 @@ jobs:
       rust_files: ${{ steps.filter.outputs.rust_files }}
       deny_config: ${{ steps.filter.outputs.deny_config }}
     steps:
+      - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v3
         id: filter
         with:
