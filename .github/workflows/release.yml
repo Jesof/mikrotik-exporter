@@ -16,12 +16,10 @@ permissions:
   contents: write
 
 jobs:
-  build-release:
-    name: Build Release
+  build:
+    name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    permissions:
-      contents: write
     strategy:
       matrix:
         include:
@@ -97,12 +95,37 @@ jobs:
             shasum -a 256 ./${{ matrix.asset_name }} > ./${{ matrix.asset_name }}.sha256
           fi
 
-      - name: Upload Release Asset
+      - name: Upload artifact
+        uses: actions/upload-artifact@6f51ac68b6676d755722a4b2aca5d5a1e8737b14 # v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: |
+            ./${{ matrix.asset_name }}
+            ./${{ matrix.asset_name }}.sha256
+          retention-days: 1
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Upload Release Assets
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           fail_on_unmatched_files: false
-          files: |
-            ./${{ matrix.asset_name }}
-            ./${{ matrix.asset_name }}.sha256
+          files: artifacts/*
