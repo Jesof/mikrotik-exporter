@@ -1,30 +1,30 @@
-# MikroTik Exporter - Развертывание
+# MikroTik Exporter - Deployment
 
-Техническая документация по развертыванию в production-окружениях.
+Technical documentation for deploying in production environments.
 
-## Содержание
+## Table of Contents
 
 - [Docker](#docker)
 - [Kubernetes](#kubernetes)
 - [Prometheus](#prometheus)
 - [Grafana](#grafana)
-- [Безопасность](#безопасность)
+- [Security](#security)
 
 ---
 
 ## Docker
 
-### Сборка образа
+### Building the Image
 
 ```bash
-# Multi-stage build (оптимизированный размер)
+# Multi-stage build (optimized size)
 docker build -t mikrotik-exporter:latest .
 
-# С указанием версии
+# With version tag
 docker build -t mikrotik-exporter:0.1.0 .
 ```
 
-### Публикация в Registry
+### Publishing to Registry
 
 #### GitHub Container Registry
 
@@ -42,7 +42,7 @@ docker tag mikrotik-exporter:latest username/mikrotik-exporter:latest
 docker push username/mikrotik-exporter:latest
 ```
 
-### Запуск контейнера
+### Running the Container
 
 ```bash
 docker run -d \
@@ -55,25 +55,25 @@ docker run -d \
   ghcr.io/jesof/mikrotik-exporter:latest
 ```
 
-Если `ROUTERS_CONFIG` не задан, можно использовать legacy-конфигурацию
-`ROUTEROS_ADDRESS/ROUTEROS_USERNAME/ROUTEROS_PASSWORD` (имя роутера будет `default`).
+If `ROUTERS_CONFIG` is not set, you can use the legacy configuration
+`ROUTEROS_ADDRESS/ROUTEROS_USERNAME/ROUTEROS_PASSWORD` (router name will be `default`).
 
 ---
 
 ## Kubernetes
 
-### Быстрый старт
+### Quick Start
 
 ```bash
-# Применить все манифесты
+# Apply all manifests
 kubectl apply -k k8s/
 
-# Проверка статуса
+# Check status
 kubectl get pods -n monitoring -l app=mikrotik-exporter
 kubectl logs -n monitoring -l app=mikrotik-exporter -f
 ```
 
-### Пошаговое развертывание
+### Step-by-Step Deployment
 
 #### 1. Namespace
 
@@ -81,9 +81,9 @@ kubectl logs -n monitoring -l app=mikrotik-exporter -f
 kubectl apply -f k8s/namespace.yaml
 ```
 
-#### 2. Secret (конфигурация роутеров)
+#### 2. Secret (router configuration)
 
-Отредактируйте `k8s/secret.yaml`:
+Edit `k8s/secret.yaml`:
 
 ```yaml
 apiVersion: v1
@@ -108,7 +108,7 @@ stringData:
 kubectl apply -f k8s/secret.yaml
 ```
 
-#### 3. ConfigMap (настройки сервера)
+#### 3. ConfigMap (server settings)
 
 ```bash
 kubectl apply -f k8s/configmap.yaml
@@ -126,55 +126,55 @@ kubectl apply -f k8s/deployment.yaml
 kubectl apply -f k8s/service.yaml
 ```
 
-#### 6. ServiceMonitor (для Prometheus Operator)
+#### 6. ServiceMonitor (for Prometheus Operator)
 
 ```bash
 kubectl apply -f k8s/servicemonitor.yaml
 ```
 
-### Проверка развертывания
+### Verify Deployment
 
 ```bash
-# Port-forward для тестирования
+# Port-forward for testing
 kubectl port-forward -n monitoring svc/mikrotik-exporter 9090:9090
 
-# Проверка endpoints
+# Check endpoints
 curl http://localhost:9090/health
 curl http://localhost:9090/metrics | grep mikrotik_system_info
 ```
 
-### Обновление конфигурации
+### Update Configuration
 
 ```bash
-# Редактирование Secret
+# Edit Secret
 kubectl edit secret mikrotik-exporter-secret -n monitoring
 
-# Или применение измененного файла
+# Or apply modified file
 kubectl apply -f k8s/secret.yaml
 
-# Перезапуск для применения изменений
+# Restart to apply changes
 kubectl rollout restart deployment/mikrotik-exporter -n monitoring
 kubectl rollout status deployment/mikrotik-exporter -n monitoring
 ```
 
-### Обновление образа
+### Update Image
 
 ```bash
-# Rolling update на новую версию
+# Rolling update to new version
 kubectl set image deployment/mikrotik-exporter \
   mikrotik-exporter=ghcr.io/jesof/mikrotik-exporter:v0.2.1 \
   -n monitoring
 
-# Проверка статуса
+# Check status
 kubectl rollout status deployment/mikrotik-exporter -n monitoring
 
-# Откат при проблемах
+# Rollback if issues occur
 kubectl rollout undo deployment/mikrotik-exporter -n monitoring
 ```
 
-### Helm Chart (опционально)
+### Helm Chart (optional)
 
-Создание базового chart:
+Create a basic chart:
 
 ```bash
 mkdir -p helm/mikrotik-exporter
@@ -212,17 +212,17 @@ routers:
 collectionInterval: 30
 EOF
 
-# Установка
+# Install
 helm install mikrotik-exporter . -n monitoring --create-namespace
 ```
 
-### Удаление
+### Uninstall
 
 ```bash
-# Через kubectl
+# Via kubectl
 kubectl delete -k k8s/
 
-# Через Helm
+# Via Helm
 helm uninstall mikrotik-exporter -n monitoring
 ```
 
@@ -230,9 +230,9 @@ helm uninstall mikrotik-exporter -n monitoring
 
 ## Prometheus
 
-### Prometheus Operator (рекомендуется)
+### Prometheus Operator (recommended)
 
-ServiceMonitor автоматически обнаруживает exporter:
+ServiceMonitor automatically discovers the exporter:
 
 ```yaml
 # k8s/servicemonitor.yaml
@@ -242,7 +242,7 @@ metadata:
   name: mikrotik-exporter
   namespace: monitoring
   labels:
-    release: prometheus # Должен совпадать с label selector в Prometheus
+    release: prometheus # Must match the label selector in Prometheus
 spec:
   selector:
     matchLabels:
@@ -253,15 +253,15 @@ spec:
       path: /metrics
 ```
 
-Проверка:
+Verify:
 
 ```bash
 kubectl get servicemonitor -n monitoring mikrotik-exporter
 ```
 
-### Статическая конфигурация
+### Static Configuration
 
-Для обычного Prometheus добавьте в `prometheus.yml`:
+For standard Prometheus, add to `prometheus.yml`:
 
 ```yaml
 scrape_configs:
@@ -273,22 +273,22 @@ scrape_configs:
     honor_labels: true
 ```
 
-### Проверка в Prometheus UI
+### Verify in Prometheus UI
 
 ```promql
-# Проверка доступности
+# Check availability
 up{job="mikrotik-exporter"}
 
-# Проверка метрик
+# Check metrics
 mikrotik_system_info
 mikrotik_system_cpu_load
-rate(mikrotik_interface_rx_bytes[5m])
+rate(mikrotik_interface_rx_bytes_total[5m])
 ```
 
-### Алерты
+### Alerts
 
 ```yaml
-# PrometheusRule для алертов
+# PrometheusRule for alerts
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -305,17 +305,17 @@ spec:
           labels:
             severity: critical
           annotations:
-            summary: "MikroTik Exporter недоступен"
-            description: "Exporter не отвечает более 5 минут"
+            summary: "MikroTik Exporter is unavailable"
+            description: "Exporter has not responded for more than 5 minutes"
 
         - alert: MikroTikRouterDown
-          expr: mikrotik_scrape_success == 0
+          expr: mikrotik_scrape_success_total == 0
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: "Роутер {{ $labels.router }} недоступен"
-            description: "Сбор метрик с роутера {{ $labels.router }} не производится более 5 минут"
+            summary: "Router {{ $labels.router }} is unavailable"
+            description: "Metrics collection from router {{ $labels.router }} has failed for more than 5 minutes"
 
         - alert: MikroTikHighCPU
           expr: mikrotik_system_cpu_load > 80
@@ -323,8 +323,8 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "Высокая загрузка CPU на {{ $labels.router }}"
-            description: "CPU load = {{ $value }}% на роутере {{ $labels.router }}"
+            summary: "High CPU usage on {{ $labels.router }}"
+            description: "CPU load = {{ $value }}% on router {{ $labels.router }}"
 
         - alert: MikroTikLowMemory
           expr: (mikrotik_system_free_memory_bytes / mikrotik_system_total_memory_bytes) * 100 < 10
@@ -332,44 +332,44 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "Мало свободной памяти на {{ $labels.router }}"
-            description: "Свободно менее 10% памяти на роутере {{ $labels.router }}"
+            summary: "Low memory on {{ $labels.router }}"
+            description: "Less than 10% memory available on router {{ $labels.router }}"
 ```
 
 ---
 
 ## Grafana
 
-### Официальный Dashboard
+### Official Dashboard
 
-Дашборд доступен в официальном каталоге Grafana:
+The dashboard is available in the official Grafana catalog:
 - **ID:** `24875`
 - **URL:** [https://grafana.com/grafana/dashboards/24875](https://grafana.com/grafana/dashboards/24875-mikrotik-router-monitoring/)
 
-### Импорт Dashboard
+### Import Dashboard
 
-#### Через UI
+#### Via UI
 
 1. Grafana → Dashboards → Import
 2. Upload `grafana/dashboard.json`
-3. Выберите Prometheus datasource
+3. Select Prometheus datasource
 4. Import
 
-#### Через ConfigMap (Kubernetes)
+#### Via ConfigMap (Kubernetes)
 
 ```bash
-# Создание ConfigMap
+# Create ConfigMap
 kubectl create configmap mikrotik-dashboard \
   --from-file=dashboard.json=grafana/dashboard.json \
   -n monitoring
 
-# Добавление label для автообнаружения
+# Add label for auto-discovery
 kubectl label configmap mikrotik-dashboard \
   grafana_dashboard=1 \
   -n monitoring
 ```
 
-Конфигурация Grafana Helm chart:
+Grafana Helm chart configuration:
 
 ```yaml
 # values.yaml
@@ -382,7 +382,7 @@ sidecar:
     searchNamespace: monitoring
 ```
 
-#### Через Grafana API
+#### Via Grafana API
 
 ```bash
 GRAFANA_URL="http://grafana.monitoring.svc.cluster.local"
@@ -395,22 +395,22 @@ curl -X POST \
   "${GRAFANA_URL}/api/dashboards/db"
 ```
 
-### Dashboard включает
+### Dashboard Includes
 
-- **System Info**: Версия RouterOS, модель устройства, uptime
+- **System Info**: RouterOS version, device model, uptime
 - **Resource Usage**: CPU load, memory usage
-- **Network Traffic**: RX/TX по интерфейсам
-- **Metrics Health**: Scrape duration, success rate, ошибки подключения
-- **Interface Status**: Таблица со статусами всех интерфейсов
+- **Network Traffic**: RX/TX per interface
+- **Metrics Health**: Scrape duration, success rate, connection errors
+- **Interface Status**: Table with status of all interfaces
 
 ---
 
-## Безопасность
+## Security
 
-### RouterOS пользователь с минимальными правами
+### RouterOS User with Minimal Permissions
 
 ```bash
-# На MikroTik роутере
+# On MikroTik router
 /user group add name=monitoring policy=api,read
 /user add name=prometheus group=monitoring password=secure-random-password
 ```
@@ -418,12 +418,12 @@ curl -X POST \
 ### Kubernetes Secret
 
 ```bash
-# Создание Secret из командной строки
+# Create Secret from command line
 kubectl create secret generic mikrotik-exporter-secret \
   --from-literal=ROUTERS_CONFIG='[{...}]' \
   -n monitoring
 
-# Или из файла
+# Or from file
 kubectl create secret generic mikrotik-exporter-secret \
   --from-file=ROUTERS_CONFIG=routers.json \
   -n monitoring
@@ -431,7 +431,7 @@ kubectl create secret generic mikrotik-exporter-secret \
 
 ### Network Policies
 
-Ограничение сетевого доступа:
+Restrict network access:
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -469,56 +469,56 @@ spec:
           port: 53
 ```
 
-### TLS для RouterOS API (порт 8729)
+### TLS for RouterOS API (port 8729)
 
-> ⚠️ Пока не реализовано в проекте (в roadmap)
+> ⚠️ Not yet implemented in the project (in roadmap)
 
 ---
 
 ## Troubleshooting
 
-### Pod не запускается
+### Pod Won't Start
 
 ```bash
 kubectl describe pod -n monitoring -l app=mikrotik-exporter
 kubectl logs -n monitoring -l app=mikrotik-exporter --previous
 ```
 
-### Нет метрик в Prometheus
+### No Metrics in Prometheus
 
 ```bash
-# Проверка ServiceMonitor
+# Check ServiceMonitor
 kubectl get servicemonitor -n monitoring -o yaml
 
-# Проверка endpoints
+# Check endpoints
 kubectl get endpoints -n monitoring mikrotik-exporter
 
-# Проверка в Prometheus UI: Status → Targets
+# Check in Prometheus UI: Status → Targets
 ```
 
-### Ошибки подключения к роутерам
+### Router Connection Errors
 
 ```bash
-# Логи с подробностями
+# Logs with details
 kubectl logs -n monitoring -l app=mikrotik-exporter -f
 
-# Проверка сетевой доступности из pod
+# Check network connectivity from pod
 kubectl exec -it -n monitoring deployment/mikrotik-exporter -- sh
-# В контейнере только busybox (wget есть, curl/jq нет) — для curl/jq используйте sidecar
+# In container only busybox (wget available, curl/jq not) — for curl/jq use sidecar
 ```
 
-### Dashboard не показывает данные
+### Dashboard Shows No Data
 
-1. Проверьте, что Prometheus datasource настроен
-2. Проверьте наличие метрик в Prometheus UI
-3. Проверьте переменные dashboard (Settings → Variables)
-4. Убедитесь, что выбран правильный роутер в dropdown
+1. Check that Prometheus datasource is configured
+2. Check metrics in Prometheus UI
+3. Check dashboard variables (Settings → Variables)
+4. Make sure the correct router is selected in dropdown
 
 ---
 
-## Дополнительные настройки
+## Additional Configuration
 
-### Ingress для внешнего доступа
+### Ingress for External Access
 
 ```yaml
 apiVersion: networking.k8s.io/v1

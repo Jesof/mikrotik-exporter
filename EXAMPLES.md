@@ -1,8 +1,8 @@
-# MikroTik Exporter - Примеры использования
+# MikroTik Exporter - Usage Examples
 
-Практические примеры развертывания для различных сценариев.
+Practical deployment examples for various scenarios.
 
-## Содержание
+## Table of Contents
 
 - [Docker Compose - Production Stack](#docker-compose---production-stack)
 - [Docker - Standalone](#docker---standalone)
@@ -13,7 +13,7 @@
 
 ## Docker Compose - Production Stack
 
-Полный стек мониторинга с Prometheus, Grafana и Alertmanager.
+Complete monitoring stack with Prometheus, Grafana, and Alertmanager.
 
 ### docker-compose.yml
 
@@ -165,17 +165,17 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "MikroTik Exporter недоступен"
-          description: "Exporter не отвечает более 5 минут"
+          summary: "MikroTik Exporter is unavailable"
+          description: "Exporter has not responded for more than 5 minutes"
 
       - alert: MikroTikRouterDown
-        expr: mikrotik_scrape_success == 0
+        expr: mikrotik_scrape_success_total == 0
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Роутер {{ $labels.router }} недоступен"
-          description: "Не удается собрать метрики с {{ $labels.router }}"
+          summary: "Router {{ $labels.router }} is unavailable"
+          description: "Unable to collect metrics from {{ $labels.router }}"
 
       - alert: MikroTikHighCPU
         expr: mikrotik_system_cpu_load > 80
@@ -183,7 +183,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Высокая загрузка CPU на {{ $labels.router }}"
+          summary: "High CPU usage on {{ $labels.router }}"
           description: "CPU load = {{ $value }}%"
 
       - alert: MikroTikLowMemory
@@ -192,8 +192,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Мало памяти на {{ $labels.router }}"
-          description: "Свободно {{ $value | humanizePercentage }} памяти"
+          summary: "Low memory on {{ $labels.router }}"
+          description: "Available memory: {{ $value | humanizePercentage }}"
 
       - alert: MikroTikInterfaceDown
         expr: mikrotik_interface_running == 0
@@ -201,8 +201,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Интерфейс {{ $labels.interface }} на {{ $labels.router }} не работает"
-          description: "Интерфейс {{ $labels.interface }} в состоянии down"
+          summary: "Interface {{ $labels.interface }} on {{ $labels.router }} is down"
+          description: "Interface {{ $labels.interface }} is in down state"
 ```
 
 ### grafana/provisioning/datasources/prometheus.yml
@@ -266,29 +266,29 @@ inhibit_rules:
     equal: ["alertname", "cluster", "service"]
 ```
 
-### Запуск
+### Startup
 
 ```bash
-# Создать структуру директорий
+# Create directory structure
 mkdir -p prometheus grafana/provisioning/{datasources,dashboards} alertmanager
 
-# Скопировать dashboard
+# Copy dashboard
 cp grafana/dashboard.json ./grafana/
 
-# Запустить стек
+# Start the stack
 docker-compose up -d
 
-# Проверка логов
+# Check logs
 docker-compose logs -f mikrotik-exporter
 
-# Остановка
+# Stop
 docker-compose down
 
-# Удаление с данными
+# Remove with data
 docker-compose down -v
 ```
 
-### Доступ
+### Access
 
 - **MikroTik Exporter**: http://localhost:9090/metrics
 - **Prometheus**: http://localhost:9091
@@ -299,7 +299,7 @@ docker-compose down -v
 
 ## Docker - Standalone
 
-### Простой запуск (один роутер)
+### Simple Run (single router)
 
 ```bash
 docker run -d \
@@ -313,13 +313,13 @@ docker run -d \
   ghcr.io/jesof/mikrotik-exporter:latest
 ```
 
-Если `ROUTERS_CONFIG` не задан, используйте legacy-конфигурацию
-`ROUTEROS_ADDRESS/ROUTEROS_USERNAME/ROUTEROS_PASSWORD` (имя роутера будет `default`).
+If `ROUTERS_CONFIG` is not set, use the legacy configuration
+`ROUTEROS_ADDRESS/ROUTEROS_USERNAME/ROUTEROS_PASSWORD` (router name will be `default`).
 
-### С конфигурацией из файла
+### With Configuration File
 
 ```bash
-# Создать routers.json
+# Create routers.json
 cat > routers.json <<EOF
 [
   {
@@ -337,7 +337,7 @@ cat > routers.json <<EOF
 ]
 EOF
 
-# Запустить с конфигурацией
+# Run with configuration
 docker run -d \
   --name mikrotik-exporter \
   --restart=unless-stopped \
@@ -348,7 +348,7 @@ docker run -d \
   ghcr.io/jesof/mikrotik-exporter:latest
 ```
 
-### С healthcheck
+### With Healthcheck
 
 ```bash
 docker run -d \
@@ -368,7 +368,7 @@ docker run -d \
 
 ## Kubernetes - Multi-Router
 
-### Конфигурация для нескольких роутеров
+### Configuration for Multiple Routers
 
 ```yaml
 # routers-secret.yaml
@@ -408,7 +408,7 @@ stringData:
     ]
 ```
 
-### Deployment с resource limits
+### Deployment with Resource Limits
 
 ```yaml
 # deployment.yaml
@@ -475,165 +475,165 @@ spec:
 
 ## Prometheus Queries
 
-### Системные метрики
+### System Metrics
 
 ```promql
-# CPU load по роутерам
+# CPU load by router
 mikrotik_system_cpu_load
 
-# Использование памяти (%)
+# Memory usage (%)
 100 - (mikrotik_system_free_memory_bytes / mikrotik_system_total_memory_bytes * 100)
 
-# Uptime в днях
+# Uptime in days
 mikrotik_system_uptime_seconds / 86400
 
-# Роутеры с загрузкой CPU > 70%
+# Routers with CPU load > 70%
 mikrotik_system_cpu_load > 70
 ```
 
-### Сетевой трафик
+### Network Traffic
 
 ```promql
-# RX rate (bits/s) за последние 5 минут
-rate(mikrotik_interface_rx_bytes[5m]) * 8
+# RX rate (bits/s) over last 5 minutes
+rate(mikrotik_interface_rx_bytes_total[5m]) * 8
 
 # TX rate (bits/s)
-rate(mikrotik_interface_tx_bytes[5m]) * 8
+rate(mikrotik_interface_tx_bytes_total[5m]) * 8
 
-# Общий трафик RX+TX (Mbps)
-(rate(mikrotik_interface_rx_bytes[5m]) + rate(mikrotik_interface_tx_bytes[5m])) * 8 / 1000000
+# Total traffic RX+TX (Mbps)
+(rate(mikrotik_interface_rx_bytes_total[5m]) + rate(mikrotik_interface_tx_bytes_total[5m])) * 8 / 1000000
 
-# Топ-5 интерфейсов по RX
-topk(5, rate(mikrotik_interface_rx_bytes[5m]))
+# Top-5 interfaces by RX
+topk(5, rate(mikrotik_interface_rx_bytes_total[5m]))
 
-# Суммарный трафик по роутеру
-sum by (router) (rate(mikrotik_interface_rx_bytes[5m]))
+# Total traffic by router
+sum by (router) (rate(mikrotik_interface_rx_bytes_total[5m]))
 ```
 
-### Ошибки и пакеты
+### Errors and Packets
 
 ```promql
-# Rate ошибок RX
-rate(mikrotik_interface_rx_errors[5m])
+# RX error rate
+rate(mikrotik_interface_rx_errors_total[5m])
 
-# Rate ошибок TX
-rate(mikrotik_interface_tx_errors[5m])
+# TX error rate
+rate(mikrotik_interface_tx_errors_total[5m])
 
 # Packets per second (RX)
-rate(mikrotik_interface_rx_packets[5m])
+rate(mikrotik_interface_rx_packets_total[5m])
 
-# Интерфейсы с ошибками
-mikrotik_interface_rx_errors > 0 or mikrotik_interface_tx_errors > 0
+# Interfaces with errors
+mikrotik_interface_rx_errors_total > 0 or mikrotik_interface_tx_errors_total > 0
 ```
 
-### Мониторинг health
+### Health Monitoring
 
 ```promql
-# Success rate сбора метрик (%)
-rate(mikrotik_scrape_success[5m]) / (rate(mikrotik_scrape_success[5m]) + rate(mikrotik_scrape_errors[5m])) * 100
+# Metrics collection success rate (%)
+rate(mikrotik_scrape_success_total[5m]) / (rate(mikrotik_scrape_success_total[5m]) + rate(mikrotik_scrape_errors_total[5m])) * 100
 
-# Длительность сбора метрик (ms)
+# Scrape duration (ms)
 mikrotik_scrape_duration_milliseconds
 
-# Время с последнего успешного сбора (минуты)
+# Time since last successful scrape (minutes)
 (time() - mikrotik_scrape_last_success_timestamp_seconds) / 60
 
-# Роутеры с ошибками подключения
+# Routers with connection errors
 mikrotik_connection_consecutive_errors > 0
 
-# Использование пула соединений (%)
+# Connection pool usage (%)
 mikrotik_connection_pool_active / mikrotik_connection_pool_size * 100
 ```
 
-### Алерты
+### Alerts
 
 ```promql
-# Exporter недоступен
+# Exporter unavailable
 up{job="mikrotik-exporter"} == 0
 
-# Роутер недоступен
-mikrotik_scrape_success == 0
+# Router unavailable
+mikrotik_scrape_success_total == 0
 
-# Высокая загрузка CPU
+# High CPU load
 mikrotik_system_cpu_load > 80
 
-# Мало памяти (<10%)
+# Low memory (<10%)
 (mikrotik_system_free_memory_bytes / mikrotik_system_total_memory_bytes) * 100 < 10
 
-# Интерфейс down
+# Interface down
 mikrotik_interface_running == 0
 
-# Много ошибок на интерфейсе
-rate(mikrotik_interface_rx_errors[5m]) > 10 or rate(mikrotik_interface_tx_errors[5m]) > 10
+# High error rate on interface
+rate(mikrotik_interface_rx_errors_total[5m]) > 10 or rate(mikrotik_interface_tx_errors_total[5m]) > 10
 ```
 
-### Правила фаервола
+### Firewall Rules
 
 ```promql
-# Трафик по правилам фаервола (bits/s)
-rate(mikrotik_firewall_rule_bytes[5m]) * 8
+# Traffic by firewall rules (bits/s)
+rate(mikrotik_firewall_rule_bytes_total[5m]) * 8
 
-# Пакеты по правилам фаервола (pps)
-rate(mikrotik_firewall_rule_packets[5m])
+# Packets by firewall rules (pps)
+rate(mikrotik_firewall_rule_packets_total[5m])
 
-# Трафик по разделам фаервола
-sum by (section) (rate(mikrotik_firewall_rule_bytes[5m]) * 8)
+# Traffic by firewall sections
+sum by (section) (rate(mikrotik_firewall_rule_bytes_total[5m]) * 8)
 
-# Топ-10 правил по трафику
-topk(10, rate(mikrotik_firewall_rule_bytes[5m]) * 8)
+# Top-10 rules by traffic
+topk(10, rate(mikrotik_firewall_rule_bytes_total[5m]) * 8)
 
-# Трафик по правилам в разделе filter
-rate(mikrotik_firewall_rule_bytes{section="filter"}[5m]) * 8
+# Traffic by rules in filter section
+rate(mikrotik_firewall_rule_bytes_total{section="filter"}[5m]) * 8
 
-# Трафик по правилам в разделе nat
-rate(mikrotik_firewall_rule_bytes{section="nat"}[5m]) * 8
+# Traffic by rules in nat section
+rate(mikrotik_firewall_rule_bytes_total{section="nat"}[5m]) * 8
 
-# Трафик по правилам ACCEPT в разделе filter
-rate(mikrotik_firewall_rule_bytes{section="filter",action="accept"}[5m]) * 8
+# Traffic by ACCEPT rules in filter section
+rate(mikrotik_firewall_rule_bytes_total{section="filter",action="accept"}[5m]) * 8
 
-# Трафик по правилам DROP в разделе filter
-rate(mikrotik_firewall_rule_bytes{section="filter",action="drop"}[5m]) * 8
+# Traffic by DROP rules in filter section
+rate(mikrotik_firewall_rule_bytes_total{section="filter",action="drop"}[5m]) * 8
 ```
 
 ---
 
-## Полезные команды
+## Useful Commands
 
 ### Docker
 
 ```bash
-# Логи exporter
+# Exporter logs
 docker logs -f mikrotik-exporter
 
-# Статистика контейнера
+# Container stats
 docker stats mikrotik-exporter
 
-# Выполнить команду внутри
+# Execute command inside
 docker exec -it mikrotik-exporter sh
 
-# Проверка health
+# Check health
 docker exec mikrotik-exporter wget -qO- http://localhost:9090/health
 
-# Перезапуск
+# Restart
 docker restart mikrotik-exporter
 ```
 
 ### Kubernetes
 
 ```bash
-# Логи pod
+# Pod logs
 kubectl logs -n monitoring -l app=mikrotik-exporter -f
 
-# Проверка метрик из pod
+# Check metrics from pod
 kubectl exec -n monitoring deployment/mikrotik-exporter -- \
   wget -qO- http://localhost:9090/metrics | grep mikrotik_system_info
 
-# Port-forward для локального доступа
+# Port-forward for local access
 kubectl port-forward -n monitoring svc/mikrotik-exporter 9090:9090
 
-# Масштабирование (не рекомендуется для exporter с state)
+# Scaling (not recommended for stateful exporter)
 kubectl scale deployment/mikrotik-exporter --replicas=2 -n monitoring
 
-# Проверка ресурсов
+# Check resources
 kubectl top pod -n monitoring -l app=mikrotik-exporter
 ```

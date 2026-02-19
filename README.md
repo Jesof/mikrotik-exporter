@@ -31,8 +31,8 @@ kubectl apply -k k8s/
 
 | Metric                                  | Type   | Description                       |
 | --------------------------------------- | ------ | --------------------------------- |
-| `mikrotik_interface_rx_bytes`           | counter| Received bytes                    |
-| `mikrotik_interface_tx_bytes`           | counter| Transmitted bytes                 |
+| `mikrotik_interface_rx_bytes_total`     | counter| Received bytes                    |
+| `mikrotik_interface_tx_bytes_total`     | counter| Transmitted bytes                 |
 | `mikrotik_system_cpu_load`              | gauge  | CPU load (%)                      |
 | `mikrotik_system_free_memory_bytes`     | gauge  | Free memory                       |
 | `mikrotik_scrape_duration_milliseconds` | gauge  | Scrape duration                   |
@@ -158,15 +158,15 @@ MIT - see [LICENSE](LICENSE)
 
 ### Interfaces (Labels: router, interface)
 
-| Metric                         | Type    | Description                   |
-| ------------------------------ | ------- | ----------------------------- |
-| `mikrotik_interface_rx_bytes`   | counter | Received bytes                |
-| `mikrotik_interface_tx_bytes`   | counter | Transmitted bytes             |
-| `mikrotik_interface_rx_packets` | counter | Received packets              |
-| `mikrotik_interface_tx_packets` | counter | Transmitted packets           |
-| `mikrotik_interface_rx_errors`  | counter | Receive errors                |
-| `mikrotik_interface_tx_errors`  | counter | Transmit errors               |
-| `mikrotik_interface_running`    | gauge   | Status (1=running, 0=stopped) |
+| Metric                              | Type    | Description                   |
+| ----------------------------------- | ------- | ----------------------------- |
+| `mikrotik_interface_rx_bytes_total` | counter | Received bytes                |
+| `mikrotik_interface_tx_bytes_total` | counter | Transmitted bytes             |
+| `mikrotik_interface_rx_packets_total` | counter | Received packets            |
+| `mikrotik_interface_tx_packets_total` | counter | Transmitted packets         |
+| `mikrotik_interface_rx_errors_total` | counter | Receive errors               |
+| `mikrotik_interface_tx_errors_total` | counter | Transmit errors              |
+| `mikrotik_interface_running`       | gauge   | Status (1=running, 0=stopped) |
 
 ### System (Labels: router, version, board)
 
@@ -228,10 +228,10 @@ For monitoring, you can use alerts, for example:
 
 ### Firewall Rules (Labels: router, rule_id, chain, action, ip_version, section)
 
-| Metric                              | Type    | Description                          |
-| ------------------------------------| ------- | ------------------------------------ |
-| `mikrotik_firewall_rule_bytes_total`| counter | Bytes matching firewall rules        |
-| `mikrotik_firewall_rule_packets_total`| counter| Packets matching firewall rules    |
+| Metric                                | Type    | Description                          |
+| --------------------------------------| ------- | ------------------------------------ |
+| `mikrotik_firewall_rule_bytes_total`  | counter | Bytes matching firewall rules        |
+| `mikrotik_firewall_rule_packets_total`| counter | Packets matching firewall rules      |
 
 Firewall metrics are collected for all active rules in filter, nat, mangle, and raw sections.
 - `rule_id` - unique rule identifier in RouterOS (e.g., `*1A2`)
