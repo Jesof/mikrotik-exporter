@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://github.com/jesof/mikrotik-exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/jesof/mikrotik-exporter/actions/workflows/ci.yml)
 
-Prometheus exporter для MikroTik RouterOS API с поддержкой множественных роутеров и асинхронной архитектурой.
+Prometheus exporter for MikroTik RouterOS API with multi-router support and async architecture.
 
 ## Quick Start
 
@@ -27,236 +27,226 @@ ROUTERS_CONFIG='[...]' ./mikrotik-exporter
 kubectl apply -k k8s/
 ```
 
-## Метрики
+## Metrics
 
-| Метрика                                 | Тип     | Описание                        |
-| --------------------------------------- | ------- | ------------------------------- |
-| `mikrotik_interface_rx_bytes`           | counter | Полученные байты                |
-| `mikrotik_interface_tx_bytes`           | counter | Отправленные байты              |
-| `mikrotik_system_cpu_load`              | gauge   | Загрузка CPU (%)                |
-| `mikrotik_system_free_memory_bytes`     | gauge   | Свободная память                |
-| `mikrotik_scrape_duration_milliseconds` | gauge   | Длительность сбора              |
-| `mikrotik_connection_pool_size`         | gauge   | Размер пула соединений          |
-| `mikrotik_connection_tracking_count`    | gauge   | Connection tracking             |
-| `mikrotik_wireguard_peer_rx_bytes`      | gauge   | WireGuard RX bytes              |
-| `mikrotik_wireguard_peer_tx_bytes`      | gauge   | WireGuard TX bytes              |
-| `mikrotik_certificate_days_until_expiry`| gauge   | Дней до истечения сертификатов  |
+| Metric                                  | Type   | Description                       |
+| --------------------------------------- | ------ | --------------------------------- |
+| `mikrotik_interface_rx_bytes`           | counter| Received bytes                    |
+| `mikrotik_interface_tx_bytes`           | counter| Transmitted bytes                 |
+| `mikrotik_system_cpu_load`              | gauge  | CPU load (%)                      |
+| `mikrotik_system_free_memory_bytes`     | gauge  | Free memory                       |
+| `mikrotik_scrape_duration_milliseconds` | gauge  | Scrape duration                   |
+| `mikrotik_connection_pool_size`         | gauge  | Connection pool size              |
+| `mikrotik_connection_tracking_count`    | gauge  | Connection tracking               |
+| `mikrotik_wireguard_peer_rx_bytes`      | gauge  | WireGuard RX bytes                |
+| `mikrotik_wireguard_peer_tx_bytes`      | gauge  | WireGuard TX bytes                |
+| `mikrotik_certificate_days_until_expiry`| gauge  | Days until certificate expiry     |
 
-[Полный список метрик →](#полный-список-метрик)
+[Full metrics list →](#full-metrics-list)
 
-## Конфигурация
+## Configuration
 
-### Переменные окружения
+### Environment Variables
 
 ```bash
 SERVER_ADDR=0.0.0.0:9090                    # HTTP server bind address
-ROUTERS_CONFIG=[{...}]                      # JSON массив роутеров (рекомендуется)
-COLLECTION_INTERVAL_SECONDS=30              # Интервал сбора метрик
-STARTUP_CONNECTIVITY_TEST=false             # Проверка доступности роутеров при запуске
-STARTUP_CONNECTIVITY_TIMEOUT_SECS=10        # Таймаут проверки доступности (в секундах)
-STRICT_STARTUP_MODE=false                   # Завершать работу при недоступности роутеров
-RUST_LOG=info                               # Уровень логирования
-ROUTEROS_ADDRESS=192.168.88.1:8728          # Legacy: адрес RouterOS API (один роутер)
-ROUTEROS_USERNAME=admin                     # Legacy: пользователь (default: admin)
-ROUTEROS_PASSWORD=                          # Legacy: пароль (default: пусто)
+ROUTERS_CONFIG=[{...}]                      # JSON array of routers (recommended)
+COLLECTION_INTERVAL_SECONDS=30              # Metrics collection interval
+STARTUP_CONNECTIVITY_TEST=false             # Check router availability at startup
+STARTUP_CONNECTIVITY_TIMEOUT_SECS=10        # Connectivity test timeout (seconds)
+STRICT_STARTUP_MODE=false                   # Exit if routers are unavailable
+RUST_LOG=info                               # Logging level
+ROUTEROS_ADDRESS=192.168.88.1:8728          # Legacy: RouterOS API address (single router)
+ROUTEROS_USERNAME=admin                     # Legacy: username (default: admin)
+ROUTEROS_PASSWORD=                          # Legacy: password (default: empty)
 ```
 
-Если `ROUTERS_CONFIG` не задан, используется legacy-конфигурация
-`ROUTEROS_ADDRESS/ROUTEROS_USERNAME/ROUTEROS_PASSWORD` с именем роутера `default`.
+If `ROUTERS_CONFIG` is not set, legacy configuration
+`ROUTEROS_ADDRESS/ROUTEROS_USERNAME/ROUTEROS_PASSWORD` is used with router name `default`.
 
-### Проверка доступности роутеров при запуске
+### Router Connectivity Check at Startup
 
-Новые опции позволяют проверить доступность всех сконфигурированных роутеров при запуске сервиса:
+New options allow checking availability of all configured routers at service startup:
 
-- `STARTUP_CONNECTIVITY_TEST=true` - включает проверку доступности роутеров при запуске
-- `STARTUP_CONNECTIVITY_TIMEOUT_SECS=10` - таймаут для каждой проверки (по умолчанию 10 секунд)
-- `STRICT_STARTUP_MODE=true` - завершает работу сервиса с кодом ошибки, если какой-либо роутер недоступен
+- `STARTUP_CONNECTIVITY_TEST=true` - enables router availability check at startup
+- `STARTUP_CONNECTIVITY_TIMEOUT_SECS=10` - timeout for each check (default: 10 seconds)
+- `STRICT_STARTUP_MODE=true` - exits the service with error code if any router is unavailable
 
-Пример использования:
+Usage example:
 ```bash
-# Проверить доступность роутеров при запуске, но продолжить работу даже если некоторые недоступны
+# Check router availability at startup, but continue even if some are unavailable
 STARTUP_CONNECTIVITY_TEST=true ./mikrotik-exporter
 
-# Проверить доступность роутеров и завершить работу, если хотя бы один недоступен
+# Check router availability and exit if any router is unavailable
 STARTUP_CONNECTIVITY_TEST=true STRICT_STARTUP_MODE=true ./mikrotik-exporter
 ```
 
-### Формат ROUTERS_CONFIG
+### ROUTERS_CONFIG Format
 
 ```json
 [
   {
-    "name": "router-name", // Имя роутера (используется в метках)
-    "address": "192.168.88.1:8728", // Адрес RouterOS API
-    "username": "admin", // Имя пользователя
-    "password": "password" // Пароль
+    "name": "router-name",
+    "address": "192.168.88.1:8728",
+    "username": "admin",
+    "password": "password"
   }
 ]
 ```
 
 ## Endpoints
 
-| Path       | Описание                         | Код ответа |
-| ---------- | -------------------------------- | ---------- |
-| `/metrics` | Prometheus метрики               | 200        |
-| `/health`  | Health check с статусом роутеров | 200/503    |
+| Path       | Description                                  | Response Code             |
+| ---------- | -------------------------------------------- | ------------------------- |
+| `/metrics` | Prometheus metrics                           | 200                       |
+| `/health`  | Health check with router connectivity test   | 200 (OK) / 503 (unavailable) |
 
-## Развертывание
+## Deployment
 
 - [Kubernetes](DEPLOYMENT.md#kubernetes)
 - [Docker & Docker Compose](EXAMPLES.md#docker-compose---production-stack)
-- [Prometheus интеграция](DEPLOYMENT.md#prometheus)
+- [Prometheus integration](DEPLOYMENT.md#prometheus)
 - [Grafana Dashboard (ID: 24875)](https://grafana.com/grafana/dashboards/24875-mikrotik-router-monitoring/)
 
-## Требования к RouterOS
+## RouterOS Requirements
 
 ```bash
-# Включить API
+# Enable API
 /ip service set api address=0.0.0.0/0 disabled=no port=8728
 
-# Создать пользователя
+# Create user
 /user group add name=monitoring policy=api,read
 /user add name=prometheus group=monitoring password=secure-password
 ```
 
-## Разработка
+## Development
 
 ```bash
-# Запуск
+# Run
 cargo run
 
-# Тесты
+# Tests
 cargo test
 
-# Интеграционные тесты (требуют настроенного MikroTik устройства)
+# Integration tests (require configured MikroTik device)
 cargo test --test integration_tests
 
-# Сборка
+# Build
 cargo build --release
 ```
 
-Для запуска интеграционных тестов необходимо настроить подключение к реальному устройству MikroTik через переменные окружения в файле `.env`:
+To run integration tests, configure connection to a real MikroTik device via environment variables in `.env` file:
 
 ```bash
-# Пример .env файла для интеграционных тестов
+# Example .env file for integration tests
 ROUTEROS_ADDRESS=192.168.88.1:8728
 ROUTEROS_USERNAME=admin
 ROUTEROS_PASSWORD=your_password
 ```
 
-Интеграционные тесты автоматически пропускаются, если переменные окружения не настроены.
+Integration tests are automatically skipped if environment variables are not configured.
 
-[Архитектура и API →](#архитектура-проекта)
+[Architecture & API →](#project-architecture)
 
-## Лицензия
+## License
 
-MIT - см. [LICENSE](LICENSE)
+MIT - see [LICENSE](LICENSE)
 
 ---
 
-## Полный список метрик
+## Full Metrics List
 
-### Интерфейсы (Labels: router, interface)
+### Interfaces (Labels: router, interface)
 
-| Метрика                         | Тип     | Описание                          |
-| ------------------------------- | ------- | --------------------------------- |
-| `mikrotik_interface_rx_bytes`   | counter | Полученные байты                  |
-| `mikrotik_interface_tx_bytes`   | counter | Отправленные байты                |
-| `mikrotik_interface_rx_packets` | counter | Полученные пакеты                 |
-| `mikrotik_interface_tx_packets` | counter | Отправленные пакеты               |
-| `mikrotik_interface_rx_errors`  | counter | Ошибки приёма                     |
-| `mikrotik_interface_tx_errors`  | counter | Ошибки передачи                   |
-| `mikrotik_interface_running`    | gauge   | Статус (1=работает, 0=остановлен) |
+| Metric                         | Type    | Description                   |
+| ------------------------------ | ------- | ----------------------------- |
+| `mikrotik_interface_rx_bytes`   | counter | Received bytes                |
+| `mikrotik_interface_tx_bytes`   | counter | Transmitted bytes             |
+| `mikrotik_interface_rx_packets` | counter | Received packets              |
+| `mikrotik_interface_tx_packets` | counter | Transmitted packets           |
+| `mikrotik_interface_rx_errors`  | counter | Receive errors                |
+| `mikrotik_interface_tx_errors`  | counter | Transmit errors               |
+| `mikrotik_interface_running`    | gauge   | Status (1=running, 0=stopped) |
 
-### Система (Labels: router)
+### System (Labels: router, version, board)
 
-| Метрика                              | Тип   | Описание                                      |
-| ------------------------------------ | ----- | --------------------------------------------- |
-| `mikrotik_system_cpu_load`           | gauge | Загрузка CPU (%)                              |
-| `mikrotik_system_free_memory_bytes`  | gauge | Свободная память                              |
-| `mikrotik_system_total_memory_bytes` | gauge | Общая память                                  |
-| `mikrotik_system_uptime_seconds`     | gauge | Uptime системы                                |
-| `mikrotik_system_info`               | gauge | Информация о системе (labels: version, board) |
+| Metric                              | Type   | Description                                      |
+| ------------------------------------| ------ | ------------------------------------------------ |
+| `mikrotik_system_cpu_load`          | gauge  | CPU load (%)                                     |
+| `mikrotik_system_free_memory_bytes` | gauge  | Free memory                                      |
+| `mikrotik_system_total_memory_bytes`| gauge  | Total memory                                     |
+| `mikrotik_system_uptime_seconds`    | gauge  | System uptime                                    |
+| `mikrotik_system_info`              | gauge  | System info (value=1, labels: version, board)    |
 
-### Сервисные метрики (Labels: router)
+### Service Metrics (Labels: router)
 
-| Метрика                                          | Тип     | Описание                                  |
-| ------------------------------------------------ | ------- | ----------------------------------------- |
-| `mikrotik_scrape_success`                        | counter | Успешные сборы                            |
-| `mikrotik_scrape_errors`                         | counter | Ошибки сбора                              |
-| `mikrotik_scrape_duration_milliseconds`          | gauge   | Длительность последнего сбора             |
-| `mikrotik_scrape_last_success_timestamp_seconds` | gauge   | Unix timestamp последнего успешного сбора |
-| `mikrotik_connection_consecutive_errors`         | gauge   | Последовательные ошибки подключения       |
-| `mikrotik_collection_cycle_duration_milliseconds`| gauge   | Длительность полного цикла сбора          |
-| `mikrotik_connection_pool_size`                  | gauge   | Размер пула соединений                    |
-| `mikrotik_connection_pool_active`                | gauge   | Активные соединения в пуле                |
+| Metric                                          | Type    | Description                               |
+| ------------------------------------------------| ------- | ----------------------------------------- |
+| `mikrotik_scrape_success_total`                 | counter | Successful scrapes                        |
+| `mikrotik_scrape_errors_total`                  | counter | Scrape errors                             |
+| `mikrotik_scrape_duration_milliseconds`         | gauge   | Last scrape duration                      |
+| `mikrotik_scrape_last_success_timestamp_seconds`| gauge   | Unix timestamp of last successful scrape  |
+| `mikrotik_connection_consecutive_errors`        | gauge   | Consecutive connection errors             |
+| `mikrotik_collection_cycle_duration_milliseconds`| gauge  | Full collection cycle duration            |
+| `mikrotik_connection_pool_size`                 | gauge   | Connection pool size                      |
+| `mikrotik_connection_pool_active`               | gauge   | Active connections in pool                |
 
-### Connection tracking (Labels: router, src_address, protocol, ip_version)
+### Connection Tracking (Labels: router, src_address, protocol, ip_version)
 
-| Метрика                                | Тип   | Описание                                   |
-| -------------------------------------- | ----- | ------------------------------------------ |
-| `mikrotik_connection_tracking_count`   | gauge | Количество соединений по src/protocol/ip   |
-
-### WireGuard Interfaces (Labels: router, interface)
-
-Статус интерфейсов WireGuard доступен через стандартную метрику `mikrotik_interface_running`.
+| Metric                                | Type   | Description                               |
+| --------------------------------------| ------ | ----------------------------------------- |
+| `mikrotik_connection_tracking_count`  | gauge  | Connection count by src/protocol/ip       |
 
 ### WireGuard Peers (Labels: router, interface, allowed_address)
 
-| Метрика                                    | Тип   | Описание                            |
-| ------------------------------------------ | ----- | ----------------------------------- |
-| `mikrotik_wireguard_peer_rx_bytes`         | gauge | Полученные байты от пира            |
-| `mikrotik_wireguard_peer_tx_bytes`         | gauge | Отправленные байты пиру             |
-| `mikrotik_wireguard_peer_latest_handshake` | gauge | Unix timestamp последнего хендшейка |
-| `mikrotik_wireguard_peer_info`             | gauge | Метаданные пира (name, endpoint)    |
+| Metric                                    | Type   | Description                           |
+| ------------------------------------------| ------ | ------------------------------------- |
+| `mikrotik_wireguard_peer_rx_bytes`        | gauge  | Received bytes from peer              |
+| `mikrotik_wireguard_peer_tx_bytes`        | gauge  | Transmitted bytes to peer             |
+| `mikrotik_wireguard_peer_latest_handshake`| gauge  | Unix timestamp of last handshake      |
+| `mikrotik_wireguard_peer_info`            | gauge  | Peer metadata (name, endpoint)        |
 
-### Сертификаты (Labels: router, name)
+### Certificates (Labels: router, name)
 
-| Метрика                                     | Тип   | Описание                                                                 |
-| ------------------------------------------- | ----- | ------------------------------------------------------------------------ |
-| `mikrotik_certificate_days_until_expiry`    | gauge | Количество дней до истечения срока действия сертификата (отрицательные значения означают просроченные сертификаты) |
+| Metric                                     | Type   | Description                                                                 |
+| -------------------------------------------| ------ | --------------------------------------------------------------------------- |
+| `mikrotik_certificate_days_until_expiry`   | gauge  | Number of days until certificate expiry (negative values indicate expired)  |
 
-Метрика `mikrotik_certificate_days_until_expiry` отслеживает количество дней до истечения срока действия сертификатов на роутере. 
-Поддерживаются оба формата дат истечения сертификатов RouterOS:
-- ISO формат (YYYY-MM-DD) - современный формат
-- Legacy формат (MMM/DD/YYYY) - классический формат
+The `mikrotik_certificate_days_until_expiry` metric tracks the number of days until certificate expiration on the router.
+Both RouterOS certificate expiration date formats are supported:
+- ISO format (YYYY-MM-DD) - modern format
+- Legacy format (MMM/DD/YYYY) - classic format
 
-Значения метрики:
-- Положительные значения: количество дней до истечения срока действия
-- Отрицательные значения: количество дней с момента истечения срока действия (просроченные сертификаты)
-- Нулевое значение: срок действия сертификата истекает сегодня
+Metric values:
+- Positive values: number of days until expiration
+- Negative values: number of days since expiration (expired certificates)
+- Zero value: certificate expires today
 
-Для мониторинга можно использовать алерты, например:
-- Предупреждение при `mikrotik_certificate_days_until_expiry < 30` (сертификат истекает менее чем через 30 дней)
-- Критическая ошибка при `mikrotik_certificate_days_until_expiry < 0` (сертификат уже просрочен)
+For monitoring, you can use alerts, for example:
+- Warning when `mikrotik_certificate_days_until_expiry < 30` (certificate expires in less than 30 days)
+- Critical when `mikrotik_certificate_days_until_expiry < 0` (certificate already expired)
 
-### Информация о системе (Labels: router, version, board)
+### Firewall Rules (Labels: router, rule_id, chain, action, ip_version, section)
 
-| Метрика                | Тип   | Описание                                      |
-| ---------------------- | ----- | --------------------------------------------- |
-| `mikrotik_system_info` | gauge | Статическая информация о роутере (значение=1) |
+| Metric                              | Type    | Description                          |
+| ------------------------------------| ------- | ------------------------------------ |
+| `mikrotik_firewall_rule_bytes_total`| counter | Bytes matching firewall rules        |
+| `mikrotik_firewall_rule_packets_total`| counter| Packets matching firewall rules    |
 
-### Правила фаервола (Labels: router, rule_id, chain, action, ip_version, section)
+Firewall metrics are collected for all active rules in filter, nat, mangle, and raw sections.
+- `rule_id` - unique rule identifier in RouterOS (e.g., `*1A2`)
+- `section` indicates the firewall section:
+  - `filter` - basic filtering rules
+  - `nat` - network address translation rules
+  - `mangle` - packet modification rules
+  - `raw` - packet preprocessing rules
 
-| Метрика                              | Тип     | Описание                          |
-| ------------------------------------ | ------- | --------------------------------- |
-| `mikrotik_firewall_rule_bytes_total` | counter | Байты, соответствующие правилам фаервола |
-| `mikrotik_firewall_rule_packets_total` | counter | Пакеты, соответствующие правилам фаервола |
+## Project Architecture
 
-Метрики фаервола собираются для всех активных правил в разделах filter, nat, mangle и raw.
-- `rule_id` - уникальный идентификатор правила в RouterOS (например, `*1A2`)
-- `section` указывает на раздел фаервола:
-- `filter` - основные правила фильтрации
-- `nat` - правила преобразования сетевых адресов
-- `mangle` - правила модификации пакетов
-- `raw` - правила предварительной обработки пакетов
-
-## Архитектура проекта
-
-```tree
+```
 src/
-├── lib.rs                  # Публичная библиотека
-├── main.rs                 # Точка входа
+├── lib.rs                  # Public library
+├── main.rs                 # Entry point
 ├── prelude.rs              # Re-exports
 ├── api/                    # HTTP handlers
 │   └── handlers/           # Health and metrics endpoints
@@ -280,13 +270,13 @@ src/
     └── mod.rs              # Module exports
 ```
 
-### Использование как библиотеки
+### Using as a Library
 
-Добавьте в ваш `Cargo.toml`:
+Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mikrotik-exporter = "0.2.5"
+mikrotik-exporter = "0.3"
 ```
 
 ```rust
