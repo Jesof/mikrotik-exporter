@@ -4,8 +4,8 @@
 [![GitHub release](https://img.shields.io/github/v/release/jesof/mikrotik-exporter.svg)](https://github.com/jesof/mikrotik-exporter/releases)
 [![Grafana](https://img.shields.io/badge/Grafana-24875-orange.svg?logo=grafana)](https://grafana.com/grafana/dashboards/24875-mikrotik-router-monitoring/)
 [![Docs.rs](https://docs.rs/mikrotik-exporter/badge.svg)](https://docs.rs/mikrotik-exporter)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://github.com/jesof/mikrotik-exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/jesof/mikrotik-exporter/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Prometheus exporter for MikroTik RouterOS API with multi-router support and async architecture.
 
@@ -29,18 +29,18 @@ kubectl apply -k k8s/
 
 ## Metrics
 
-| Metric                                  | Type   | Description                       |
-| --------------------------------------- | ------ | --------------------------------- |
-| `mikrotik_interface_rx_bytes_total`     | counter| Received bytes                    |
-| `mikrotik_interface_tx_bytes_total`     | counter| Transmitted bytes                 |
-| `mikrotik_system_cpu_load`              | gauge  | CPU load (%)                      |
-| `mikrotik_system_free_memory_bytes`     | gauge  | Free memory                       |
-| `mikrotik_scrape_duration_milliseconds` | gauge  | Scrape duration                   |
-| `mikrotik_connection_pool_size`         | gauge  | Connection pool size              |
-| `mikrotik_connection_tracking_count`    | gauge  | Connection tracking               |
-| `mikrotik_wireguard_peer_rx_bytes`      | gauge  | WireGuard RX bytes                |
-| `mikrotik_wireguard_peer_tx_bytes`      | gauge  | WireGuard TX bytes                |
-| `mikrotik_certificate_days_until_expiry`| gauge  | Days until certificate expiry     |
+| Metric                                   | Type    | Description                       |
+| ---------------------------------------  | ------- | --------------------------------- |
+| `mikrotik_interface_rx_bytes_total`      | counter | Received bytes                    |
+| `mikrotik_interface_tx_bytes_total`      | counter | Transmitted bytes                 |
+| `mikrotik_system_cpu_load`               | gauge   | CPU load (%)                      |
+| `mikrotik_system_free_memory_bytes`      | gauge   | Free memory                       |
+| `mikrotik_scrape_duration_milliseconds`  | gauge   | Scrape duration                   |
+| `mikrotik_connection_pool_size`          | gauge   | Connection pool size              |
+| `mikrotik_connection_tracking_count`     | gauge   | Connection tracking               |
+| `mikrotik_wireguard_peer_rx_bytes`       | gauge   | WireGuard RX bytes                |
+| `mikrotik_wireguard_peer_tx_bytes`       | gauge   | WireGuard TX bytes                |
+| `mikrotik_certificate_days_until_expiry` | gauge   | Days until certificate expiry     |
 
 [Full metrics list →](#full-metrics-list)
 
@@ -96,9 +96,9 @@ STARTUP_CONNECTIVITY_TEST=true STRICT_STARTUP_MODE=true ./mikrotik-exporter
 
 ## Endpoints
 
-| Path       | Description                                  | Response Code             |
-| ---------- | -------------------------------------------- | ------------------------- |
-| `/metrics` | Prometheus metrics                           | 200                       |
+| Path       | Description                                  | Response Code                |
+| ---------- | -------------------------------------------- | ---------------------------- |
+| `/metrics` | Prometheus metrics                           | 200                          |
 | `/health`  | Health check with router connectivity test   | 200 (OK) / 503 (unavailable) |
 
 ## Deployment
@@ -158,38 +158,38 @@ MIT - see [LICENSE](LICENSE)
 
 ### Interfaces (Labels: router, interface)
 
-| Metric                              | Type    | Description                   |
-| ----------------------------------- | ------- | ----------------------------- |
-| `mikrotik_interface_rx_bytes_total` | counter | Received bytes                |
-| `mikrotik_interface_tx_bytes_total` | counter | Transmitted bytes             |
-| `mikrotik_interface_rx_packets_total` | counter | Received packets            |
-| `mikrotik_interface_tx_packets_total` | counter | Transmitted packets         |
-| `mikrotik_interface_rx_errors_total` | counter | Receive errors               |
-| `mikrotik_interface_tx_errors_total` | counter | Transmit errors              |
-| `mikrotik_interface_running`       | gauge   | Status (1=running, 0=stopped) |
+| Metric                                | Type    | Description                   |
+| ------------------------------------- | ------- | ----------------------------- |
+| `mikrotik_interface_rx_bytes_total`   | counter | Received bytes                |
+| `mikrotik_interface_tx_bytes_total`   | counter | Transmitted bytes             |
+| `mikrotik_interface_rx_packets_total` | counter | Received packets              |
+| `mikrotik_interface_tx_packets_total` | counter | Transmitted packets           |
+| `mikrotik_interface_rx_errors_total`  | counter | Receive errors                |
+| `mikrotik_interface_tx_errors_total`  | counter | Transmit errors               |
+| `mikrotik_interface_running`          | gauge   | Status (1=running, 0=stopped) |
 
 ### System (Labels: router, version, board)
 
-| Metric                              | Type   | Description                                      |
-| ------------------------------------| ------ | ------------------------------------------------ |
-| `mikrotik_system_cpu_load`          | gauge  | CPU load (%)                                     |
-| `mikrotik_system_free_memory_bytes` | gauge  | Free memory                                      |
-| `mikrotik_system_total_memory_bytes`| gauge  | Total memory                                     |
-| `mikrotik_system_uptime_seconds`    | gauge  | System uptime                                    |
-| `mikrotik_system_info`              | gauge  | System info (value=1, labels: version, board)    |
+| Metric                               | Type   | Description                                      |
+| ------------------------------------ | ------ | ------------------------------------------------ |
+| `mikrotik_system_cpu_load`           | gauge  | CPU load (%)                                     |
+| `mikrotik_system_free_memory_bytes`  | gauge  | Free memory                                      |
+| `mikrotik_system_total_memory_bytes` | gauge  | Total memory                                     |
+| `mikrotik_system_uptime_seconds`     | gauge  | System uptime                                    |
+| `mikrotik_system_info`               | gauge  | System info (value=1, labels: version, board)    |
 
 ### Service Metrics (Labels: router)
 
-| Metric                                          | Type    | Description                               |
-| ------------------------------------------------| ------- | ----------------------------------------- |
-| `mikrotik_scrape_success_total`                 | counter | Successful scrapes                        |
-| `mikrotik_scrape_errors_total`                  | counter | Scrape errors                             |
-| `mikrotik_scrape_duration_milliseconds`         | gauge   | Last scrape duration                      |
-| `mikrotik_scrape_last_success_timestamp_seconds`| gauge   | Unix timestamp of last successful scrape  |
-| `mikrotik_connection_consecutive_errors`        | gauge   | Consecutive connection errors             |
-| `mikrotik_collection_cycle_duration_milliseconds`| gauge  | Full collection cycle duration            |
-| `mikrotik_connection_pool_size`                 | gauge   | Connection pool size                      |
-| `mikrotik_connection_pool_active`               | gauge   | Active connections in pool                |
+| Metric                                            | Type    | Description                               |
+| ------------------------------------------------- | ------- | ----------------------------------------- |
+| `mikrotik_scrape_success_total`                   | counter | Successful scrapes                        |
+| `mikrotik_scrape_errors_total`                    | counter | Scrape errors                             |
+| `mikrotik_scrape_duration_milliseconds`           | gauge   | Last scrape duration                      |
+| `mikrotik_scrape_last_success_timestamp_seconds`  | gauge   | Unix timestamp of last successful scrape  |
+| `mikrotik_connection_consecutive_errors`          | gauge   | Consecutive connection errors             |
+| `mikrotik_collection_cycle_duration_milliseconds` | gauge   | Full collection cycle duration            |
+| `mikrotik_connection_pool_size`                   | gauge   | Connection pool size                      |
+| `mikrotik_connection_pool_active`                 | gauge   | Active connections in pool                |
 
 ### Connection Tracking (Labels: router, src_address, protocol, ip_version)
 
@@ -199,18 +199,18 @@ MIT - see [LICENSE](LICENSE)
 
 ### WireGuard Peers (Labels: router, interface, allowed_address)
 
-| Metric                                    | Type   | Description                           |
-| ------------------------------------------| ------ | ------------------------------------- |
-| `mikrotik_wireguard_peer_rx_bytes`        | gauge  | Received bytes from peer              |
-| `mikrotik_wireguard_peer_tx_bytes`        | gauge  | Transmitted bytes to peer             |
-| `mikrotik_wireguard_peer_latest_handshake`| gauge  | Unix timestamp of last handshake      |
-| `mikrotik_wireguard_peer_info`            | gauge  | Peer metadata (name, endpoint)        |
+| Metric                                     | Type   | Description                           |
+| ------------------------------------------ | ------ | ------------------------------------- |
+| `mikrotik_wireguard_peer_rx_bytes`         | gauge  | Received bytes from peer              |
+| `mikrotik_wireguard_peer_tx_bytes`         | gauge  | Transmitted bytes to peer             |
+| `mikrotik_wireguard_peer_latest_handshake` | gauge  | Unix timestamp of last handshake      |
+| `mikrotik_wireguard_peer_info`             | gauge  | Peer metadata (name, endpoint)        |
 
 ### Certificates (Labels: router, name)
 
-| Metric                                     | Type   | Description                                                                 |
-| -------------------------------------------| ------ | --------------------------------------------------------------------------- |
-| `mikrotik_certificate_days_until_expiry`   | gauge  | Number of days until certificate expiry (negative values indicate expired)  |
+| Metric                                      | Type   | Description                                                                 |
+| ------------------------------------------- | ------ | --------------------------------------------------------------------------- |
+| `mikrotik_certificate_days_until_expiry`    | gauge  | Number of days until certificate expiry (negative values indicate expired)  |
 
 The `mikrotik_certificate_days_until_expiry` metric tracks the number of days until certificate expiration on the router.
 Both RouterOS certificate expiration date formats are supported:
@@ -228,10 +228,10 @@ For monitoring, you can use alerts, for example:
 
 ### Firewall Rules (Labels: router, rule_id, chain, action, ip_version, section)
 
-| Metric                                | Type    | Description                          |
-| --------------------------------------| ------- | ------------------------------------ |
-| `mikrotik_firewall_rule_bytes_total`  | counter | Bytes matching firewall rules        |
-| `mikrotik_firewall_rule_packets_total`| counter | Packets matching firewall rules      |
+| Metric                                 | Type    | Description                          |
+| -------------------------------------- | ------- | ------------------------------------ |
+| `mikrotik_firewall_rule_bytes_total`   | counter | Bytes matching firewall rules        |
+| `mikrotik_firewall_rule_packets_total` | counter | Packets matching firewall rules      |
 
 Firewall metrics are collected for all active rules in filter, nat, mangle, and raw sections.
 - `rule_id` - unique rule identifier in RouterOS (e.g., `*1A2`)
@@ -276,7 +276,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mikrotik-exporter = "0.3"
+mikrotik-exporter = "0.3.0"
 ```
 
 ```rust
