@@ -74,6 +74,7 @@ jobs:
           cargo install cross --version 0.2.5 || true
           
       - name: Build with cross or cargo
+        shell: bash
         run: |
           if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ] && command -v cross &> /dev/null; then
             cross build --release --locked --target ${{ matrix.target }}
