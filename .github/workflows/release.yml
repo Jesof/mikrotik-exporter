@@ -70,6 +70,7 @@ jobs:
           echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config.toml
           
       - name: Install cross for better cross-compilation
+        if: runner.os == 'Linux'
         run: |
           cargo install cross --version 0.2.5 || true
           
@@ -98,7 +99,10 @@ jobs:
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          fail_on_unmatched_files: false
           files: |
             ./${{ matrix.asset_name }}
             ./${{ matrix.asset_name }}.sha256
