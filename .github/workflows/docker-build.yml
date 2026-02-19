@@ -223,6 +223,9 @@ jobs:
     needs: [prepare, build-amd64, build-arm64]
     if: inputs.push && needs.prepare.outputs.build_multiarch == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     outputs:
       digest: ${{ steps.create-manifest.outputs.digest }}
     steps:
