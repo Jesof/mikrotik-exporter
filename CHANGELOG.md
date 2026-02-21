@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI optimizations with smart path filtering and tool caching for faster builds
 - CI now uses tags instead of SHA for GitHub Actions for better maintainability
 
+### Fixed
+- Reset counter baselines after long scrape gaps to avoid spikes on recovery
+
 ## [0.3.0] - 2026-02-19
 
 ### Added
