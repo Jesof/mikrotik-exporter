@@ -45,6 +45,7 @@ use crate::metrics::{MetricsRegistry, RouterLabels};
 use crate::mikrotik::{ConnectionPool, MikroTikClient};
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 
 use super::cache::SystemInfoCache;
 
@@ -54,6 +55,7 @@ pub(super) fn spawn_router_collection(
     metrics: MetricsRegistry,
     system_cache: SystemInfoCache,
     active_interfaces: Arc<tokio::sync::Mutex<HashSet<InterfaceLabels>>>,
+    gap_reset_threshold: Duration,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let router_name = router.name.clone();
@@ -66,7 +68,8 @@ pub(super) fn spawn_router_collection(
         let start = std::time::Instant::now();
         match client.collect_metrics().await {
             Ok(m) => {
-                let duration = start.elapsed().as_secs_f64();
+                let end = std::time::Instant::now();
+                let duration = end.duration_since(start).as_secs_f64();
 
                 // Track active interfaces
                 {
@@ -79,8 +82,21 @@ pub(super) fn spawn_router_collection(
                     }
                 }
 
-                metrics.update_metrics(&m).await;
-                metrics.record_scrape_success(&router_label);
+                let gap = metrics.record_scrape_success_and_check_gap(
+                    &router_label,
+                    end,
+                    gap_reset_threshold,
+                );
+                if let Some(gap_duration) = gap {
+                    tracing::info!(
+                        "Resetting counter baselines for router {} after scrape gap of {:?}",
+                        router_name,
+                        gap_duration
+                    );
+                    metrics.update_metrics_baseline(&m).await;
+                } else {
+                    metrics.update_metrics(&m).await;
+                }
                 metrics.record_scrape_duration(&router_label, duration);
 
                 // Cache system info if it's the first time

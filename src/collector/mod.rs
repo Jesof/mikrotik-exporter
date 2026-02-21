@@ -92,6 +92,10 @@ pub fn start_collection_loop(
     // Cleanup interval: every 20 collection cycles
     const CLEANUP_EVERY_N_CYCLES: u64 = 20;
     const STALE_LABEL_TTL: Duration = Duration::from_secs(60 * 30);
+    const GAP_RESET_MULTIPLIER: u64 = 3;
+    const MIN_GAP_RESET_SECS: u64 = 30;
+    let gap_reset_threshold = Duration::from_secs(interval.saturating_mul(GAP_RESET_MULTIPLIER))
+        .max(Duration::from_secs(MIN_GAP_RESET_SECS));
 
     let active_routers: HashSet<String> = config
         .routers
@@ -134,6 +138,7 @@ pub fn start_collection_loop(
                     metrics.clone(),
                     system_cache.clone(),
                     active_interfaces.clone(),
+                    gap_reset_threshold,
                 );
                 tasks.push(task);
             }

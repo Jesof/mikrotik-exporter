@@ -5,6 +5,7 @@
 
 use crate::metrics::labels::RouterLabels;
 use prometheus_client::encoding::text::encode;
+use std::time::{Duration, Instant};
 
 use super::MetricsRegistry;
 
@@ -27,6 +28,36 @@ impl MetricsRegistry {
         self.scrape_last_success_timestamp_seconds
             .get_or_create(labels)
             .set(now as i64);
+        self.last_scrape_success
+            .insert(labels.router.clone(), Instant::now());
+    }
+
+    /// Record scrape success and return gap duration if it exceeds threshold.
+    pub fn record_scrape_success_and_check_gap(
+        &self,
+        labels: &RouterLabels,
+        now: Instant,
+        reset_threshold: Duration,
+    ) -> Option<Duration> {
+        self.scrape_success.get_or_create(labels).inc();
+        let now_epoch = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        #[allow(clippy::cast_possible_wrap)]
+        self.scrape_last_success_timestamp_seconds
+            .get_or_create(labels)
+            .set(now_epoch as i64);
+
+        let gap = self
+            .last_scrape_success
+            .insert(labels.router.clone(), now)
+            .map(|previous| now.duration_since(previous));
+
+        match gap {
+            Some(duration) if duration > reset_threshold => Some(duration),
+            _ => None,
+        }
     }
 
     pub fn record_scrape_error(&self, labels: &RouterLabels) {

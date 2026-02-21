@@ -162,6 +162,7 @@ pub struct MetricsRegistry {
     wireguard_peer_last_seen: Arc<DashMap<WireGuardPeerLabels, Instant>>,
     wireguard_peer_info_last_seen: Arc<DashMap<WireGuardPeerInfoLabels, Instant>>,
     certificate_last_seen: Arc<DashMap<CertificateLabels, Instant>>,
+    last_scrape_success: Arc<DashMap<String, Instant>>,
 }
 
 impl Default for MetricsRegistry {
@@ -328,6 +329,37 @@ mod tests {
         assert_eq!(
             registry.interface_tx_packets.get_or_create(&labels).get(),
             25
+        );
+    }
+
+    #[tokio::test]
+    async fn test_update_metrics_baseline_skips_counters() {
+        let registry = MetricsRegistry::new();
+
+        let iface1 = make_interface("ether1", 1000, 2000, 10, 20, 0, 0, true);
+        let system1 = make_system("7.10", "RB750Gr3", "1d");
+        let metrics1 = make_router_metrics("router1", vec![iface1], system1);
+        registry.update_metrics_baseline(&metrics1).await;
+
+        let labels = InterfaceLabels {
+            router: "router1".to_string(),
+            interface: "ether1".to_string(),
+        };
+        assert_eq!(registry.interface_rx_bytes.get_or_create(&labels).get(), 0);
+        assert_eq!(registry.interface_tx_bytes.get_or_create(&labels).get(), 0);
+
+        let iface2 = make_interface("ether1", 1500, 2600, 15, 26, 0, 0, true);
+        let system2 = make_system("7.10", "RB750Gr3", "1d");
+        let metrics2 = make_router_metrics("router1", vec![iface2], system2);
+        registry.update_metrics(&metrics2).await;
+
+        assert_eq!(
+            registry.interface_rx_bytes.get_or_create(&labels).get(),
+            500
+        );
+        assert_eq!(
+            registry.interface_tx_bytes.get_or_create(&labels).get(),
+            600
         );
     }
 

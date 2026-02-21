@@ -246,6 +246,7 @@ impl MetricsRegistry {
             wireguard_peer_last_seen: Arc::new(DashMap::new()),
             wireguard_peer_info_last_seen: Arc::new(DashMap::new()),
             certificate_last_seen: Arc::new(DashMap::new()),
+            last_scrape_success: Arc::new(DashMap::new()),
         }
     }
 }

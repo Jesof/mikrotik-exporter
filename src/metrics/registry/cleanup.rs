@@ -456,6 +456,10 @@ impl MetricsRegistry {
             self.prev_firewall_rules_by_router.remove(router);
         }
 
+        for router in &stale_routers {
+            self.last_scrape_success.remove(router);
+        }
+
         if !stale_interfaces.is_empty()
             || !stale_system.is_empty()
             || !stale_conntrack.is_empty()
