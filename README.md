@@ -276,7 +276,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mikrotik-exporter = "0.3.0"
+mikrotik-exporter = "0.3.1"
 ```
 
 ```rust
