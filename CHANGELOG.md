@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed counter metrics to use `_total` suffix following Prometheus naming conventions
 
 ### Changed
+- Counter metrics (interface rx/tx bytes/packets/errors, firewall bytes/packets) now start with current router values on exporter startup instead of zero
 - CI optimizations with smart path filtering and tool caching for faster builds
 - CI now uses tags instead of SHA for GitHub Actions for better maintainability
 

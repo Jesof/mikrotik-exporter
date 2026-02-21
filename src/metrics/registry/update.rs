@@ -36,42 +36,79 @@ impl MetricsRegistry {
                     router: metrics.router_name.clone(),
                     interface: iface.name.clone(),
                 };
-                let snapshot = self
-                    .prev_iface
-                    .get(&labels)
-                    .map(|entry| *entry.value())
-                    .unwrap_or(InterfaceSnapshot {
-                        rx_bytes: iface.rx_bytes,
-                        tx_bytes: iface.tx_bytes,
-                        rx_packets: iface.rx_packets,
-                        tx_packets: iface.tx_packets,
-                        rx_errors: iface.rx_errors,
-                        tx_errors: iface.tx_errors,
-                    });
-                let dx_rx_bytes = iface.rx_bytes.saturating_sub(snapshot.rx_bytes);
-                let dx_tx_bytes = iface.tx_bytes.saturating_sub(snapshot.tx_bytes);
-                let dx_rx_packets = iface.rx_packets.saturating_sub(snapshot.rx_packets);
-                let dx_tx_packets = iface.tx_packets.saturating_sub(snapshot.tx_packets);
-                let dx_rx_errors = iface.rx_errors.saturating_sub(snapshot.rx_errors);
-                let dx_tx_errors = iface.tx_errors.saturating_sub(snapshot.tx_errors);
-                self.interface_rx_bytes
-                    .get_or_create(&labels)
-                    .inc_by(dx_rx_bytes);
-                self.interface_tx_bytes
-                    .get_or_create(&labels)
-                    .inc_by(dx_tx_bytes);
-                self.interface_rx_packets
-                    .get_or_create(&labels)
-                    .inc_by(dx_rx_packets);
-                self.interface_tx_packets
-                    .get_or_create(&labels)
-                    .inc_by(dx_tx_packets);
-                self.interface_rx_errors
-                    .get_or_create(&labels)
-                    .inc_by(dx_rx_errors);
-                self.interface_tx_errors
-                    .get_or_create(&labels)
-                    .inc_by(dx_tx_errors);
+                let is_first_collection = !self.prev_iface.contains_key(&labels);
+
+                if is_first_collection {
+                    self.interface_rx_bytes
+                        .get_or_create(&labels)
+                        .inc_by(iface.rx_bytes);
+                    self.interface_tx_bytes
+                        .get_or_create(&labels)
+                        .inc_by(iface.tx_bytes);
+                    self.interface_rx_packets
+                        .get_or_create(&labels)
+                        .inc_by(iface.rx_packets);
+                    self.interface_tx_packets
+                        .get_or_create(&labels)
+                        .inc_by(iface.tx_packets);
+                    self.interface_rx_errors
+                        .get_or_create(&labels)
+                        .inc_by(iface.rx_errors);
+                    self.interface_tx_errors
+                        .get_or_create(&labels)
+                        .inc_by(iface.tx_errors);
+                } else if let Some(snapshot) = self.prev_iface.get(&labels) {
+                    let snapshot = *snapshot.value();
+                    let dx_rx_bytes = if iface.rx_bytes >= snapshot.rx_bytes {
+                        iface.rx_bytes - snapshot.rx_bytes
+                    } else {
+                        iface.rx_bytes
+                    };
+                    let dx_tx_bytes = if iface.tx_bytes >= snapshot.tx_bytes {
+                        iface.tx_bytes - snapshot.tx_bytes
+                    } else {
+                        iface.tx_bytes
+                    };
+                    let dx_rx_packets = if iface.rx_packets >= snapshot.rx_packets {
+                        iface.rx_packets - snapshot.rx_packets
+                    } else {
+                        iface.rx_packets
+                    };
+                    let dx_tx_packets = if iface.tx_packets >= snapshot.tx_packets {
+                        iface.tx_packets - snapshot.tx_packets
+                    } else {
+                        iface.tx_packets
+                    };
+                    let dx_rx_errors = if iface.rx_errors >= snapshot.rx_errors {
+                        iface.rx_errors - snapshot.rx_errors
+                    } else {
+                        iface.rx_errors
+                    };
+                    let dx_tx_errors = if iface.tx_errors >= snapshot.tx_errors {
+                        iface.tx_errors - snapshot.tx_errors
+                    } else {
+                        iface.tx_errors
+                    };
+                    self.interface_rx_bytes
+                        .get_or_create(&labels)
+                        .inc_by(dx_rx_bytes);
+                    self.interface_tx_bytes
+                        .get_or_create(&labels)
+                        .inc_by(dx_tx_bytes);
+                    self.interface_rx_packets
+                        .get_or_create(&labels)
+                        .inc_by(dx_rx_packets);
+                    self.interface_tx_packets
+                        .get_or_create(&labels)
+                        .inc_by(dx_tx_packets);
+                    self.interface_rx_errors
+                        .get_or_create(&labels)
+                        .inc_by(dx_rx_errors);
+                    self.interface_tx_errors
+                        .get_or_create(&labels)
+                        .inc_by(dx_tx_errors);
+                }
+
                 self.interface_running
                     .get_or_create(&labels)
                     .set(i64::from(iface.running));
@@ -327,37 +364,37 @@ impl MetricsRegistry {
             };
             current_firewall_rules.insert(rule_labels.clone());
 
-            // Get previous values or initialize with current values to handle first collection
-            let prev_values = self
-                .prev_firewall_rules
-                .get(&rule_labels)
-                .map(|entry| *entry.value())
-                .unwrap_or((rule.bytes, rule.packets));
+            let is_first_collection = !self.prev_firewall_rules.contains_key(&rule_labels);
 
-            let (prev_bytes, prev_packets) = prev_values;
+            if is_first_collection {
+                self.firewall_rule_bytes
+                    .get_or_create(&rule_labels)
+                    .inc_by(rule.bytes);
+                self.firewall_rule_packets
+                    .get_or_create(&rule_labels)
+                    .inc_by(rule.packets);
+            } else if let Some(prev_entry) = self.prev_firewall_rules.get(&rule_labels) {
+                let (prev_bytes, prev_packets) = *prev_entry.value();
 
-            // Calculate deltas, handling counter resets
-            let dx_bytes = if rule.bytes >= prev_bytes {
-                rule.bytes - prev_bytes
-            } else {
-                // Counter reset (router reboot), use current value as delta
-                rule.bytes
-            };
+                let dx_bytes = if rule.bytes >= prev_bytes {
+                    rule.bytes - prev_bytes
+                } else {
+                    rule.bytes
+                };
 
-            let dx_packets = if rule.packets >= prev_packets {
-                rule.packets - prev_packets
-            } else {
-                // Counter reset (router reboot), use current value as delta
-                rule.packets
-            };
+                let dx_packets = if rule.packets >= prev_packets {
+                    rule.packets - prev_packets
+                } else {
+                    rule.packets
+                };
 
-            // Update Prometheus counters with deltas
-            self.firewall_rule_bytes
-                .get_or_create(&rule_labels)
-                .inc_by(dx_bytes);
-            self.firewall_rule_packets
-                .get_or_create(&rule_labels)
-                .inc_by(dx_packets);
+                self.firewall_rule_bytes
+                    .get_or_create(&rule_labels)
+                    .inc_by(dx_bytes);
+                self.firewall_rule_packets
+                    .get_or_create(&rule_labels)
+                    .inc_by(dx_packets);
+            }
 
             // Store current values for next iteration
             self.prev_firewall_rules

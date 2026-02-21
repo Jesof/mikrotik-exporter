@@ -240,27 +240,30 @@ async fn metrics_correctly_calculates_interface_counters() {
     )
     .unwrap();
 
-    // Check that delta values are correctly calculated
+    // Check that counter starts with initial values and increments by delta
+    // First update: rx_bytes=1000, tx_bytes=2000, rx_packets=10, tx_packets=20
+    // Second update: delta rx=2000, delta tx=3000, delta rx_pkts=15, delta tx_pkts=15
+    // Final counter: rx=3000, tx=5000, rx_pkts=25, tx_pkts=35
     assert!(body.contains(
-        "mikrotik_interface_rx_bytes_total{router=\"router1\",interface=\"ether1\"} 2000"
+        "mikrotik_interface_rx_bytes_total{router=\"router1\",interface=\"ether1\"} 3000"
     ));
     assert!(body.contains(
-        "mikrotik_interface_tx_bytes_total{router=\"router1\",interface=\"ether1\"} 3000"
+        "mikrotik_interface_tx_bytes_total{router=\"router1\",interface=\"ether1\"} 5000"
     ));
     assert!(body.contains(
-        "mikrotik_interface_rx_packets_total{router=\"router1\",interface=\"ether1\"} 15"
+        "mikrotik_interface_rx_packets_total{router=\"router1\",interface=\"ether1\"} 25"
     ));
     assert!(body.contains(
-        "mikrotik_interface_tx_packets_total{router=\"router1\",interface=\"ether1\"} 15"
+        "mikrotik_interface_tx_packets_total{router=\"router1\",interface=\"ether1\"} 35"
     ));
     assert!(
         body.contains(
-            "mikrotik_interface_rx_errors_total{router=\"router1\",interface=\"ether1\"} 0"
+            "mikrotik_interface_rx_errors_total{router=\"router1\",interface=\"ether1\"} 1"
         )
     );
     assert!(
         body.contains(
-            "mikrotik_interface_tx_errors_total{router=\"router1\",interface=\"ether1\"} 2"
+            "mikrotik_interface_tx_errors_total{router=\"router1\",interface=\"ether1\"} 4"
         )
     );
 }

@@ -277,15 +277,21 @@ mod tests {
             router: "router1".to_string(),
             interface: "ether1".to_string(),
         };
-        assert_eq!(registry.interface_rx_bytes.get_or_create(&labels).get(), 0);
-        assert_eq!(registry.interface_tx_bytes.get_or_create(&labels).get(), 0);
+        assert_eq!(
+            registry.interface_rx_bytes.get_or_create(&labels).get(),
+            1000
+        );
+        assert_eq!(
+            registry.interface_tx_bytes.get_or_create(&labels).get(),
+            2000
+        );
         assert_eq!(
             registry.interface_rx_packets.get_or_create(&labels).get(),
-            0
+            10
         );
         assert_eq!(
             registry.interface_tx_packets.get_or_create(&labels).get(),
-            0
+            20
         );
     }
 
@@ -309,19 +315,19 @@ mod tests {
         };
         assert_eq!(
             registry.interface_rx_bytes.get_or_create(&labels).get(),
-            500
+            1500
         );
         assert_eq!(
             registry.interface_tx_bytes.get_or_create(&labels).get(),
-            500
+            2500
         );
         assert_eq!(
             registry.interface_rx_packets.get_or_create(&labels).get(),
-            5
+            15
         );
         assert_eq!(
             registry.interface_tx_packets.get_or_create(&labels).get(),
-            5
+            25
         );
     }
 
@@ -343,10 +349,24 @@ mod tests {
             router: "router1".to_string(),
             interface: "ether1".to_string(),
         };
-        assert_eq!(registry.interface_rx_bytes.get_or_create(&labels).get(), 0);
-        assert_eq!(registry.interface_tx_bytes.get_or_create(&labels).get(), 0);
-        assert_eq!(registry.interface_rx_errors.get_or_create(&labels).get(), 0);
-        assert_eq!(registry.interface_tx_errors.get_or_create(&labels).get(), 0);
+        assert_eq!(
+            registry.interface_rx_bytes.get_or_create(&labels).get(),
+            6000
+        );
+        assert_eq!(
+            registry.interface_tx_bytes.get_or_create(&labels).get(),
+            8000
+        );
+        assert_eq!(
+            registry.interface_rx_packets.get_or_create(&labels).get(),
+            60
+        );
+        assert_eq!(
+            registry.interface_tx_packets.get_or_create(&labels).get(),
+            80
+        );
+        assert_eq!(registry.interface_rx_errors.get_or_create(&labels).get(), 2);
+        assert_eq!(registry.interface_tx_errors.get_or_create(&labels).get(), 3);
     }
 
     #[tokio::test]
@@ -509,8 +529,14 @@ mod tests {
             interface: "ether2".to_string(),
         };
 
-        assert_eq!(registry.interface_rx_bytes.get_or_create(&labels1).get(), 0);
-        assert_eq!(registry.interface_rx_bytes.get_or_create(&labels2).get(), 0);
+        assert_eq!(
+            registry.interface_rx_bytes.get_or_create(&labels1).get(),
+            1000
+        );
+        assert_eq!(
+            registry.interface_rx_bytes.get_or_create(&labels2).get(),
+            3000
+        );
         assert_eq!(registry.interface_running.get_or_create(&labels1).get(), 1);
         assert_eq!(registry.interface_running.get_or_create(&labels2).get(), 0);
     }
