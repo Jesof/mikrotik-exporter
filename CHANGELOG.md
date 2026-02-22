@@ -8,11 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-02-23
+
 ### Added
 - Added `comment` label to all applicable metrics (interfaces, WireGuard peers, certificates, and firewall rules)
+- Enhanced Grafana dashboard with comment labels
 
 ### Fixed
 - Fixed an unbounded metric memory leak caused by stale firewall rule labels not being garbage collected when rule comments change
+- Run Docker build on tag pushes
 
 ### Removed
 - Removed unused `WireGuardInterfaceLabels` and `/interface/wireguard/print` API call, optimizing metric scraping performance
