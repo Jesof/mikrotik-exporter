@@ -78,6 +78,7 @@ pub(super) fn spawn_router_collection(
                         active.insert(InterfaceLabels {
                             router: router_name.clone(),
                             interface: iface.name.clone(),
+                            comment: iface.comment.clone(),
                         });
                     }
                 }

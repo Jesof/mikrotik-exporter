@@ -19,4 +19,4 @@ pub(crate) use conntrack::parse_connection_tracking;
 pub(crate) use firewall::parse_firewall_rules;
 pub(crate) use interfaces::parse_interfaces;
 pub(crate) use system::parse_system;
-pub(crate) use wireguard::{parse_wireguard_interfaces, parse_wireguard_peers};
+pub(crate) use wireguard::parse_wireguard_peers;

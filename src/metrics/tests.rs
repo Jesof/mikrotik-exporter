@@ -49,10 +49,12 @@ mod test {
         let label1 = InterfaceLabels {
             router: "router1".to_string(),
             interface: "ether1".to_string(),
+            comment: "WAN".to_string(),
         };
         let label2 = InterfaceLabels {
             router: "router1".to_string(),
             interface: "ether1".to_string(),
+            comment: "WAN".to_string(),
         };
         assert_eq!(label1, label2);
     }

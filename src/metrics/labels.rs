@@ -9,6 +9,7 @@ use prometheus_client::encoding::EncodeLabelSet;
 pub(crate) struct InterfaceLabels {
     pub(crate) router: String,
     pub(crate) interface: String,
+    pub(crate) comment: String,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
@@ -32,16 +33,11 @@ pub(crate) struct ConntrackLabels {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
-pub(crate) struct WireGuardInterfaceLabels {
-    pub(crate) router: String,
-    pub(crate) interface: String,
-}
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct WireGuardPeerLabels {
     pub(crate) router: String,
     pub(crate) interface: String,
     pub(crate) allowed_address: String,
+    pub(crate) comment: String,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
@@ -51,18 +47,21 @@ pub(crate) struct WireGuardPeerInfoLabels {
     pub(crate) allowed_address: String,
     pub(crate) name: String,
     pub(crate) endpoint: String,
+    pub(crate) comment: String,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct CertificateLabels {
     pub(crate) router: String,
     pub(crate) name: String,
+    pub(crate) comment: String,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct FirewallRuleLabels {
     pub(crate) router: String,
     pub(crate) rule_id: String,
+    pub(crate) comment: String,
     pub(crate) chain: String,
     pub(crate) action: String,
     pub(crate) ip_version: String,
@@ -78,10 +77,12 @@ mod tests {
         let labels = InterfaceLabels {
             router: "router1".to_string(),
             interface: "ether1".to_string(),
+            comment: "WAN".to_string(),
         };
 
         assert_eq!(labels.router, "router1");
         assert_eq!(labels.interface, "ether1");
+        assert_eq!(labels.comment, "WAN");
     }
 
     #[test]
@@ -89,11 +90,13 @@ mod tests {
         let labels1 = InterfaceLabels {
             router: "router1".to_string(),
             interface: "ether1".to_string(),
+            comment: "WAN".to_string(),
         };
 
         let labels2 = InterfaceLabels {
             router: "router1".to_string(),
             interface: "ether1".to_string(),
+            comment: "WAN".to_string(),
         };
 
         assert_eq!(labels1, labels2);
@@ -104,11 +107,13 @@ mod tests {
         let labels1 = InterfaceLabels {
             router: "router1".to_string(),
             interface: "ether1".to_string(),
+            comment: "WAN".to_string(),
         };
 
         let labels2 = InterfaceLabels {
             router: "router1".to_string(),
             interface: "ether2".to_string(),
+            comment: "LAN".to_string(),
         };
 
         assert_ne!(labels1, labels2);
@@ -171,11 +176,13 @@ mod tests {
         let labels = InterfaceLabels {
             router: "router1".to_string(),
             interface: "ether1".to_string(),
+            comment: "WAN".to_string(),
         };
 
         let debug_str = format!("{:?}", labels);
         assert!(debug_str.contains("router1"));
         assert!(debug_str.contains("ether1"));
+        assert!(debug_str.contains("WAN"));
     }
 
     #[test]
@@ -183,6 +190,7 @@ mod tests {
         let labels = FirewallRuleLabels {
             router: "router1".to_string(),
             rule_id: "*1".to_string(),
+            comment: "Drop invalid".to_string(),
             chain: "forward".to_string(),
             action: "accept".to_string(),
             ip_version: "ipv4".to_string(),
@@ -191,6 +199,7 @@ mod tests {
 
         assert_eq!(labels.router, "router1");
         assert_eq!(labels.rule_id, "*1");
+        assert_eq!(labels.comment, "Drop invalid");
         assert_eq!(labels.chain, "forward");
         assert_eq!(labels.action, "accept");
         assert_eq!(labels.ip_version, "ipv4");
@@ -201,6 +210,7 @@ mod tests {
         let labels1 = FirewallRuleLabels {
             router: "router1".to_string(),
             rule_id: "*1".to_string(),
+            comment: "Drop invalid".to_string(),
             chain: "input".to_string(),
             action: "drop".to_string(),
             ip_version: "ipv6".to_string(),
@@ -210,6 +220,7 @@ mod tests {
         let labels2 = FirewallRuleLabels {
             router: "router1".to_string(),
             rule_id: "*1".to_string(),
+            comment: "Drop invalid".to_string(),
             chain: "input".to_string(),
             action: "drop".to_string(),
             ip_version: "ipv6".to_string(),
@@ -224,6 +235,7 @@ mod tests {
         let labels1 = FirewallRuleLabels {
             router: "router1".to_string(),
             rule_id: "*1".to_string(),
+            comment: "Drop invalid".to_string(),
             chain: "output".to_string(),
             action: "reject".to_string(),
             ip_version: "ipv4".to_string(),
@@ -233,6 +245,7 @@ mod tests {
         let labels2 = FirewallRuleLabels {
             router: "router1".to_string(),
             rule_id: "*2".to_string(),
+            comment: "Reject ssh".to_string(),
             chain: "output".to_string(),
             action: "reject".to_string(),
             ip_version: "ipv4".to_string(),
@@ -249,6 +262,7 @@ mod tests {
         let labels1 = FirewallRuleLabels {
             router: "router1".to_string(),
             rule_id: "*1".to_string(),
+            comment: "Drop invalid".to_string(),
             chain: "forward".to_string(),
             action: "accept".to_string(),
             ip_version: "ipv4".to_string(),
@@ -258,6 +272,7 @@ mod tests {
         let labels2 = FirewallRuleLabels {
             router: "router1".to_string(),
             rule_id: "*1".to_string(),
+            comment: "Drop invalid".to_string(),
             chain: "forward".to_string(),
             action: "accept".to_string(),
             ip_version: "ipv4".to_string(),

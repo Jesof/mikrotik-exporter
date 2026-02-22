@@ -7,6 +7,7 @@
 #[derive(Debug, Clone)]
 pub struct InterfaceStats {
     pub name: String,
+    pub comment: String,
     pub rx_bytes: u64,
     pub tx_bytes: u64,
     pub rx_packets: u64,
@@ -40,14 +41,8 @@ pub struct ConnectionTrackingStats {
 #[derive(Debug, Clone)]
 pub struct CertificateStats {
     pub name: String,
+    pub comment: String,
     pub days_until_expiry: i64,
-}
-
-/// Statistics for a WireGuard interface
-#[derive(Debug, Clone, PartialEq)]
-pub struct WireGuardInterfaceStats {
-    pub name: String,
-    pub enabled: bool,
 }
 
 /// Statistics for a WireGuard peer
@@ -55,6 +50,7 @@ pub struct WireGuardInterfaceStats {
 pub struct WireGuardPeerStats {
     pub interface: String,
     pub name: String,
+    pub comment: String,
     pub allowed_address: String,
     pub endpoint: Option<String>,
     pub rx_bytes: u64,
@@ -66,6 +62,7 @@ pub struct WireGuardPeerStats {
 #[derive(Debug, Clone)]
 pub struct FirewallRuleStats {
     pub id: String,
+    pub comment: String,
     pub chain: String,
     pub action: String,
     pub bytes: u64,
@@ -81,7 +78,6 @@ pub struct RouterMetrics {
     pub interfaces: Vec<InterfaceStats>,
     pub system: SystemResource,
     pub connection_tracking: Vec<ConnectionTrackingStats>,
-    pub wireguard_interfaces: Vec<WireGuardInterfaceStats>,
     pub wireguard_peers: Vec<WireGuardPeerStats>,
     pub certificate_stats: Vec<CertificateStats>,
     pub firewall_rules: Vec<FirewallRuleStats>,
@@ -95,6 +91,7 @@ mod tests {
     fn test_interface_stats_creation() {
         let stats = InterfaceStats {
             name: "ether1".to_string(),
+            comment: "WAN".to_string(),
             rx_bytes: 1000,
             tx_bytes: 2000,
             rx_packets: 10,
@@ -105,6 +102,7 @@ mod tests {
         };
 
         assert_eq!(stats.name, "ether1");
+        assert_eq!(stats.comment, "WAN");
         assert_eq!(stats.rx_bytes, 1000);
         assert_eq!(stats.tx_bytes, 2000);
         assert!(stats.running);
@@ -133,6 +131,7 @@ mod tests {
             router_name: "main-router".to_string(),
             interfaces: vec![InterfaceStats {
                 name: "ether1".to_string(),
+                comment: "WAN".to_string(),
                 rx_bytes: 1000,
                 tx_bytes: 2000,
                 rx_packets: 10,
@@ -150,13 +149,10 @@ mod tests {
                 board_name: "test".to_string(),
             },
             connection_tracking: Vec::new(),
-            wireguard_interfaces: vec![WireGuardInterfaceStats {
-                name: "wg1".to_string(),
-                enabled: true,
-            }],
             wireguard_peers: vec![WireGuardPeerStats {
                 interface: "wg1".to_string(),
                 name: "peer1".to_string(),
+                comment: "John".to_string(),
                 allowed_address: "10.10.10.1/32".to_string(),
                 endpoint: Some("192.168.1.1:51820".to_string()),
                 rx_bytes: 1024,
@@ -165,10 +161,12 @@ mod tests {
             }],
             certificate_stats: vec![CertificateStats {
                 name: "cert1".to_string(),
+                comment: "Web".to_string(),
                 days_until_expiry: 30,
             }],
             firewall_rules: vec![FirewallRuleStats {
                 id: "*1".to_string(),
+                comment: "Drop invalid".to_string(),
                 chain: "forward".to_string(),
                 action: "accept".to_string(),
                 bytes: 1024,
@@ -182,7 +180,6 @@ mod tests {
         assert_eq!(metrics.interfaces.len(), 1);
         assert_eq!(metrics.interfaces[0].name, "ether1");
         assert_eq!(metrics.system.version, "7.10");
-        assert_eq!(metrics.wireguard_interfaces.len(), 1);
         assert_eq!(metrics.wireguard_peers.len(), 1);
         assert_eq!(metrics.certificate_stats.len(), 1);
         assert_eq!(metrics.certificate_stats[0].name, "cert1");
@@ -201,6 +198,7 @@ mod tests {
     fn test_interface_stats_clone() {
         let stats = InterfaceStats {
             name: "ether1".to_string(),
+            comment: "WAN".to_string(),
             rx_bytes: 1000,
             tx_bytes: 2000,
             rx_packets: 10,
@@ -212,6 +210,7 @@ mod tests {
 
         let cloned = stats.clone();
         assert_eq!(stats.name, cloned.name);
+        assert_eq!(stats.comment, cloned.comment);
         assert_eq!(stats.rx_bytes, cloned.rx_bytes);
     }
 }

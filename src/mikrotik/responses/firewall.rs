@@ -34,6 +34,7 @@ pub(crate) fn parse_firewall_rules(
         {
             out.push(FirewallRuleStats {
                 id: id.clone(),
+                comment: s.get("comment").cloned().unwrap_or_default(),
                 chain: chain.clone(),
                 action: action.clone(),
                 bytes: s.get("bytes").and_then(|v| v.parse().ok()).unwrap_or(0),
@@ -52,30 +53,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_firewall_rules_complete() {
-        let mut rule1 = HashMap::new();
-        rule1.insert(".id".to_string(), "*1".to_string());
-        rule1.insert("chain".to_string(), "input".to_string());
-        rule1.insert("action".to_string(), "accept".to_string());
-        rule1.insert("bytes".to_string(), "1024".to_string());
-        rule1.insert("packets".to_string(), "5".to_string());
-
-        let result = parse_firewall_rules(&[rule1], "ipv4", "filter");
-
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].id, "*1");
-        assert_eq!(result[0].chain, "input");
-        assert_eq!(result[0].action, "accept");
-        assert_eq!(result[0].bytes, 1024);
-        assert_eq!(result[0].packets, 5);
-        assert_eq!(result[0].ip_version, "ipv4");
-        assert_eq!(result[0].section, "filter");
-    }
-
-    #[test]
     fn test_parse_firewall_rules_multiple() {
         let mut rule1 = HashMap::new();
         rule1.insert(".id".to_string(), "*1".to_string());
+        rule1.insert("comment".to_string(), "Drop invalid".to_string());
         rule1.insert("chain".to_string(), "input".to_string());
         rule1.insert("action".to_string(), "accept".to_string());
         rule1.insert("bytes".to_string(), "1024".to_string());
@@ -92,6 +73,7 @@ mod tests {
 
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].id, "*1");
+        assert_eq!(result[0].comment, "Drop invalid");
         assert_eq!(result[0].chain, "input");
         assert_eq!(result[0].action, "accept");
         assert_eq!(result[0].bytes, 1024);
@@ -99,6 +81,7 @@ mod tests {
         assert_eq!(result[0].ip_version, "ipv6");
 
         assert_eq!(result[1].id, "*2");
+        assert_eq!(result[1].comment, "");
         assert_eq!(result[1].chain, "forward");
         assert_eq!(result[1].action, "drop");
         assert_eq!(result[1].bytes, 2048);
@@ -119,6 +102,7 @@ mod tests {
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].id, "*1");
+        assert_eq!(result[0].comment, "");
         assert_eq!(result[0].chain, "input");
         assert_eq!(result[0].action, "accept");
         assert_eq!(result[0].bytes, 0); // Should default to 0

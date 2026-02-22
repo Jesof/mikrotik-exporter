@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added `comment` label to all applicable metrics (interfaces, WireGuard peers, certificates, and firewall rules)
+
+### Fixed
+- Fixed an unbounded metric memory leak caused by stale firewall rule labels not being garbage collected when rule comments change
+
+### Removed
+- Removed unused `WireGuardInterfaceLabels` and `/interface/wireguard/print` API call, optimizing metric scraping performance
+
 ## [0.3.1] - 2026-02-21
 
 ### Added

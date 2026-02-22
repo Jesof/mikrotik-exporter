@@ -166,6 +166,7 @@ async fn test_metrics_update_and_retrieval() {
     // Create sample metrics data
     let iface = InterfaceStats {
         name: "ether1".to_string(),
+        comment: "WAN".to_string(),
         rx_bytes: 1000,
         tx_bytes: 2000,
         rx_packets: 10,
@@ -189,11 +190,11 @@ async fn test_metrics_update_and_retrieval() {
         interfaces: vec![iface],
         system,
         connection_tracking: Vec::new(),
-        wireguard_interfaces: vec![],
         wireguard_peers: vec![],
         certificate_stats: vec![],
         firewall_rules: vec![FirewallRuleStats {
             id: "*1".to_string(),
+            comment: "Drop invalid".to_string(),
             chain: "forward".to_string(),
             action: "accept".to_string(),
             bytes: 1024,

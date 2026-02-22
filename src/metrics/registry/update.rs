@@ -5,7 +5,7 @@
 
 use crate::metrics::labels::{
     CertificateLabels, ConntrackLabels, FirewallRuleLabels, InterfaceLabels, RouterLabels,
-    SystemInfoLabels, WireGuardInterfaceLabels, WireGuardPeerInfoLabels, WireGuardPeerLabels,
+    SystemInfoLabels, WireGuardPeerInfoLabels, WireGuardPeerLabels,
 };
 use crate::metrics::parsers::parse_uptime_to_seconds;
 use crate::mikrotik::{RouterMetrics, WireGuardPeerStats};
@@ -59,6 +59,7 @@ impl MetricsRegistry {
                 let labels = InterfaceLabels {
                     router: metrics.router_name.clone(),
                     interface: iface.name.clone(),
+                    comment: iface.comment.clone(),
                 };
                 if apply_counters {
                     let is_first_collection = !self.prev_iface.contains_key(&labels);
@@ -224,16 +225,6 @@ impl MetricsRegistry {
             *prev_labels = current_conntrack;
         }
 
-        // Update WireGuard interface metrics
-        for wg_iface in &metrics.wireguard_interfaces {
-            let _wg_labels = WireGuardInterfaceLabels {
-                router: metrics.router_name.clone(),
-                interface: wg_iface.name.clone(),
-            };
-            // Note: We're no longer updating wireguard_interface_enabled metric
-            // as it duplicates information available in mikrotik_interface_running
-        }
-
         // Update WireGuard peer metrics
         let mut deduped_peers = HashMap::new();
         let should_replace = |existing: &WireGuardPeerStats, candidate: &WireGuardPeerStats| match (
@@ -260,6 +251,7 @@ impl MetricsRegistry {
                 router: metrics.router_name.clone(),
                 interface: wg_peer.interface.clone(),
                 allowed_address: wg_peer.allowed_address.clone(),
+                comment: wg_peer.comment.clone(),
             };
             if let Some(existing) = deduped_peers.get(&wg_peer_labels) {
                 if should_replace(existing, wg_peer) {
@@ -284,6 +276,7 @@ impl MetricsRegistry {
                 allowed_address: wg_peer_labels.allowed_address.clone(),
                 name: wg_peer.name.clone(),
                 endpoint,
+                comment: wg_peer.comment.clone(),
             };
             current_peer_info.insert(wg_peer_labels.clone(), info_labels.clone());
             #[allow(clippy::cast_possible_wrap)]
@@ -361,6 +354,7 @@ impl MetricsRegistry {
             let cert_labels = CertificateLabels {
                 router: metrics.router_name.clone(),
                 name: cert.name.clone(),
+                comment: cert.comment.clone(),
             };
             current_certificates.insert(cert_labels.clone());
             #[allow(clippy::cast_possible_wrap)]
@@ -390,6 +384,7 @@ impl MetricsRegistry {
             let rule_labels = FirewallRuleLabels {
                 router: metrics.router_name.clone(),
                 rule_id: rule.id.clone(),
+                comment: rule.comment.clone(),
                 chain: rule.chain.clone(),
                 action: rule.action.clone(),
                 ip_version: rule.ip_version.clone(),
@@ -451,9 +446,8 @@ impl MetricsRegistry {
                 // Reset counters for stale labels
                 self.firewall_rule_bytes.get_or_create(stale).inc_by(0);
                 self.firewall_rule_packets.get_or_create(stale).inc_by(0);
-                // Remove from tracking maps
+                // Remove from tracking map but keep in last_seen for TTL cleanup
                 self.prev_firewall_rules.remove(stale);
-                self.firewall_rule_last_seen.remove(stale);
             }
             *prev_labels = current_firewall_rules;
         }

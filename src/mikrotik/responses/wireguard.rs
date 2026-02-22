@@ -10,27 +10,9 @@
 //! to avoid collecting sensitive information. This approach provides a stable
 //! identifier for monitoring while maintaining privacy.
 
-use crate::mikrotik::types::{WireGuardInterfaceStats, WireGuardPeerStats};
+use crate::mikrotik::types::WireGuardPeerStats;
 use std::collections::HashMap;
 use std::time::SystemTime;
-
-/// Parse WireGuard interface information from RouterOS API response
-pub(crate) fn parse_wireguard_interfaces(
-    sentences: &[HashMap<String, String>],
-) -> Vec<WireGuardInterfaceStats> {
-    let mut interfaces = Vec::new();
-
-    for sentence in sentences {
-        if let Some(name) = sentence.get("name") {
-            interfaces.push(WireGuardInterfaceStats {
-                name: name.clone(),
-                enabled: sentence.get("disabled").is_none_or(|v| v != "true"),
-            });
-        }
-    }
-
-    interfaces
-}
 
 /// Parse WireGuard peer information from RouterOS API response
 pub(crate) fn parse_wireguard_peers(
@@ -68,6 +50,7 @@ pub(crate) fn parse_wireguard_peers(
                         .get("name")
                         .cloned()
                         .unwrap_or_else(|| "unnamed-peer".to_string()),
+                    comment: sentence.get("comment").cloned().unwrap_or_default(),
                     allowed_address: allowed_address.clone(),
                     endpoint: parse_peer_endpoint(sentence),
                     rx_bytes,
@@ -168,74 +151,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_wireguard_interfaces_empty() {
-        let result = parse_wireguard_interfaces(&[]);
-        assert_eq!(result.len(), 0);
-    }
-
-    #[test]
-    fn test_parse_wireguard_interfaces_single() {
-        let mut data = HashMap::new();
-        data.insert("name".to_string(), "wg1".to_string());
-        data.insert("disabled".to_string(), "false".to_string());
-
-        let result = parse_wireguard_interfaces(&[data]);
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].name, "wg1");
-        assert!(result[0].enabled);
-    }
-
-    #[test]
-    fn test_parse_wireguard_interfaces_disabled() {
-        let mut data = HashMap::new();
-        data.insert("name".to_string(), "wg1".to_string());
-        data.insert("disabled".to_string(), "true".to_string());
-
-        let result = parse_wireguard_interfaces(&[data]);
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].name, "wg1");
-        assert!(!result[0].enabled);
-    }
-
-    #[test]
-    fn test_parse_wireguard_interfaces_multiple() {
-        let mut iface1 = HashMap::new();
-        iface1.insert("name".to_string(), "wg1".to_string());
-        iface1.insert("disabled".to_string(), "false".to_string());
-
-        let mut iface2 = HashMap::new();
-        iface2.insert("name".to_string(), "wg2".to_string());
-        iface2.insert("disabled".to_string(), "true".to_string());
-
-        let result = parse_wireguard_interfaces(&[iface1, iface2]);
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0].name, "wg1");
-        assert!(result[0].enabled);
-        assert_eq!(result[1].name, "wg2");
-        assert!(!result[1].enabled);
-    }
-
-    #[test]
-    fn test_parse_wireguard_interfaces_missing_name() {
-        let mut data = HashMap::new();
-        data.insert("disabled".to_string(), "false".to_string());
-
-        let result = parse_wireguard_interfaces(&[data]);
-        assert_eq!(result.len(), 0);
-    }
-
-    #[test]
-    fn test_parse_wireguard_interfaces_no_disabled_field() {
-        let mut data = HashMap::new();
-        data.insert("name".to_string(), "wg1".to_string());
-
-        let result = parse_wireguard_interfaces(&[data]);
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].name, "wg1");
-        assert!(result[0].enabled);
-    }
-
-    #[test]
     fn test_parse_wireguard_peers_empty() {
         let result = parse_wireguard_peers(&[]);
         assert_eq!(result.len(), 0);
@@ -246,6 +161,7 @@ mod tests {
         let mut data = HashMap::new();
         data.insert("interface".to_string(), "wg1".to_string());
         data.insert("name".to_string(), "peer1".to_string());
+        data.insert("comment".to_string(), "John".to_string());
         data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
         data.insert(
             "current-endpoint-address".to_string(),
@@ -259,6 +175,7 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].interface, "wg1");
         assert_eq!(result[0].name, "peer1");
+        assert_eq!(result[0].comment, "John");
         assert_eq!(result[0].allowed_address, "10.10.10.1/32");
         assert_eq!(result[0].endpoint, Some("192.168.1.1".to_string()));
         assert_eq!(result[0].rx_bytes, 1024);
@@ -319,6 +236,7 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].interface, "wg1");
         assert_eq!(result[0].name, "unnamed-peer");
+        assert_eq!(result[0].comment, "");
         assert_eq!(result[0].allowed_address, "10.10.10.1/32");
     }
 

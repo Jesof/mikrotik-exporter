@@ -93,14 +93,16 @@ async fn metrics_contains_router_data_after_update() {
 
     let iface = InterfaceStats {
         name: "ether1".to_string(),
+        comment: "WAN".to_string(),
         rx_bytes: 1000,
         tx_bytes: 2000,
         rx_packets: 10,
         tx_packets: 20,
-        rx_errors: 0,
-        tx_errors: 0,
+        rx_errors: 1,
+        tx_errors: 2,
         running: true,
     };
+
     let system = SystemResource {
         uptime: "1d".to_string(),
         cpu_load: 42,
@@ -114,11 +116,11 @@ async fn metrics_contains_router_data_after_update() {
         interfaces: vec![iface],
         system,
         connection_tracking: Vec::new(),
-        wireguard_interfaces: vec![],
         wireguard_peers: vec![],
         certificate_stats: vec![],
         firewall_rules: vec![mikrotik_exporter::FirewallRuleStats {
             id: "*1".to_string(),
+            comment: "Drop invalid".to_string(),
             chain: "forward".to_string(),
             action: "accept".to_string(),
             bytes: 1024,
@@ -157,6 +159,7 @@ async fn metrics_correctly_calculates_interface_counters() {
     // First update with initial values
     let iface = InterfaceStats {
         name: "ether1".to_string(),
+        comment: "WAN".to_string(),
         rx_bytes: 1000,
         tx_bytes: 2000,
         rx_packets: 10,
@@ -178,11 +181,11 @@ async fn metrics_correctly_calculates_interface_counters() {
         interfaces: vec![iface],
         system: system.clone(),
         connection_tracking: Vec::new(),
-        wireguard_interfaces: vec![],
         wireguard_peers: vec![],
         certificate_stats: vec![],
         firewall_rules: vec![mikrotik_exporter::FirewallRuleStats {
             id: "*1".to_string(),
+            comment: "Drop invalid".to_string(),
             chain: "forward".to_string(),
             action: "accept".to_string(),
             bytes: 1024,
@@ -196,6 +199,7 @@ async fn metrics_correctly_calculates_interface_counters() {
     // Second update with incremented values
     let iface2 = InterfaceStats {
         name: "ether1".to_string(),
+        comment: "WAN".to_string(),
         rx_bytes: 3000, // +2000
         tx_bytes: 5000, // +3000
         rx_packets: 25, // +15
@@ -209,11 +213,11 @@ async fn metrics_correctly_calculates_interface_counters() {
         interfaces: vec![iface2],
         system,
         connection_tracking: Vec::new(),
-        wireguard_interfaces: vec![],
         wireguard_peers: vec![],
         certificate_stats: vec![],
         firewall_rules: vec![mikrotik_exporter::FirewallRuleStats {
             id: "*1".to_string(),
+            comment: "Drop invalid".to_string(),
             chain: "forward".to_string(),
             action: "accept".to_string(),
             bytes: 1024,
@@ -245,25 +249,25 @@ async fn metrics_correctly_calculates_interface_counters() {
     // Second update: delta rx=2000, delta tx=3000, delta rx_pkts=15, delta tx_pkts=15
     // Final counter: rx=3000, tx=5000, rx_pkts=25, tx_pkts=35
     assert!(body.contains(
-        "mikrotik_interface_rx_bytes_total{router=\"router1\",interface=\"ether1\"} 3000"
+        "mikrotik_interface_rx_bytes_total{router=\"router1\",interface=\"ether1\",comment=\"WAN\"} 3000"
     ));
     assert!(body.contains(
-        "mikrotik_interface_tx_bytes_total{router=\"router1\",interface=\"ether1\"} 5000"
+        "mikrotik_interface_tx_bytes_total{router=\"router1\",interface=\"ether1\",comment=\"WAN\"} 5000"
     ));
     assert!(body.contains(
-        "mikrotik_interface_rx_packets_total{router=\"router1\",interface=\"ether1\"} 25"
+        "mikrotik_interface_rx_packets_total{router=\"router1\",interface=\"ether1\",comment=\"WAN\"} 25"
     ));
     assert!(body.contains(
-        "mikrotik_interface_tx_packets_total{router=\"router1\",interface=\"ether1\"} 35"
+        "mikrotik_interface_tx_packets_total{router=\"router1\",interface=\"ether1\",comment=\"WAN\"} 35"
     ));
     assert!(
         body.contains(
-            "mikrotik_interface_rx_errors_total{router=\"router1\",interface=\"ether1\"} 1"
+            "mikrotik_interface_rx_errors_total{router=\"router1\",interface=\"ether1\",comment=\"WAN\"} 1"
         )
     );
     assert!(
         body.contains(
-            "mikrotik_interface_tx_errors_total{router=\"router1\",interface=\"ether1\"} 4"
+            "mikrotik_interface_tx_errors_total{router=\"router1\",interface=\"ether1\",comment=\"WAN\"} 4"
         )
     );
 }

@@ -10,7 +10,7 @@ use std::sync::Arc;
 use super::pool::ConnectionPool;
 use super::responses::{
     parse_certificates, parse_connection_tracking, parse_firewall_rules, parse_interfaces,
-    parse_system, parse_wireguard_interfaces, parse_wireguard_peers,
+    parse_system, parse_wireguard_peers,
 };
 use super::types::RouterMetrics;
 
@@ -148,7 +148,6 @@ impl MikroTikClient {
         let interfaces_result = conn.command("/interface/print", &[]).await;
         let conntrack_v4_result = conn.command("/ip/firewall/connection/print", &[]).await;
         let conntrack_v6_result = conn.command("/ipv6/firewall/connection/print", &[]).await;
-        let wireguard_interfaces_result = conn.command("/interface/wireguard/print", &[]).await;
         let wireguard_peers_result = conn.command("/interface/wireguard/peers/print", &[]).await;
         let certificates_result = conn.command("/certificate/print", &[".detail"]).await;
 
@@ -231,9 +230,7 @@ impl MikroTikClient {
         let system = parse_system(&system_sentences);
         let interfaces = parse_interfaces(&interfaces_sentences);
 
-        // Parse WireGuard interfaces and peers
-        let wireguard_interfaces =
-            parse_wireguard_interfaces(&wireguard_interfaces_result.unwrap_or_default());
+        // Parse WireGuard peers
         let wireguard_peers = parse_wireguard_peers(&wireguard_peers_result.unwrap_or_default());
 
         // Parse certificates
@@ -291,7 +288,6 @@ impl MikroTikClient {
             interfaces,
             system,
             connection_tracking: conntrack_v4,
-            wireguard_interfaces,
             wireguard_peers,
             certificate_stats,
             firewall_rules,
