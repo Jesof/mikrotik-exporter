@@ -211,7 +211,7 @@ mod tests {
         let system = make_system("7.10", "RB750Gr3", "1d");
         let metrics = make_router_metrics("router1", vec![iface], system);
 
-        registry.update_metrics(&metrics).await;
+        registry.update_metrics(&metrics);
 
         let labels = InterfaceLabels {
             router: "router1".to_string(),
@@ -242,12 +242,12 @@ mod tests {
         let iface1 = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
         let system1 = make_system("7.10", "RB750Gr3", "1d");
         let metrics1 = make_router_metrics("router1", vec![iface1], system1);
-        registry.update_metrics(&metrics1).await;
+        registry.update_metrics(&metrics1);
 
         let iface2 = make_interface("*1", "ether1", "WAN", 1500, 2500, 15, 25, 0, 0, true);
         let system2 = make_system("7.10", "RB750Gr3", "1d");
         let metrics2 = make_router_metrics("router1", vec![iface2], system2);
-        registry.update_metrics(&metrics2).await;
+        registry.update_metrics(&metrics2);
 
         let labels = InterfaceLabels {
             router: "router1".to_string(),
@@ -278,7 +278,7 @@ mod tests {
         let iface1 = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
         let system1 = make_system("7.10", "RB750Gr3", "1d");
         let metrics1 = make_router_metrics("router1", vec![iface1], system1);
-        registry.update_metrics_baseline(&metrics1).await;
+        registry.update_metrics_baseline(&metrics1);
 
         let labels = InterfaceLabels {
             router: "router1".to_string(),
@@ -290,7 +290,7 @@ mod tests {
         let iface2 = make_interface("*1", "ether1", "WAN", 1500, 2600, 15, 26, 0, 0, true);
         let system2 = make_system("7.10", "RB750Gr3", "1d");
         let metrics2 = make_router_metrics("router1", vec![iface2], system2);
-        registry.update_metrics(&metrics2).await;
+        registry.update_metrics(&metrics2);
 
         assert_eq!(
             registry.interface_rx_bytes.get_or_create(&labels).get(),
@@ -309,12 +309,12 @@ mod tests {
         let iface1 = make_interface("*1", "ether1", "WAN", 5000, 6000, 50, 60, 2, 3, true);
         let system1 = make_system("7.10", "RB750Gr3", "1d");
         let metrics1 = make_router_metrics("router1", vec![iface1], system1);
-        registry.update_metrics(&metrics1).await;
+        registry.update_metrics(&metrics1);
 
         let iface2 = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
         let system2 = make_system("7.10", "RB750Gr3", "1d");
         let metrics2 = make_router_metrics("router1", vec![iface2], system2);
-        registry.update_metrics(&metrics2).await;
+        registry.update_metrics(&metrics2);
 
         let labels = InterfaceLabels {
             router: "router1".to_string(),
@@ -346,7 +346,7 @@ mod tests {
         let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
         let system = make_system("7.10", "RB750Gr3", "1d");
         let metrics = make_router_metrics("router1", vec![iface], system);
-        registry.update_metrics(&metrics).await;
+        registry.update_metrics(&metrics);
 
         let router_label = RouterLabels {
             router: "router1".to_string(),
@@ -389,7 +389,7 @@ mod tests {
                 );
                 let system = make_system("7.10", "RB750Gr3", "1d");
                 let metrics = make_router_metrics(&format!("router{}", i), vec![iface], system);
-                registry_clone.update_metrics(&metrics).await;
+                registry_clone.update_metrics(&metrics);
             });
             tasks.push(task);
         }
@@ -491,7 +491,7 @@ mod tests {
         let iface2 = make_interface("*2", "ether2", "LAN", 3000, 4000, 30, 40, 1, 2, false);
         let system = make_system("7.10", "RB750Gr3", "1d");
         let metrics = make_router_metrics("router1", vec![iface1, iface2], system);
-        registry.update_metrics(&metrics).await;
+        registry.update_metrics(&metrics);
 
         let labels1 = InterfaceLabels {
             router: "router1".to_string(),
@@ -527,7 +527,7 @@ mod tests {
             board_name: "RB750Gr3".to_string(),
         };
         let metrics = make_router_metrics("router1", vec![iface], system);
-        registry.update_metrics(&metrics).await;
+        registry.update_metrics(&metrics);
 
         let router_label = RouterLabels {
             router: "router1".to_string(),
@@ -565,7 +565,7 @@ mod tests {
             make_conntrack("192.168.1.1", "tcp", 100, "ipv4"),
             make_conntrack("192.168.1.1", "udp", 50, "ipv4"),
         ];
-        registry.update_metrics(&metrics1).await;
+        registry.update_metrics(&metrics1);
 
         // First update for router2 with different connections
         let mut metrics2 = make_router_metrics("router2", vec![iface.clone()], system.clone());
@@ -573,7 +573,7 @@ mod tests {
             make_conntrack("10.0.0.1", "tcp", 200, "ipv4"),
             make_conntrack("10.0.0.1", "icmp", 10, "ipv4"),
         ];
-        registry.update_metrics(&metrics2).await;
+        registry.update_metrics(&metrics2);
 
         // Check that both routers have their metrics
         let labels1_tcp = ConntrackLabels {
@@ -632,7 +632,7 @@ mod tests {
 
         // Second update for router1: remove UDP, keep TCP
         metrics1.connection_tracking = vec![make_conntrack("192.168.1.1", "tcp", 150, "ipv4")];
-        registry.update_metrics(&metrics1).await;
+        registry.update_metrics(&metrics1);
 
         // Check that router1's UDP was reset to 0, but TCP updated
         assert_eq!(
@@ -681,7 +681,7 @@ mod tests {
             board_name: "RB750Gr3".to_string(),
         };
         let metrics_v1 = make_router_metrics("router1", vec![iface.clone()], system_v1);
-        registry.update_metrics(&metrics_v1).await;
+        registry.update_metrics(&metrics_v1);
 
         let old_labels = SystemInfoLabels {
             router: "router1".to_string(),
@@ -699,7 +699,7 @@ mod tests {
             board_name: "RB750Gr3".to_string(),
         };
         let metrics_v2 = make_router_metrics("router1", vec![iface], system_v2);
-        registry.update_metrics(&metrics_v2).await;
+        registry.update_metrics(&metrics_v2);
 
         let new_labels = SystemInfoLabels {
             router: "router1".to_string(),
@@ -732,8 +732,8 @@ mod tests {
             board_name: "RB750Gr3".to_string(),
         };
         let metrics = make_router_metrics("router1", vec![iface.clone()], system.clone());
-        registry.update_metrics(&metrics).await;
-        registry.update_metrics(&metrics).await;
+        registry.update_metrics(&metrics);
+        registry.update_metrics(&metrics);
 
         let labels = SystemInfoLabels {
             router: "router1".to_string(),

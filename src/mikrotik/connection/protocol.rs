@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! RouterOS wire protocol helpers
+//! `RouterOS` wire protocol helpers
 
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 
 // RouterOS protocol length encoding - intentional truncation is part of the wire format
 #[allow(clippy::cast_possible_truncation)]
+#[must_use]
 pub fn encode_length(len: usize) -> Vec<u8> {
     if len < 0x80 {
         vec![len as u8]

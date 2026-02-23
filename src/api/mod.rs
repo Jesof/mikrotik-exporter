@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! HTTP API module for MikroTik Exporter
+//! HTTP API module for `MikroTik` Exporter
 //!
 //! Provides REST API endpoints for health checks and Prometheus metrics export.
 //!

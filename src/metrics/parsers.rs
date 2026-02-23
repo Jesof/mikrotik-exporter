@@ -3,7 +3,7 @@
 
 //! Utility functions for metrics processing
 
-/// Parse MikroTik uptime string to seconds
+/// Parse `MikroTik` uptime string to seconds
 ///
 /// Accepts formats like: 1d2h3m4s, 2w1d, 05:23:10, 1h5m, 30s
 ///

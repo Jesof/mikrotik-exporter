@@ -79,9 +79,9 @@ pub(super) fn spawn_router_collection(
                         router_name,
                         gap_duration
                     );
-                    metrics.update_metrics_baseline(&m).await;
+                    metrics.update_metrics_baseline(&m);
                 } else {
-                    metrics.update_metrics(&m).await;
+                    metrics.update_metrics(&m);
                 }
                 metrics.record_scrape_duration(&router_label, duration);
 

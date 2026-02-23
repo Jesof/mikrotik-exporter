@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! Error types for MikroTik Exporter application
+//! Error types for `MikroTik` Exporter application
 
 use thiserror::Error;
 
@@ -16,7 +16,7 @@ pub enum AppError {
     #[error("IO error")]
     Io(#[from] std::io::Error),
 
-    /// RouterOS API error
+    /// `RouterOS` API error
     #[error("RouterOS error: {0}")]
     RouterOs(String),
 

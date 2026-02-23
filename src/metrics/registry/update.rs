@@ -29,18 +29,17 @@ impl UpdateMode {
 
 impl MetricsRegistry {
     /// Update metrics from collected router data
-    pub async fn update_metrics(&self, metrics: &RouterMetrics) {
-        self.update_metrics_with_mode(metrics, UpdateMode::Normal)
-            .await;
+    pub fn update_metrics(&self, metrics: &RouterMetrics) {
+        self.update_metrics_with_mode(metrics, UpdateMode::Normal);
     }
 
     /// Update metrics but skip counter increments (baseline only).
-    pub async fn update_metrics_baseline(&self, metrics: &RouterMetrics) {
-        self.update_metrics_with_mode(metrics, UpdateMode::BaselineOnly)
-            .await;
+    pub fn update_metrics_baseline(&self, metrics: &RouterMetrics) {
+        self.update_metrics_with_mode(metrics, UpdateMode::BaselineOnly);
     }
 
-    async fn update_metrics_with_mode(&self, metrics: &RouterMetrics, mode: UpdateMode) {
+    #[allow(clippy::too_many_lines, clippy::similar_names)]
+    fn update_metrics_with_mode(&self, metrics: &RouterMetrics, mode: UpdateMode) {
         let apply_counters = mode.apply_counters();
         let now = Instant::now();
 
@@ -269,11 +268,11 @@ impl MetricsRegistry {
             existing.latest_handshake,
         ) {
             (Some(candidate_ts), Some(existing_ts)) => {
-                if candidate_ts != existing_ts {
-                    candidate_ts > existing_ts
-                } else {
+                if candidate_ts == existing_ts {
                     candidate.rx_bytes.saturating_add(candidate.tx_bytes)
                         > existing.rx_bytes.saturating_add(existing.rx_bytes)
+                } else {
+                    candidate_ts > existing_ts
                 }
             }
             (Some(_), None) => true,

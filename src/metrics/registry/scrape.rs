@@ -10,6 +10,10 @@ use std::time::{Duration, Instant};
 use super::MetricsRegistry;
 
 impl MetricsRegistry {
+    /// Encode all metrics to `OpenMetrics` text format.
+    ///
+    /// # Errors
+    /// Returns an error if Prometheus encoding fails.
     pub async fn encode_metrics(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let registry = self.registry.lock().await;
         let mut buffer = String::new();
@@ -33,6 +37,7 @@ impl MetricsRegistry {
     }
 
     /// Record scrape success and return gap duration if it exceeds threshold.
+    #[must_use]
     pub fn record_scrape_success_and_check_gap(
         &self,
         labels: &RouterLabels,
@@ -66,7 +71,7 @@ impl MetricsRegistry {
 
     /// Initialize metrics for a router to zero
     ///
-    /// This ensures that counters like scrape_success and scrape_errors
+    /// This ensures that counters like `scrape_success` and `scrape_errors`
     /// exist from the start, allowing Prometheus to calculate rates correctly
     /// even before the first success or error occurs.
     pub fn initialize_router_metrics(&self, labels: &RouterLabels) {
@@ -107,12 +112,14 @@ impl MetricsRegistry {
     }
 
     /// Get scrape success count for health check
-    pub async fn get_scrape_success_count(&self, labels: &RouterLabels) -> u64 {
+    #[must_use]
+    pub fn get_scrape_success_count(&self, labels: &RouterLabels) -> u64 {
         self.scrape_success.get_or_create(labels).get()
     }
 
     /// Get scrape error count for health check
-    pub async fn get_scrape_error_count(&self, labels: &RouterLabels) -> u64 {
+    #[must_use]
+    pub fn get_scrape_error_count(&self, labels: &RouterLabels) -> u64 {
         self.scrape_errors.get_or_create(labels).get()
     }
 }

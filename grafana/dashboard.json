@@ -3192,6 +3192,7 @@
           "options": {
             "excludeByName": {
               "Time": true,
+              "__name__": true,
               "container": true,
               "endpoint": true,
               "id": true,
@@ -3767,7 +3768,7 @@
     ]
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-1m",
     "to": "now"
   },
   "timepicker": {
@@ -3786,7 +3787,7 @@
   "timezone": "browser",
   "title": "MikroTik Router Monitoring",
   "uid": "mikrotik-exporter",
-  "version": 40,
+  "version": 45,
   "weekStart": "",
   "id": null
 }

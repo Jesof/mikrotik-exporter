@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! # MikroTik Exporter
+//! # `MikroTik` Exporter
 //!
-//! Prometheus exporter for MikroTik RouterOS devices.
+//! Prometheus exporter for `MikroTik` `RouterOS` devices.
 //!
-//! This library provides functionality to collect metrics from MikroTik routers
-//! via the RouterOS API and expose them in Prometheus format.
+//! This library provides functionality to collect metrics from `MikroTik` routers
+//! via the `RouterOS` API and expose them in Prometheus format.
 //!
 //! ## Installation
 //!
@@ -31,9 +31,9 @@
 //!
 //! ## Features
 //!
-//! - **Multi-router support**: Collect metrics from multiple MikroTik devices
+//! - **Multi-router support**: Collect metrics from multiple `MikroTik` devices
 //! - **Asynchronous architecture**: Efficient concurrent collection using connection pooling
-//! - **Comprehensive metrics**: Interface statistics, system resources, connection tracking, WireGuard
+//! - **Comprehensive metrics**: Interface statistics, system resources, connection tracking, `WireGuard`
 //! - **Built-in connection pooling**: Automatic connection management with exponential backoff
 //! - **Delta calculation**: Automatic counter delta calculation for accurate rate metrics
 //! - **Startup connectivity testing**: Optional connectivity verification during application startup
@@ -81,7 +81,7 @@
 //! - `config`: configuration management
 //! - `error`: error types
 //! - `metrics`: metrics parsing and registry
-//! - `mikrotik`: MikroTik device interaction
+//! - `mikrotik`: `MikroTik` device interaction
 //! - `prelude`: commonly used types and traits
 //!
 //! ## Performance Optimizations
@@ -115,11 +115,11 @@ pub use collector::start_collection_loop;
 /// Metrics registry and labels
 pub use metrics::{MetricsRegistry, RouterLabels};
 
-/// MikroTik connection pool and metric input types
+/// `MikroTik` connection pool and metric input types
 pub use mikrotik::{
     CertificateStats, ConnectionPool, ConnectionTrackingStats, FirewallRuleStats, InterfaceStats,
     RouterMetrics, SystemResource, WireGuardPeerStats,
 };
 
-/// RouterOS wire protocol length encoding (public for tests)
+/// `RouterOS` wire protocol length encoding (public for tests)
 pub use mikrotik::encode_length;

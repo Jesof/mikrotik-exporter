@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! RouterOS API response parsing modules
+//! `RouterOS` API response parsing modules
 //!
 //! This module contains parsers for different types of data returned
-//! by the RouterOS API, such as system resources, interfaces, connection
-//! tracking, WireGuard, and certificates.
+//! by the `RouterOS` API, such as system resources, interfaces, connection
+//! tracking, `WireGuard`, and certificates.
 
 pub(crate) mod certificates;
 pub(crate) mod conntrack;

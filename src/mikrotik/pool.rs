@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! Connection pool for managing RouterOS connections
+//! Connection pool for managing `RouterOS` connections
 //!
 //! # Architecture
 //!
-//! This module implements a connection pooling mechanism for RouterOS API connections
-//! to MikroTik devices. It provides efficient connection reuse and handles connection
+//! This module implements a connection pooling mechanism for `RouterOS` API connections
+//! to `MikroTik` devices. It provides efficient connection reuse and handles connection
 //! failures with exponential backoff.
 //!
 //! ## Key Components
 //!
-//! - **ConnectionPool**: Thread-safe pool managing multiple connections using `Arc<Mutex<HashMap>>`
-//! - **PooledConnectionGuard**: RAII guard ensuring connections are always returned to the pool
-//! - **ConnectionState**: Tracks connection health with error counting and backoff logic
+//! - **`ConnectionPool`**: Thread-safe pool managing multiple connections using `Arc<Mutex<HashMap>>`
+//! - **`PooledConnectionGuard`**: RAII guard ensuring connections are always returned to the pool
+//! - **`ConnectionState`**: Tracks connection health with error counting and backoff logic
 //!
 //! ## Connection Lifecycle
 //!
@@ -217,6 +217,7 @@ impl Default for ConnectionPool {
 }
 
 impl ConnectionPool {
+    #[must_use]
     pub fn new() -> Self {
         let (return_tx, return_rx) = mpsc::unbounded_channel();
         let connections = Arc::new(Mutex::new(HashMap::new()));

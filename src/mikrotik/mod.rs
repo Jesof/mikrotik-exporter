@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! RouterOS API client module for MikroTik
+//! `RouterOS` API client module for `MikroTik`
 //!
-//! Implements connection to MikroTik routers via RouterOS API,
+//! Implements connection to `MikroTik` routers via `RouterOS` API,
 //! authentication, and collection of metrics including system resources,
-//! interfaces, connection tracking, WireGuard, and certificates.
+//! interfaces, connection tracking, `WireGuard`, and certificates.
 
 mod client;
 mod connection;
@@ -13,7 +13,7 @@ mod pool;
 mod responses;
 pub(crate) mod types;
 
-/// Client for MikroTik RouterOS API
+/// Client for `MikroTik` `RouterOS` API
 pub(crate) use client::MikroTikClient;
 
 /// Connection pool for routers

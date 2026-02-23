@@ -6,15 +6,15 @@
 use crate::mikrotik::types::FirewallRuleStats;
 use std::collections::HashMap;
 
-/// Parse firewall rules from RouterOS API responses
+/// Parse firewall rules from `RouterOS` API responses
 ///
 /// # Arguments
-/// * `sentences` - Slice of HashMap<String, String> representing API responses
+/// * `sentences` - Slice of `HashMap<String, String>` representing API responses
 /// * `ip_version` - IP version string ("ipv4" or "ipv6")
 /// * `section` - Firewall section ("filter", "nat", "mangle", "raw")
 ///
 /// # Returns
-/// Vector of FirewallRuleStats parsed from the API responses
+/// Vector of `FirewallRuleStats` parsed from the API responses
 pub(crate) fn parse_firewall_rules(
     sentences: &[HashMap<String, String>],
     ip_version: &str,

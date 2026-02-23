@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! HTTP endpoint handlers for MikroTik Exporter
+//! HTTP endpoint handlers for `MikroTik` Exporter
 //!
 //! # Endpoints
 //!
@@ -16,7 +16,7 @@
 //!     - Scrape success history
 //!
 //! - **`/metrics`** (`metrics_handler`): Prometheus metrics endpoint
-//!   - Returns metrics in OpenMetrics format
+//!   - Returns metrics in `OpenMetrics` format
 //!   - Content-Type: `application/openmetrics-text; version=1.0.0`
 //!   - Encodes all collected metrics from the registry
 //!   - Handles encoding errors gracefully with 500 response

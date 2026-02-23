@@ -130,7 +130,7 @@ async fn metrics_contains_router_data_after_update() {
             section: "filter".to_string(),
         }],
     };
-    state.metrics.update_metrics(&metrics).await;
+    state.metrics.update_metrics(&metrics);
 
     let app = create_router(state);
     let resp = app
@@ -199,7 +199,7 @@ async fn metrics_correctly_calculates_interface_counters() {
             section: "filter".to_string(),
         }],
     };
-    state.metrics.update_metrics(&metrics1).await;
+    state.metrics.update_metrics(&metrics1);
 
     // Second update with incremented values
     let iface2 = InterfaceStats {
@@ -232,7 +232,7 @@ async fn metrics_correctly_calculates_interface_counters() {
             section: "filter".to_string(),
         }],
     };
-    state.metrics.update_metrics(&metrics2).await;
+    state.metrics.update_metrics(&metrics2);
 
     let app = create_router(state);
     let resp = app

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! Type definitions for MikroTik metrics
+//! Type definitions for `MikroTik` metrics
 
 /// Statistics for a network interface
 #[derive(Debug, Clone)]
@@ -38,7 +38,7 @@ pub struct ConnectionTrackingStats {
     pub ip_version: String,
 }
 
-/// Certificate information from a MikroTik router
+/// Certificate information from a `MikroTik` router
 #[derive(Debug, Clone)]
 pub struct CertificateStats {
     pub id: String,
@@ -46,7 +46,7 @@ pub struct CertificateStats {
     pub days_until_expiry: i64,
 }
 
-/// Statistics for a WireGuard peer
+/// Statistics for a `WireGuard` peer
 #[derive(Debug, Clone, PartialEq)]
 pub struct WireGuardPeerStats {
     pub id: String,
