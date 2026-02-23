@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! RouterOS authentication
+//! `RouterOS` authentication
 
 use md5::compute as md5_compute;
 

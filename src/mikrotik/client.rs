@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! High-level MikroTik client
+//! High-level `MikroTik` client
 
 use crate::config::RouterConfig;
 use secrecy::ExposeSecret;
@@ -18,7 +18,7 @@ use super::types::RouterMetrics;
 ///
 /// Provides methods to connect to `MikroTik` routers via `RouterOS` API
 /// and collect system resources, interface statistics, connection tracking,
-/// WireGuard peers, and certificate information.
+/// `WireGuard` peers, and certificate information.
 pub(crate) struct MikroTikClient {
     config: RouterConfig,
     pool: Arc<ConnectionPool>,
@@ -82,16 +82,15 @@ impl MikroTikClient {
 
         const TEST_CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
 
-        match timeout(TEST_CONNECTION_TIMEOUT, self.test_connection_real()).await {
-            Ok(result) => result,
-            Err(_) => {
-                let err = format!(
-                    "Router '{}' connection test timeout (>10s)",
-                    self.config.name
-                );
-                tracing::error!("{}", err);
-                Err(err.into())
-            }
+        if let Ok(result) = timeout(TEST_CONNECTION_TIMEOUT, self.test_connection_real()).await {
+            result
+        } else {
+            let err = format!(
+                "Router '{}' connection test timeout (>10s)",
+                self.config.name
+            );
+            tracing::error!("{}", err);
+            Err(err.into())
         }
     }
 

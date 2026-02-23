@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! Metrics registry and update module for MikroTik Exporter
+//! Metrics registry and update module for `MikroTik` Exporter
 //!
 //! Contains types for labels, parsers, and Prometheus metrics registry.
 

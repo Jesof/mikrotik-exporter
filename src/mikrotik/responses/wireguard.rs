@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! WireGuard metrics collection for MikroTik routers
+//! `WireGuard` metrics collection for `MikroTik` routers
 //!
-//! This module implements parsing of WireGuard interface and peer information
-//! from RouterOS API responses and structures for storing the parsed data.
+//! This module implements parsing of `WireGuard` interface and peer information
+//! from `RouterOS` API responses and structures for storing the parsed data.
 //!
 //! For peer identification, we use `.id` as the primary key.
 
@@ -12,7 +12,7 @@ use crate::mikrotik::types::WireGuardPeerStats;
 use std::collections::HashMap;
 use std::time::SystemTime;
 
-/// Parse WireGuard peer information from RouterOS API response
+/// Parse `WireGuard` peer information from `RouterOS` API response
 pub(crate) fn parse_wireguard_peers(
     sentences: &[HashMap<String, String>],
 ) -> Vec<WireGuardPeerStats> {
@@ -85,7 +85,7 @@ fn parse_handshake_to_timestamp(handshake_str: &str) -> Option<u64> {
     let duration_secs = if let Ok(seconds) = handshake_str.parse::<u64>() {
         seconds
     } else {
-        parse_routeros_duration(handshake_str)?
+        parse_routeros_duration(handshake_str)
     };
 
     let now = SystemTime::now()
@@ -96,9 +96,9 @@ fn parse_handshake_to_timestamp(handshake_str: &str) -> Option<u64> {
     Some(now.saturating_sub(duration_secs))
 }
 
-fn parse_routeros_duration(duration_str: &str) -> Option<u64> {
+fn parse_routeros_duration(duration_str: &str) -> u64 {
     if duration_str.is_empty() {
-        return Some(0);
+        return 0;
     }
 
     let mut total_seconds: u64 = 0;
@@ -109,11 +109,11 @@ fn parse_routeros_duration(duration_str: &str) -> Option<u64> {
             '0'..='9' => {
                 if let Some(new_val) = current_number
                     .checked_mul(10)
-                    .and_then(|v| v.checked_add((ch as u8 - b'0') as u64))
+                    .and_then(|v| v.checked_add(u64::from(ch as u8 - b'0')))
                 {
                     current_number = new_val;
                 } else {
-                    return Some(u64::MAX);
+                    return u64::MAX;
                 }
             }
             's' => {
@@ -133,16 +133,15 @@ fn parse_routeros_duration(duration_str: &str) -> Option<u64> {
                 current_number = 0;
             }
             'w' => {
-                total_seconds = total_seconds.saturating_add(current_number.saturating_mul(604800));
+                total_seconds =
+                    total_seconds.saturating_add(current_number.saturating_mul(604_800));
                 current_number = 0;
             }
-            _ => {
-                continue;
-            }
+            _ => {}
         }
     }
 
-    Some(total_seconds)
+    total_seconds
 }
 
 #[cfg(test)]
@@ -356,13 +355,13 @@ mod tests {
 
     #[test]
     fn test_parse_routeros_duration() {
-        assert_eq!(parse_routeros_duration("7s"), Some(7));
-        assert_eq!(parse_routeros_duration("1m30s"), Some(90));
-        assert_eq!(parse_routeros_duration("2h30m"), Some(9000));
-        assert_eq!(parse_routeros_duration("1d2h"), Some(93600));
-        assert_eq!(parse_routeros_duration("1w2d"), Some(777600));
-        assert_eq!(parse_routeros_duration(""), Some(0));
-        assert_eq!(parse_routeros_duration("0s"), Some(0));
+        assert_eq!(parse_routeros_duration("7s"), 7);
+        assert_eq!(parse_routeros_duration("1m30s"), 90);
+        assert_eq!(parse_routeros_duration("2h30m"), 9000);
+        assert_eq!(parse_routeros_duration("1d2h"), 93600);
+        assert_eq!(parse_routeros_duration("1w2d"), 777600);
+        assert_eq!(parse_routeros_duration(""), 0);
+        assert_eq!(parse_routeros_duration("0s"), 0);
     }
 
     #[test]
@@ -385,7 +384,7 @@ mod tests {
     fn test_parse_routeros_duration_overflow_protection() {
         assert_eq!(
             parse_routeros_duration("9999999999999999999999999999999999999999s"),
-            Some(u64::MAX)
+            u64::MAX
         );
     }
 }

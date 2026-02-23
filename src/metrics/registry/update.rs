@@ -40,6 +40,7 @@ impl MetricsRegistry {
             .await;
     }
 
+    #[allow(clippy::unused_async, clippy::too_many_lines, clippy::similar_names)]
     async fn update_metrics_with_mode(&self, metrics: &RouterMetrics, mode: UpdateMode) {
         let apply_counters = mode.apply_counters();
         let now = Instant::now();
@@ -269,11 +270,11 @@ impl MetricsRegistry {
             existing.latest_handshake,
         ) {
             (Some(candidate_ts), Some(existing_ts)) => {
-                if candidate_ts != existing_ts {
-                    candidate_ts > existing_ts
-                } else {
+                if candidate_ts == existing_ts {
                     candidate.rx_bytes.saturating_add(candidate.tx_bytes)
                         > existing.rx_bytes.saturating_add(existing.rx_bytes)
+                } else {
+                    candidate_ts > existing_ts
                 }
             }
             (Some(_), None) => true,

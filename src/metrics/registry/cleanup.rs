@@ -15,6 +15,7 @@ use super::MetricsRegistry;
 
 impl MetricsRegistry {
     /// Clean up stale dynamic labels based on TTL to prevent unbounded growth
+    #[allow(clippy::unused_async)]
     pub async fn cleanup_expired_dynamic_labels(&self, ttl: Duration) {
         let now = Instant::now();
 
@@ -196,6 +197,7 @@ impl MetricsRegistry {
     }
 
     /// Clean up cached state for routers that are no longer configured
+    #[allow(clippy::unused_async)]
     pub async fn cleanup_stale_routers(&self, active_routers: &HashSet<String>) {
         let mut stale_routers = HashSet::new();
 
@@ -218,44 +220,46 @@ impl MetricsRegistry {
             self.interface_running.remove(&label);
         }
         self.prev_interface_info.retain(|router, map| {
-            if !active_routers.contains(router) {
+            if active_routers.contains(router) {
+                true
+            } else {
                 for info_label in map.values() {
                     self.interface_info.remove(info_label);
                     self.interface_info_last_seen.remove(info_label);
                 }
                 false
-            } else {
-                true
             }
         });
 
         // System Info
         self.prev_system_info.retain(|router, label| {
-            if !active_routers.contains(router) {
+            if active_routers.contains(router) {
+                true
+            } else {
                 stale_routers.insert(router.clone());
                 self.system_info.remove(label);
                 false
-            } else {
-                true
             }
         });
 
         // Conntrack
         self.prev_conntrack.retain(|router, set| {
-            if !active_routers.contains(router) {
+            if active_routers.contains(router) {
+                true
+            } else {
                 for label in set.iter() {
                     self.connection_tracking_count.remove(label);
                     self.conntrack_last_seen.remove(label);
                 }
                 false
-            } else {
-                true
             }
         });
 
         // WireGuard
         self.prev_wireguard_peers.retain(|router, set| {
-            if !active_routers.contains(router) {
+            if active_routers.contains(router) {
+                true
+            } else {
                 for label in set.iter() {
                     self.wireguard_peer_rx_bytes.remove(label);
                     self.wireguard_peer_tx_bytes.remove(label);
@@ -263,38 +267,38 @@ impl MetricsRegistry {
                     self.wireguard_peer_last_seen.remove(label);
                 }
                 false
-            } else {
-                true
             }
         });
         self.prev_wireguard_peer_info.retain(|router, map| {
-            if !active_routers.contains(router) {
+            if active_routers.contains(router) {
+                true
+            } else {
                 for info_label in map.values() {
                     self.wireguard_peer_info.remove(info_label);
                     self.wireguard_peer_info_last_seen.remove(info_label);
                 }
                 false
-            } else {
-                true
             }
         });
 
         // Certificates
         self.prev_certificates.retain(|router, set| {
-            if !active_routers.contains(router) {
+            if active_routers.contains(router) {
+                true
+            } else {
                 for label in set.iter() {
                     self.certificate_days_until_expiry.remove(label);
                     self.certificate_last_seen.remove(label);
                 }
                 false
-            } else {
-                true
             }
         });
 
         // Firewall
         self.prev_firewall_rules_by_router.retain(|router, set| {
-            if !active_routers.contains(router) {
+            if active_routers.contains(router) {
+                true
+            } else {
                 for label in set.iter() {
                     self.prev_firewall_rules.remove(label);
                     self.firewall_rule_bytes.remove(label);
@@ -302,19 +306,17 @@ impl MetricsRegistry {
                     self.firewall_rule_last_seen.remove(label);
                 }
                 false
-            } else {
-                true
             }
         });
         self.prev_firewall_rule_info.retain(|router, map| {
-            if !active_routers.contains(router) {
+            if active_routers.contains(router) {
+                true
+            } else {
                 for info_label in map.values() {
                     self.firewall_rule_info.remove(info_label);
                     self.firewall_rule_info_last_seen.remove(info_label);
                 }
                 false
-            } else {
-                true
             }
         });
 

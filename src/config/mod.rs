@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! Configuration module for MikroTik Exporter application
+//! Configuration module for `MikroTik` Exporter application
 //!
 //! Loads and parses configuration from environment variables and JSON.
 
@@ -24,7 +24,7 @@ mod env_vars {
     pub const ROUTERS_CONFIG: &str = "ROUTERS_CONFIG";
 }
 
-/// Configuration for a single MikroTik router
+/// Configuration for a single `MikroTik` router
 ///
 /// # Router Name Uniqueness
 ///
@@ -56,6 +56,10 @@ impl RouterConfig {
     /// # Returns
     /// Returns `Ok(())` if validation passes, or `Err(String)` with a descriptive
     /// error message if validation fails.
+    ///
+    /// # Errors
+    /// Returns `Err(String)` when any validation rule fails (empty name, invalid
+    /// address format, empty username, or weak password).
     ///
     /// # Examples
     /// ```

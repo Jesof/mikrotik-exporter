@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! Main entry point for MikroTik Exporter
+//! Main entry point for `MikroTik` Exporter
 //!
 //! Initializes configuration, logging, metrics collection, and HTTP API.
 //! - Loads environment variables
@@ -57,7 +57,9 @@ async fn main() -> Result<()> {
             .test_router_connectivity(config.startup_connectivity_timeout_secs)
             .await;
 
-        if !failed_routers.is_empty() {
+        if failed_routers.is_empty() {
+            tracing::info!("All router connectivity tests passed");
+        } else {
             tracing::warn!(
                 "Connectivity test failed for {} router(s): {:?}",
                 failed_routers.len(),
@@ -71,8 +73,6 @@ async fn main() -> Result<()> {
                 );
                 std::process::exit(1);
             }
-        } else {
-            tracing::info!("All router connectivity tests passed");
         }
     }
 

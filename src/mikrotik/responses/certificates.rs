@@ -113,19 +113,16 @@ fn parse_legacy_date_format(date_part: &str) -> i64 {
         _ => return 0,
     };
 
-    let day = match day_str.parse::<u32>() {
-        Ok(d) => d,
-        Err(_) => return 0,
+    let Ok(day) = day_str.parse::<u32>() else {
+        return 0;
     };
 
-    let year = match year_str.parse::<i32>() {
-        Ok(y) => y,
-        Err(_) => return 0,
+    let Ok(year) = year_str.parse::<i32>() else {
+        return 0;
     };
 
-    let expiry_date = match NaiveDate::from_ymd_opt(year, month_num, day) {
-        Some(date) => date,
-        None => return 0,
+    let Some(expiry_date) = NaiveDate::from_ymd_opt(year, month_num, day) else {
+        return 0;
     };
 
     let current_date = Utc::now().date_naive();

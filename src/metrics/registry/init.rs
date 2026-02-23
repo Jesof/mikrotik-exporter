@@ -19,7 +19,8 @@ use tokio::sync::Mutex;
 use super::MetricsRegistry;
 
 impl MetricsRegistry {
-    #[allow(clippy::similar_names)] // rx/tx naming pattern is intentional
+    #[allow(clippy::similar_names, clippy::too_many_lines)] // rx/tx naming pattern is intentional
+    #[must_use]
     pub fn new() -> Self {
         let mut registry = Registry::default();
 

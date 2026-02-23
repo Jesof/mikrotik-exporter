@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! Low-level RouterOS API connection handling
+//! Low-level `RouterOS` API connection handling
 
 mod auth;
 mod protocol;
@@ -21,7 +21,7 @@ const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 /// Read operation timeout (30 seconds)
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Low-level RouterOS API connection
+/// Low-level `RouterOS` API connection
 pub(super) struct RouterOsConnection {
     stream: TcpStream,
 }

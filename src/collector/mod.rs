@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! Metrics collection orchestration module for MikroTik routers
+//! Metrics collection orchestration module for `MikroTik` routers
 //!
 //! # Architecture
 //!
 //! This module implements the core metrics collection loop that runs in the background
-//! to periodically collect metrics from all configured MikroTik routers.
+//! to periodically collect metrics from all configured `MikroTik` routers.
 //!
 //! ## Components
 //!
@@ -55,6 +55,11 @@ use crate::mikrotik::ConnectionPool;
 use self::cache::SystemInfoCache;
 use self::router_task::spawn_router_collection;
 
+const CLEANUP_EVERY_N_CYCLES: u64 = 20;
+const STALE_LABEL_TTL: Duration = Duration::from_secs(60 * 30);
+const GAP_RESET_MULTIPLIER: u64 = 3;
+const MIN_GAP_RESET_SECS: u64 = 30;
+
 /// Starts the background metrics collection loop
 ///
 /// Spawns a background task that periodically collects metrics from all configured routers.
@@ -90,10 +95,6 @@ pub fn start_collection_loop(
     );
 
     // Cleanup interval: every 20 collection cycles
-    const CLEANUP_EVERY_N_CYCLES: u64 = 20;
-    const STALE_LABEL_TTL: Duration = Duration::from_secs(60 * 30);
-    const GAP_RESET_MULTIPLIER: u64 = 3;
-    const MIN_GAP_RESET_SECS: u64 = 30;
     let gap_reset_threshold = Duration::from_secs(interval.saturating_mul(GAP_RESET_MULTIPLIER))
         .max(Duration::from_secs(MIN_GAP_RESET_SECS));
 
