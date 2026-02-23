@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-02-23
+
+### Added
+- Added metadata gauges `mikrotik_interface_info` and `mikrotik_firewall_rule_info` for stable joins
+
+### Changed
+- Switched counter labels to stable `id` keys for interfaces, WireGuard peers, certificates, and firewall rules
+- Updated Grafana dashboard queries to join metadata from info gauges and adjusted interface variable source
+- Refreshed README metric lists and label descriptions to match the new label model
+
+### Fixed
+- Cleaned up stale dynamic label series via TTL to prevent unbounded growth when metadata changes
+
+### Removed
+- Removed interface, WireGuard peer, firewall rule, and certificate counters' comment/name labels in favor of info metrics
+
 ## [0.3.2] - 2026-02-23
 
 ### Added
