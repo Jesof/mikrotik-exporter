@@ -40,7 +40,6 @@ pub(crate) fn parse_certificates(sentences: &[HashMap<String, String>]) -> Vec<C
         certificates.push(CertificateStats {
             id,
             name,
-            comment: sentence.get("comment").cloned().unwrap_or_default(),
             days_until_expiry,
         });
     }
@@ -150,14 +149,12 @@ mod tests {
         let mut sentence1 = HashMap::new();
         sentence1.insert(".id".to_string(), "*1".to_string());
         sentence1.insert("name".to_string(), "cert1".to_string());
-        sentence1.insert("comment".to_string(), "Web".to_string());
         // Use a future date that's definitely in the future
         sentence1.insert("expiration".to_string(), "Jan/01/2030 12:00:00".to_string());
 
         let mut sentence2 = HashMap::new();
         sentence2.insert(".id".to_string(), "*2".to_string());
         sentence2.insert("name".to_string(), "cert2".to_string());
-        sentence2.insert("comment".to_string(), "API".to_string());
         // Use another future date
         sentence2.insert("expiration".to_string(), "Dec/31/2029 23:59:59".to_string());
 
@@ -167,10 +164,8 @@ mod tests {
         assert_eq!(certificates.len(), 2);
         assert_eq!(certificates[0].id, "*1");
         assert_eq!(certificates[0].name, "cert1");
-        assert_eq!(certificates[0].comment, "Web");
         assert_eq!(certificates[1].id, "*2");
         assert_eq!(certificates[1].name, "cert2");
-        assert_eq!(certificates[1].comment, "API");
     }
 
     #[test]

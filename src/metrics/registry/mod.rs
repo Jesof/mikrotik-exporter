@@ -9,9 +9,9 @@ mod scrape;
 mod update;
 
 use crate::metrics::labels::{
-    CertificateInfoLabels, CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels,
-    FirewallRuleLabels, InterfaceInfoLabels, InterfaceLabels, RouterLabels, SystemInfoLabels,
-    WireGuardPeerInfoLabels, WireGuardPeerLabels,
+    CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels, FirewallRuleLabels,
+    InterfaceInfoLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardPeerInfoLabels,
+    WireGuardPeerLabels,
 };
 use dashmap::DashMap;
 use prometheus_client::metrics::counter::Counter;
@@ -73,7 +73,6 @@ pub struct MetricsRegistry {
     wireguard_peer_info: Family<WireGuardPeerInfoLabels, Gauge>,
     // certificate metrics
     certificate_days_until_expiry: Family<CertificateLabels, Gauge>,
-    certificate_info: Family<CertificateInfoLabels, Gauge>,
     // interface info
     interface_info: Family<InterfaceInfoLabels, Gauge>,
     // firewall info
@@ -87,7 +86,6 @@ pub struct MetricsRegistry {
     prev_wireguard_peer_info:
         Arc<DashMap<String, HashMap<WireGuardPeerLabels, WireGuardPeerInfoLabels>>>,
     prev_interface_info: Arc<DashMap<String, HashMap<InterfaceLabels, InterfaceInfoLabels>>>,
-    prev_certificate_info: Arc<DashMap<String, HashMap<CertificateLabels, CertificateInfoLabels>>>,
     prev_firewall_rule_info:
         Arc<DashMap<String, HashMap<FirewallRuleLabels, FirewallRuleInfoLabels>>>,
     prev_certificates: Arc<DashMap<String, HashSet<CertificateLabels>>>,
@@ -98,7 +96,6 @@ pub struct MetricsRegistry {
     wireguard_peer_last_seen: Arc<DashMap<WireGuardPeerLabels, Instant>>,
     wireguard_peer_info_last_seen: Arc<DashMap<WireGuardPeerInfoLabels, Instant>>,
     certificate_last_seen: Arc<DashMap<CertificateLabels, Instant>>,
-    certificate_info_last_seen: Arc<DashMap<CertificateInfoLabels, Instant>>,
     interface_info_last_seen: Arc<DashMap<InterfaceInfoLabels, Instant>>,
     last_scrape_success: Arc<DashMap<String, Instant>>,
 }

@@ -4,9 +4,9 @@
 //! Cleanup helpers for stale and expired metric labels
 
 use crate::metrics::labels::{
-    CertificateInfoLabels, CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels,
-    FirewallRuleLabels, InterfaceInfoLabels, InterfaceLabels, RouterLabels,
-    WireGuardPeerInfoLabels, WireGuardPeerLabels,
+    CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels, FirewallRuleLabels,
+    InterfaceInfoLabels, InterfaceLabels, RouterLabels, WireGuardPeerInfoLabels,
+    WireGuardPeerLabels,
 };
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
@@ -99,14 +99,6 @@ impl MetricsRegistry {
                     set.remove(label);
                 }
                 self.certificate_days_until_expiry.remove(label);
-
-                // Clean up info
-                if let Some(mut map) = self.prev_certificate_info.get_mut(&label.router) {
-                    if let Some(info_label) = map.remove(label) {
-                        self.certificate_info.remove(&info_label);
-                        self.certificate_info_last_seen.remove(&info_label);
-                    }
-                }
             }
             tracing::debug!("Expired {} certificate labels via TTL cleanup", count);
         }
@@ -181,22 +173,6 @@ impl MetricsRegistry {
                 "Expired {} wireguard peer info labels via TTL cleanup",
                 count
             );
-        }
-
-        // 5.3 Certificate Info
-        let stale_cert_info: Vec<CertificateInfoLabels> = self
-            .certificate_info_last_seen
-            .iter()
-            .filter(|entry| now.duration_since(*entry.value()) > ttl)
-            .map(|entry| entry.key().clone())
-            .collect();
-        if !stale_cert_info.is_empty() {
-            let count = stale_cert_info.len();
-            for label in stale_cert_info {
-                self.certificate_info_last_seen.remove(&label);
-                self.certificate_info.remove(&label);
-            }
-            tracing::debug!("Expired {} certificate info labels via TTL cleanup", count);
         }
 
         // 5.4 Firewall Rule Info
@@ -309,17 +285,6 @@ impl MetricsRegistry {
                 for label in set.iter() {
                     self.certificate_days_until_expiry.remove(label);
                     self.certificate_last_seen.remove(label);
-                }
-                false
-            } else {
-                true
-            }
-        });
-        self.prev_certificate_info.retain(|router, map| {
-            if !active_routers.contains(router) {
-                for info_label in map.values() {
-                    self.certificate_info.remove(info_label);
-                    self.certificate_info_last_seen.remove(info_label);
                 }
                 false
             } else {

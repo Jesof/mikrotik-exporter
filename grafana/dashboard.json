@@ -3177,7 +3177,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_certificate_days_until_expiry{router=\"$router\"} * on (router, id) group_left(name, comment) (mikrotik_certificate_info == 1)",
+          "expr": "mikrotik_certificate_days_until_expiry{router=\"$router\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",

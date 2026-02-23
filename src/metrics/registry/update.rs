@@ -4,9 +4,9 @@
 //! Metric update logic for router snapshots
 
 use crate::metrics::labels::{
-    CertificateInfoLabels, CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels,
-    FirewallRuleLabels, InterfaceInfoLabels, InterfaceLabels, RouterLabels, SystemInfoLabels,
-    WireGuardPeerInfoLabels, WireGuardPeerLabels,
+    CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels, FirewallRuleLabels,
+    InterfaceInfoLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardPeerInfoLabels,
+    WireGuardPeerLabels,
 };
 use crate::metrics::parsers::parse_uptime_to_seconds;
 use crate::mikrotik::{RouterMetrics, WireGuardPeerStats};
@@ -377,31 +377,22 @@ impl MetricsRegistry {
         // 5. Update certificate metrics
         {
             let mut current_certificates = HashSet::new();
-            let mut current_cert_info = HashMap::new();
 
             for cert in &metrics.certificate_stats {
                 let labels = CertificateLabels {
                     router: metrics.router_name.clone(),
                     id: cert.id.clone(),
-                };
-                let info_labels = CertificateInfoLabels {
-                    router: metrics.router_name.clone(),
-                    id: cert.id.clone(),
                     name: cert.name.clone(),
-                    comment: cert.comment.clone(),
                 };
 
                 current_certificates.insert(labels.clone());
-                current_cert_info.insert(labels.clone(), info_labels.clone());
 
                 #[allow(clippy::cast_possible_wrap)]
                 self.certificate_days_until_expiry
                     .get_or_create(&labels)
                     .set(cert.days_until_expiry);
-                self.certificate_info.get_or_create(&info_labels).set(1);
 
                 self.certificate_last_seen.insert(labels, now);
-                self.certificate_info_last_seen.insert(info_labels, now);
             }
 
             let mut prev_certs_entry = self
@@ -414,25 +405,6 @@ impl MetricsRegistry {
                 self.certificate_last_seen.remove(stale);
             }
             *prev_labels = current_certificates;
-
-            let mut prev_info_entry = self
-                .prev_certificate_info
-                .entry(metrics.router_name.clone())
-                .or_default();
-            let prev_map = prev_info_entry.value_mut();
-            for (labels, info_labels) in prev_map.iter() {
-                if !current_cert_info.contains_key(labels) {
-                    // Cert is gone
-                    self.certificate_info.remove(info_labels);
-                    self.certificate_info_last_seen.remove(info_labels);
-                } else if let Some(current_info) = current_cert_info.get(labels) {
-                    if current_info != info_labels {
-                        // Metadata changed
-                        self.certificate_info.get_or_create(info_labels).set(0);
-                    }
-                }
-            }
-            *prev_map = current_cert_info;
         }
 
         // 6. Update firewall rule metrics

@@ -60,14 +60,7 @@ pub(crate) struct WireGuardPeerInfoLabels {
 pub(crate) struct CertificateLabels {
     pub(crate) router: String,
     pub(crate) id: String,
-}
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
-pub(crate) struct CertificateInfoLabels {
-    pub(crate) router: String,
-    pub(crate) id: String,
     pub(crate) name: String,
-    pub(crate) comment: String,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]

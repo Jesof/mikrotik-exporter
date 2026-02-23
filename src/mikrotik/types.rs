@@ -43,7 +43,6 @@ pub struct ConnectionTrackingStats {
 pub struct CertificateStats {
     pub id: String,
     pub name: String,
-    pub comment: String,
     pub days_until_expiry: i64,
 }
 
@@ -169,7 +168,6 @@ mod tests {
             certificate_stats: vec![CertificateStats {
                 id: "*1".to_string(),
                 name: "cert1".to_string(),
-                comment: "Web".to_string(),
                 days_until_expiry: 30,
             }],
             firewall_rules: vec![FirewallRuleStats {

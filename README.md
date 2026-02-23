@@ -205,12 +205,11 @@ MIT - see [LICENSE](LICENSE)
 | `mikrotik_wireguard_peer_latest_handshake` | gauge  | Unix timestamp of last handshake              |
 | `mikrotik_wireguard_peer_info`             | gauge  | Metadata (name, endpoint, comment, etc.)      |
 
-### Certificates (Labels: router, id)
+### Certificates (Labels: router, id, name)
 
 | Metric                                      | Type   | Description                               |
 | ------------------------------------------- | ------ | ----------------------------------------- |
 | `mikrotik_certificate_days_until_expiry`    | gauge  | Days until certificate expiry             |
-| `mikrotik_certificate_info`                 | gauge  | Metadata (name, comment)                  |
 
 The `mikrotik_certificate_days_until_expiry` metric tracks the number of days until certificate expiration on the router.
 Both RouterOS certificate expiration date formats are supported:

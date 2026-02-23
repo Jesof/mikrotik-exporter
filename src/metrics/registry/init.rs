@@ -4,9 +4,9 @@
 //! Registry initialization and metric registration
 
 use crate::metrics::labels::{
-    CertificateInfoLabels, CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels,
-    FirewallRuleLabels, InterfaceInfoLabels, InterfaceLabels, RouterLabels, SystemInfoLabels,
-    WireGuardPeerInfoLabels, WireGuardPeerLabels,
+    CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels, FirewallRuleLabels,
+    InterfaceInfoLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardPeerInfoLabels,
+    WireGuardPeerLabels,
 };
 use dashmap::DashMap;
 use prometheus_client::metrics::counter::Counter;
@@ -218,13 +218,6 @@ impl MetricsRegistry {
             certificate_days_until_expiry.clone(),
         );
 
-        let certificate_info = Family::<CertificateInfoLabels, Gauge>::default();
-        registry.register(
-            "mikrotik_certificate_info",
-            "Static certificate info (value=1)",
-            certificate_info.clone(),
-        );
-
         Self {
             registry: Arc::new(Mutex::new(registry)),
             interface_rx_bytes,
@@ -255,7 +248,6 @@ impl MetricsRegistry {
             wireguard_peer_latest_handshake,
             wireguard_peer_info,
             certificate_days_until_expiry,
-            certificate_info,
             interface_info,
             firewall_rule_info,
             prev_iface: Arc::new(DashMap::new()),
@@ -265,7 +257,6 @@ impl MetricsRegistry {
             prev_wireguard_peers: Arc::new(DashMap::new()),
             prev_wireguard_peer_info: Arc::new(DashMap::new()),
             prev_interface_info: Arc::new(DashMap::new()),
-            prev_certificate_info: Arc::new(DashMap::new()),
             prev_firewall_rule_info: Arc::new(DashMap::new()),
             prev_certificates: Arc::new(DashMap::new()),
             prev_firewall_rules_by_router: Arc::new(DashMap::new()),
@@ -275,7 +266,6 @@ impl MetricsRegistry {
             wireguard_peer_last_seen: Arc::new(DashMap::new()),
             wireguard_peer_info_last_seen: Arc::new(DashMap::new()),
             certificate_last_seen: Arc::new(DashMap::new()),
-            certificate_info_last_seen: Arc::new(DashMap::new()),
             interface_info_last_seen: Arc::new(DashMap::new()),
             last_scrape_success: Arc::new(DashMap::new()),
         }
