@@ -74,6 +74,10 @@ mod proptests {
     use proptest::prelude::*;
 
     proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig {
+            failure_persistence: None,
+            ..proptest::prelude::ProptestConfig::default()
+        })]
         #[test]
         fn encode_decode_roundtrip_proptest(value in 0usize..0xFFFF_FFFF) {
             let encoded = encode_length(value);
