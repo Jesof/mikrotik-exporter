@@ -184,7 +184,7 @@ mod tests {
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].id, "*1");
-        assert_eq!(result[0].bytes, 1024000);
+        assert_eq!(result[0].bytes, 1_024_000);
         assert_eq!(result[0].packets, 5000);
     }
 

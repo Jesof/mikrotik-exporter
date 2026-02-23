@@ -155,8 +155,8 @@ mod tests {
         // Use another future date
         sentence2.insert("expiration".to_string(), "Dec/31/2029 23:59:59".to_string());
 
-        let sentences = vec![sentence1, sentence2];
-        let certificates = parse_certificates(&sentences);
+        let inputs = vec![sentence1, sentence2];
+        let certificates = parse_certificates(&inputs);
 
         assert_eq!(certificates.len(), 2);
         assert_eq!(certificates[0].id, "*1");
@@ -185,8 +185,8 @@ mod tests {
             "2029-12-31 23:59:59".to_string(),
         );
 
-        let sentences = vec![sentence1, sentence2];
-        let certificates = parse_certificates(&sentences);
+        let inputs = vec![sentence1, sentence2];
+        let certificates = parse_certificates(&inputs);
 
         assert_eq!(certificates.len(), 2);
         assert_eq!(certificates[0].id, "*1");
@@ -207,8 +207,8 @@ mod tests {
         );
         sentence.insert("expiration".to_string(), "Jan/01/2025 12:00:00".to_string());
 
-        let sentences = vec![sentence];
-        let certificates = parse_certificates(&sentences);
+        let inputs = vec![sentence];
+        let certificates = parse_certificates(&inputs);
 
         assert_eq!(certificates.len(), 1);
         assert_eq!(certificates[0].id, "*1");
@@ -222,8 +222,8 @@ mod tests {
         sentence.insert("name".to_string(), "expired-cert".to_string());
         sentence.insert("expiration".to_string(), "Jan/01/2020 12:00:00".to_string());
 
-        let sentences = vec![sentence];
-        let certificates = parse_certificates(&sentences);
+        let inputs = vec![sentence];
+        let certificates = parse_certificates(&inputs);
 
         // Expired certificates should be skipped (days_until_expiry would be <= 0)
         assert_eq!(certificates.len(), 0);
@@ -255,17 +255,17 @@ mod tests {
         sentence.insert("name".to_string(), "invalid".to_string());
         sentence.insert("expiration".to_string(), "invalid-date".to_string());
 
-        let sentences = vec![sentence];
-        let certificates = parse_certificates(&sentences);
+        let inputs = vec![sentence];
+        let certificates = parse_certificates(&inputs);
 
         assert!(certificates.is_empty());
     }
 
     #[test]
     fn test_parse_certificates_skip_missing_fields() {
-        let sentences = vec![HashMap::new()];
+        let inputs = vec![HashMap::new()];
 
-        let certificates = parse_certificates(&sentences);
+        let certificates = parse_certificates(&inputs);
         assert!(certificates.is_empty());
     }
 }

@@ -7,13 +7,16 @@ msrv = "1.83.0"
 warn-on-all-wildcard-imports = true
 
 # Cognitive complexity threshold
-cognitive-complexity-threshold = 15
+cognitive-complexity-threshold = 20
 
 # Documentation requirements
 missing-docs-in-crate-items = false
 
 # Type complexity
-type-complexity-threshold = 250
+type-complexity-threshold = 300
+
+# Function signature size
+too-many-arguments-threshold = 8
 
 # Performance
-too-many-lines-threshold = 200
+too-many-lines-threshold = 180

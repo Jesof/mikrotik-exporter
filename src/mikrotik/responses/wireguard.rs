@@ -359,7 +359,7 @@ mod tests {
         assert_eq!(parse_routeros_duration("1m30s"), 90);
         assert_eq!(parse_routeros_duration("2h30m"), 9000);
         assert_eq!(parse_routeros_duration("1d2h"), 93600);
-        assert_eq!(parse_routeros_duration("1w2d"), 777600);
+        assert_eq!(parse_routeros_duration("1w2d"), 777_600);
         assert_eq!(parse_routeros_duration(""), 0);
         assert_eq!(parse_routeros_duration("0s"), 0);
     }

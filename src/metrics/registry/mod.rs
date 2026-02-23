@@ -372,23 +372,23 @@ mod tests {
         let registry = std::sync::Arc::new(MetricsRegistry::new());
 
         let mut tasks = vec![];
-        for i in 0..5 {
+        for i in 0u64..5 {
             let registry_clone = registry.clone();
             let task = tokio::spawn(async move {
                 let iface = make_interface(
-                    &format!("*{}", i),
-                    &format!("ether{}", i),
+                    &format!("*{i}"),
+                    &format!("ether{i}"),
                     "",
-                    1000 * (i as u64 + 1),
-                    2000 * (i as u64 + 1),
-                    10 * (i as u64 + 1),
-                    20 * (i as u64 + 1),
+                    1000 * (i + 1),
+                    2000 * (i + 1),
+                    10 * (i + 1),
+                    20 * (i + 1),
                     0,
                     0,
                     true,
                 );
                 let system = make_system("7.10", "RB750Gr3", "1d");
-                let metrics = make_router_metrics(&format!("router{}", i), vec![iface], system);
+                let metrics = make_router_metrics(&format!("router{i}"), vec![iface], system);
                 registry_clone.update_metrics(&metrics);
             });
             tasks.push(task);
@@ -400,8 +400,8 @@ mod tests {
 
         let encoded = registry.encode_metrics().await.expect("Failed to encode");
         for i in 0..5 {
-            assert!(encoded.contains(&format!("router{}", i)));
-            assert!(encoded.contains(&format!("id=\"*{}\"", i)));
+            assert!(encoded.contains(&format!("router{i}")));
+            assert!(encoded.contains(&format!("id=\"*{i}\"")));
         }
     }
 

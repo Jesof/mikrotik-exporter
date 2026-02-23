@@ -71,6 +71,7 @@ New options allow checking availability of all configured routers at service sta
 - `STRICT_STARTUP_MODE=true` - exits the service with error code if any router is unavailable
 
 Usage example:
+
 ```bash
 # Check router availability at startup, but continue even if some are unavailable
 STARTUP_CONNECTIVITY_TEST=true ./mikrotik-exporter
@@ -125,6 +126,12 @@ cargo run
 
 # Tests
 cargo test
+
+# Lint (pedantic warnings)
+cargo clippy --all-targets --all-features --locked
+
+# Lint (CI strict mode)
+cargo clippy --all-targets --all-features --locked -- -D warnings
 
 # Integration tests (require configured MikroTik device)
 cargo test --test integration_tests
@@ -213,15 +220,18 @@ MIT - see [LICENSE](LICENSE)
 
 The `mikrotik_certificate_days_until_expiry` metric tracks the number of days until certificate expiration on the router.
 Both RouterOS certificate expiration date formats are supported:
+
 - ISO format (YYYY-MM-DD) - modern format
 - Legacy format (MMM/DD/YYYY) - classic format
 
 Metric values:
+
 - Positive values: number of days until expiration
 - Negative values: number of days since expiration (expired certificates)
 - Zero value: certificate expires today
 
 For monitoring, you can use alerts, for example:
+
 - Warning when `mikrotik_certificate_days_until_expiry < 30` (certificate expires in less than 30 days)
 - Critical when `mikrotik_certificate_days_until_expiry < 0` (certificate already expired)
 

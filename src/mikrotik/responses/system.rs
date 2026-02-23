@@ -57,8 +57,8 @@ mod tests {
         assert_eq!(result.version, "7.10");
         assert_eq!(result.uptime, "1w2d3h4m5s");
         assert_eq!(result.cpu_load, 25);
-        assert_eq!(result.free_memory, 524288000);
-        assert_eq!(result.total_memory, 1073741824);
+        assert_eq!(result.free_memory, 524_288_000);
+        assert_eq!(result.total_memory, 1_073_741_824);
         assert_eq!(result.board_name, "RB750Gr3");
     }
 

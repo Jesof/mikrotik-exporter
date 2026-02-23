@@ -175,7 +175,7 @@ impl MetricsRegistry {
             );
         }
 
-        // 5.4 Firewall Rule Info
+        // 5.3 Firewall Rule Info
         let stale_rule_info: Vec<FirewallRuleInfoLabels> = self
             .firewall_rule_info_last_seen
             .iter()

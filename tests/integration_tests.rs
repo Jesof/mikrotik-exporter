@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! Integration tests for MikroTik Exporter
+//! Integration tests for `MikroTik` Exporter
 //!
-//! These tests require a real MikroTik device to be configured via environment variables.
+//! These tests require a real `MikroTik` device to be configured via environment variables.
 //! To run these tests:
-//! 1. Configure your MikroTik device credentials in a .env file
+//! 1. Configure your `MikroTik` device credentials in a .env file
 //! 2. Run with: `cargo test --test integration_tests`
 //!
 //! For CI environments, these tests are skipped if the required environment
@@ -41,7 +41,7 @@ async fn test_environment_variables_loaded() {
 
     if has_single_router_config {
         let address = std::env::var("ROUTEROS_ADDRESS").unwrap();
-        println!("Single router configuration found: {}", address);
+        println!("Single router configuration found: {address}");
         assert!(address.contains(':'), "Router address should contain port");
     }
 
