@@ -37,7 +37,6 @@ pub(crate) struct WireGuardPeerLabels {
     pub(crate) router: String,
     pub(crate) interface: String,
     pub(crate) allowed_address: String,
-    pub(crate) comment: String,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]

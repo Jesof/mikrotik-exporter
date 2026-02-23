@@ -199,12 +199,12 @@ MIT - see [LICENSE](LICENSE)
 
 ### WireGuard Peers (Labels: router, interface, allowed_address)
 
-| Metric                                     | Type   | Description                           |
-| ------------------------------------------ | ------ | ------------------------------------- |
-| `mikrotik_wireguard_peer_rx_bytes`         | gauge  | Received bytes from peer              |
-| `mikrotik_wireguard_peer_tx_bytes`         | gauge  | Transmitted bytes to peer             |
-| `mikrotik_wireguard_peer_latest_handshake` | gauge  | Unix timestamp of last handshake      |
-| `mikrotik_wireguard_peer_info`             | gauge  | Peer metadata (name, endpoint)        |
+| Metric                                     | Type   | Description                                   |
+| ------------------------------------------ | ------ | --------------------------------------------- |
+| `mikrotik_wireguard_peer_rx_bytes`         | gauge  | Received bytes from peer                      |
+| `mikrotik_wireguard_peer_tx_bytes`         | gauge  | Transmitted bytes to peer                     |
+| `mikrotik_wireguard_peer_latest_handshake` | gauge  | Unix timestamp of last handshake              |
+| `mikrotik_wireguard_peer_info`             | gauge  | Peer metadata (name, endpoint, comment)       |
 
 ### Certificates (Labels: router, name)
 

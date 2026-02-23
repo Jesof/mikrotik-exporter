@@ -251,7 +251,6 @@ impl MetricsRegistry {
                 router: metrics.router_name.clone(),
                 interface: wg_peer.interface.clone(),
                 allowed_address: wg_peer.allowed_address.clone(),
-                comment: wg_peer.comment.clone(),
             };
             if let Some(existing) = deduped_peers.get(&wg_peer_labels) {
                 if should_replace(existing, wg_peer) {

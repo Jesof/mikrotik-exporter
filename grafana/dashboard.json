@@ -1458,8 +1458,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (interface, allowed_address) group_left(name, exported_endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
-          "legendFormat": "{{interface}} - {{name}} - {{exported_endpoint}}",
+          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (interface, allowed_address) group_left(comment, name, exported_endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
+          "legendFormat": "{{comment}} - {{interface}} - {{name}} - {{exported_endpoint}}",
           "range": true,
           "refId": "A"
         }
@@ -1560,8 +1560,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (interface, allowed_address) group_left(name, exported_endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
-          "legendFormat": "{{interface}} - {{name}} - {{exported_endpoint}}",
+          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (interface, allowed_address) group_left(comment, name, exported_endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
+          "legendFormat": "{{comment}} - {{interface}} - {{name}} - {{exported_endpoint}}",
           "range": true,
           "refId": "A"
         }
@@ -1657,7 +1657,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "(mikrotik_wireguard_peer_latest_handshake{router=\"$router\"} * 1000) * on (interface, allowed_address) group_left(name, exported_endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
+          "expr": "(mikrotik_wireguard_peer_latest_handshake{router=\"$router\"} * 1000) * on (interface, allowed_address) group_left(comment, name, exported_endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
