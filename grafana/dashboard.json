@@ -791,7 +791,7 @@
         "sortBy": [
           {
             "desc": false,
-            "displayName": "interface"
+            "displayName": "Interface"
           }
         ]
       },
@@ -815,14 +815,31 @@
       "title": "Interface Status",
       "transformations": [
         {
-          "id": "filterFieldsByName",
+          "id": "organize",
           "options": {
-            "include": {
-              "names": [
-                "comment",
-                "Value",
-                "interface"
-              ]
+            "excludeByName": {
+              "Time": true,
+              "container": true,
+              "endpoint": true,
+              "id": true,
+              "instance": true,
+              "job": true,
+              "namespace": true,
+              "pod": true,
+              "prometheus": true,
+              "router": true,
+              "service": true
+            },
+            "includeByName": {},
+            "indexByName": {
+              "Value": 2,
+              "comment": 0,
+              "name": 1
+            },
+            "renameByName": {
+              "Value": "Status",
+              "comment": "Comment",
+              "name": "Interface"
             }
           }
         }
@@ -922,7 +939,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_bytes_total{router=\"$router\"}[$__rate_interval]) * 8 * on(router, id) group_left(name, comment) mikrotik_interface_info{router=\"$router\", name=~\"$interface\"}",
+          "expr": "rate(mikrotik_interface_rx_bytes_total{router=\"$router\"}[$__rate_interval]) * 8 * on(router, id) group_left(name, comment) (mikrotik_interface_info == 1)",
           "legendFormat": "{{name}} RX",
           "range": true,
           "refId": "A"
@@ -1024,7 +1041,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_bytes_total{router=\"$router\"}[$__rate_interval]) * 8 * on(router, id) group_left(name, comment) mikrotik_interface_info{router=\"$router\", name=~\"$interface\"}",
+          "expr": "rate(mikrotik_interface_tx_bytes_total{router=\"$router\"}[$__rate_interval]) * 8 * on(router, id) group_left(name, comment) (mikrotik_interface_info == 1)",
           "legendFormat": "{{name}} TX",
           "range": true,
           "refId": "A"
@@ -1126,7 +1143,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_packets_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) mikrotik_interface_info{router=\"$router\", name=~\"$interface\"}",
+          "expr": "rate(mikrotik_interface_rx_packets_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) (mikrotik_interface_info == 1)",
           "legendFormat": "{{name}} RX",
           "range": true,
           "refId": "A"
@@ -1228,7 +1245,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_packets_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) mikrotik_interface_info{router=\"$router\", name=~\"$interface\"}",
+          "expr": "rate(mikrotik_interface_tx_packets_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) (mikrotik_interface_info == 1)",
           "legendFormat": "{{name}} TX",
           "range": true,
           "refId": "A"
@@ -1332,7 +1349,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_errors_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) mikrotik_interface_info{router=\"$router\", name=~\"$interface\"}",
+          "expr": "rate(mikrotik_interface_rx_errors_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) (mikrotik_interface_info == 1)",
           "legendFormat": "{{name}} RX Errors",
           "range": true,
           "refId": "A"
@@ -1343,7 +1360,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_errors_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) mikrotik_interface_info{router=\"$router\", name=~\"$interface\"}",
+          "expr": "rate(mikrotik_interface_tx_errors_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) (mikrotik_interface_info == 1)",
           "legendFormat": "{{name}} TX Errors",
           "range": true,
           "refId": "B"
@@ -1458,7 +1475,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (router, id) group_left(comment, interface, name, exported_endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
+          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (router, id) group_left(comment, interface, name, exported_endpoint) (mikrotik_wireguard_peer_info == 1)",
           "legendFormat": "{{comment}} - {{interface}} - {{name}} - {{exported_endpoint}}",
           "range": true,
           "refId": "A"
@@ -1560,7 +1577,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (router, id) group_left(comment, interface, name, exported_endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
+          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (router, id) group_left(comment, interface, name, exported_endpoint) (mikrotik_wireguard_peer_info == 1)",
           "legendFormat": "{{comment}} - {{interface}} - {{name}} - {{exported_endpoint}}",
           "range": true,
           "refId": "A"
@@ -1657,7 +1674,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "(mikrotik_wireguard_peer_latest_handshake{router=\"$router\"} * 1000) * on (router, id) group_left(comment, interface, name, exported_endpoint) (mikrotik_wireguard_peer_info{router=\"$router\"} == 1)",
+          "expr": "(mikrotik_wireguard_peer_latest_handshake{router=\"$router\"} * 1000) * on (router, id) group_left(comment, interface, name, exported_endpoint) (mikrotik_wireguard_peer_info == 1)",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -1674,6 +1691,7 @@
               "Time": true,
               "container": true,
               "endpoint": true,
+              "id": true,
               "instance": true,
               "job": true,
               "namespace": true,
@@ -2523,8 +2541,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_firewall_rule_bytes_total{router=\"$router\",section=~\"$section\"} * on (router, id, chain, action, ip_version, section) group_left(comment) (mikrotik_firewall_rule_info{router=\"$router\"} == 1)",
-          "legendFormat": "{{comment}} - {{section}}/{{chain}} - {{action}} ({{ip_version}})",
+          "expr": "mikrotik_firewall_rule_bytes_total{router=\"$router\",section=~\"$section\"} * on (router, id, ip_version, section) group_left(comment) (mikrotik_firewall_rule_info == 1)",
+          "legendFormat": "{{section}}/{{chain}}/{{action}} ({{ip_version}}) {{comment}}",
           "range": true,
           "refId": "A"
         }
@@ -2625,8 +2643,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_firewall_rule_packets_total{router=\"$router\",section=~\"$section\"}",
-          "legendFormat": "{{comment}} - {{section}}/{{chain}} - {{action}} ({{ip_version}})",
+          "expr": "mikrotik_firewall_rule_packets_total{router=\"$router\",section=~\"$section\"} * on (router, id, ip_version, section) group_left(comment) (mikrotik_firewall_rule_info == 1)",
+          "legendFormat": "{{section}}/{{chain}}/{{action}} ({{ip_version}}) {{comment}}",
           "range": true,
           "refId": "A"
         }
@@ -2727,8 +2745,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_firewall_rule_bytes_total{router=\"$router\",section=~\"$section\"}[$__rate_interval]) * 8 * on (router, id, chain, action, ip_version, section) group_left(comment) (mikrotik_firewall_rule_info{router=\"$router\"} == 1)",
-          "legendFormat": "{{comment}} - {{section}}/{{chain}} - {{action}} ({{ip_version}})",
+          "expr": "rate(mikrotik_firewall_rule_bytes_total{router=\"$router\",section=~\"$section\"}[$__rate_interval]) * 8 * on (router, id, ip_version, section) group_left(comment) (mikrotik_firewall_rule_info == 1)",
+          "legendFormat": "{{section}}/{{chain}}/{{action}} ({{ip_version}}) {{comment}}",
           "range": true,
           "refId": "A"
         }
@@ -2829,8 +2847,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_firewall_rule_packets_total{router=\"$router\",section=~\"$section\"}[$__rate_interval])",
-          "legendFormat": "{{comment}} - {{section}}/{{chain}} - {{action}} ({{ip_version}})",
+          "expr": "rate(mikrotik_firewall_rule_packets_total{router=\"$router\",section=~\"$section\"}[$__rate_interval]) * on (router, id, ip_version, section) group_left(comment) (mikrotik_firewall_rule_info == 1)",
+          "legendFormat": "{{section}}/{{chain}}/{{action}} ({{ip_version}}) {{comment}}",
           "range": true,
           "refId": "A"
         }
@@ -2936,7 +2954,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "mikrotik_firewall_rule_bytes_total{router=\"$router\",section=~\"$section\"} * on (router, id, chain, action, ip_version, section) group_left(comment) (mikrotik_firewall_rule_info{router=\"$router\"} == 1)",
+          "expr": "mikrotik_firewall_rule_bytes_total{router=\"$router\",section=~\"$section\"} * on (router, id, ip_version, section) group_left(comment) (mikrotik_firewall_rule_info == 1)",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -3159,7 +3177,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_certificate_days_until_expiry{router=\"$router\"}",
+          "expr": "mikrotik_certificate_days_until_expiry{router=\"$router\"} * on (router, id) group_left(name, comment) (mikrotik_certificate_info == 1)",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -3170,13 +3188,26 @@
       "title": "Certificate Details",
       "transformations": [
         {
-          "id": "filterFieldsByName",
+          "id": "organize",
           "options": {
-            "include": {
-              "names": [
-                "name",
-                "Value"
-              ]
+            "excludeByName": {
+              "Time": true,
+              "container": true,
+              "endpoint": true,
+              "id": true,
+              "instance": true,
+              "job": true,
+              "namespace": true,
+              "pod": true,
+              "prometheus": true,
+              "router": true,
+              "service": true
+            },
+            "includeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Expires in",
+              "name": "Name"
             }
           }
         }
@@ -3755,7 +3786,7 @@
   "timezone": "browser",
   "title": "MikroTik Router Monitoring",
   "uid": "mikrotik-exporter",
-  "version": 35,
+  "version": 40,
   "weekStart": "",
   "id": null
 }

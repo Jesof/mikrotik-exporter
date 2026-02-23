@@ -84,6 +84,8 @@ pub(crate) struct FirewallRuleLabels {
 pub(crate) struct FirewallRuleInfoLabels {
     pub(crate) router: String,
     pub(crate) id: String,
+    pub(crate) ip_version: String,
+    pub(crate) section: String,
     pub(crate) comment: String,
 }
 
@@ -160,9 +162,13 @@ mod tests {
         let labels = FirewallRuleInfoLabels {
             router: "router1".to_string(),
             id: "*1".to_string(),
+            ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
             comment: "Drop invalid".to_string(),
         };
 
         assert_eq!(labels.comment, "Drop invalid");
+        assert_eq!(labels.ip_version, "ipv4");
+        assert_eq!(labels.section, "filter");
     }
 }

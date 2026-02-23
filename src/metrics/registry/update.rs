@@ -452,6 +452,8 @@ impl MetricsRegistry {
                 let info_labels = FirewallRuleInfoLabels {
                     router: metrics.router_name.clone(),
                     id: rule.id.clone(),
+                    ip_version: rule.ip_version.clone(),
+                    section: rule.section.clone(),
                     comment: rule.comment.clone(),
                 };
 
