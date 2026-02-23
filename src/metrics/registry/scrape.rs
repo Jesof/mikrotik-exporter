@@ -112,14 +112,14 @@ impl MetricsRegistry {
     }
 
     /// Get scrape success count for health check
-    #[allow(clippy::unused_async)]
-    pub async fn get_scrape_success_count(&self, labels: &RouterLabels) -> u64 {
+    #[must_use]
+    pub fn get_scrape_success_count(&self, labels: &RouterLabels) -> u64 {
         self.scrape_success.get_or_create(labels).get()
     }
 
     /// Get scrape error count for health check
-    #[allow(clippy::unused_async)]
-    pub async fn get_scrape_error_count(&self, labels: &RouterLabels) -> u64 {
+    #[must_use]
+    pub fn get_scrape_error_count(&self, labels: &RouterLabels) -> u64 {
         self.scrape_errors.get_or_create(labels).get()
     }
 }

@@ -39,8 +39,8 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> impl IntoRespon
         };
 
         // Get scrape success count to determine if router ever responded
-        let success_count = state.metrics.get_scrape_success_count(&router_label).await;
-        let error_count = state.metrics.get_scrape_error_count(&router_label).await;
+        let success_count = state.metrics.get_scrape_success_count(&router_label);
+        let error_count = state.metrics.get_scrape_error_count(&router_label);
 
         // Get actual consecutive errors from connection pool state
         let consecutive_errors = if let Some((errors, _)) = state

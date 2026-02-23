@@ -15,8 +15,7 @@ use super::MetricsRegistry;
 
 impl MetricsRegistry {
     /// Clean up stale dynamic labels based on TTL to prevent unbounded growth
-    #[allow(clippy::unused_async)]
-    pub async fn cleanup_expired_dynamic_labels(&self, ttl: Duration) {
+    pub fn cleanup_expired_dynamic_labels(&self, ttl: Duration) {
         let now = Instant::now();
 
         // 1. Conntrack
@@ -197,8 +196,7 @@ impl MetricsRegistry {
     }
 
     /// Clean up cached state for routers that are no longer configured
-    #[allow(clippy::unused_async)]
-    pub async fn cleanup_stale_routers(&self, active_routers: &HashSet<String>) {
+    pub fn cleanup_stale_routers(&self, active_routers: &HashSet<String>) {
         let mut stale_routers = HashSet::new();
 
         // Interfaces

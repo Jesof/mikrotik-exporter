@@ -29,19 +29,17 @@ impl UpdateMode {
 
 impl MetricsRegistry {
     /// Update metrics from collected router data
-    pub async fn update_metrics(&self, metrics: &RouterMetrics) {
-        self.update_metrics_with_mode(metrics, UpdateMode::Normal)
-            .await;
+    pub fn update_metrics(&self, metrics: &RouterMetrics) {
+        self.update_metrics_with_mode(metrics, UpdateMode::Normal);
     }
 
     /// Update metrics but skip counter increments (baseline only).
-    pub async fn update_metrics_baseline(&self, metrics: &RouterMetrics) {
-        self.update_metrics_with_mode(metrics, UpdateMode::BaselineOnly)
-            .await;
+    pub fn update_metrics_baseline(&self, metrics: &RouterMetrics) {
+        self.update_metrics_with_mode(metrics, UpdateMode::BaselineOnly);
     }
 
-    #[allow(clippy::unused_async, clippy::too_many_lines, clippy::similar_names)]
-    async fn update_metrics_with_mode(&self, metrics: &RouterMetrics, mode: UpdateMode) {
+    #[allow(clippy::too_many_lines, clippy::similar_names)]
+    fn update_metrics_with_mode(&self, metrics: &RouterMetrics, mode: UpdateMode) {
         let apply_counters = mode.apply_counters();
         let now = Instant::now();
 

@@ -155,10 +155,8 @@ pub fn start_collection_loop(
             // Periodic cleanup
             collection_cycle += 1;
             if collection_cycle % CLEANUP_EVERY_N_CYCLES == 0 {
-                metrics
-                    .cleanup_expired_dynamic_labels(STALE_LABEL_TTL)
-                    .await;
-                metrics.cleanup_stale_routers(&active_routers).await;
+                metrics.cleanup_expired_dynamic_labels(STALE_LABEL_TTL);
+                metrics.cleanup_stale_routers(&active_routers);
                 system_cache.cleanup_stale(&active_routers).await;
                 pool.cleanup_states(&active_pool_keys).await;
                 tracing::debug!("Cleanup cycle {} completed", collection_cycle,);

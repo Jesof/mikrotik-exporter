@@ -70,24 +70,24 @@ async fn test_metrics_registry_scrape_recording() {
     };
 
     // Initially both should be zero
-    assert_eq!(metrics.get_scrape_success_count(&router_labels).await, 0);
-    assert_eq!(metrics.get_scrape_error_count(&router_labels).await, 0);
+    assert_eq!(metrics.get_scrape_success_count(&router_labels), 0);
+    assert_eq!(metrics.get_scrape_error_count(&router_labels), 0);
 
     // Record a success
     metrics.record_scrape_success(&router_labels);
-    assert_eq!(metrics.get_scrape_success_count(&router_labels).await, 1);
-    assert_eq!(metrics.get_scrape_error_count(&router_labels).await, 0);
+    assert_eq!(metrics.get_scrape_success_count(&router_labels), 1);
+    assert_eq!(metrics.get_scrape_error_count(&router_labels), 0);
 
     // Record an error
     metrics.record_scrape_error(&router_labels);
-    assert_eq!(metrics.get_scrape_success_count(&router_labels).await, 1);
-    assert_eq!(metrics.get_scrape_error_count(&router_labels).await, 1);
+    assert_eq!(metrics.get_scrape_success_count(&router_labels), 1);
+    assert_eq!(metrics.get_scrape_error_count(&router_labels), 1);
 
     // Record multiple successes
     metrics.record_scrape_success(&router_labels);
     metrics.record_scrape_success(&router_labels);
-    assert_eq!(metrics.get_scrape_success_count(&router_labels).await, 3);
-    assert_eq!(metrics.get_scrape_error_count(&router_labels).await, 1);
+    assert_eq!(metrics.get_scrape_success_count(&router_labels), 3);
+    assert_eq!(metrics.get_scrape_error_count(&router_labels), 1);
 
     println!("Metrics registry scrape recording test passed");
 }
@@ -206,7 +206,7 @@ async fn test_metrics_update_and_retrieval() {
     };
 
     // Update metrics
-    metrics.update_metrics(&router_metrics).await;
+    metrics.update_metrics(&router_metrics);
 
     // Verify the update was successful by checking that we can record a success
     metrics.record_scrape_success(&mikrotik_exporter::RouterLabels {
