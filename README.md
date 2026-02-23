@@ -268,7 +268,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mikrotik-exporter = "0.3.2"
+mikrotik-exporter = "0.3.3"
 ```
 
 ```rust
@@ -290,7 +290,7 @@ async fn main() -> Result<()> {
         pool: pool.clone(),
     });
 
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     start_collection_loop(shutdown_rx, Arc::new(config), metrics, pool);
 
     let app = create_router(state);
