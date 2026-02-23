@@ -80,3 +80,6 @@ dashmap = "6.1.0"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 proptest = "1.6"
+
+[lints.clippy]
+pedantic = "warn"
