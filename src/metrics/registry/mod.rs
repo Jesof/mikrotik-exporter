@@ -2,82 +2,6 @@
 // Copyright (c) 2025 Jesof
 
 //! Metrics registry and update logic
-//!
-//! # Architecture
-//!
-//! This module implements the core metrics registry that stores and manages all Prometheus
-//! metrics collected from MikroTik routers. It uses a lock-free design for high concurrency.
-//!
-//! ## Key Components
-//!
-//! - **MetricsRegistry**: Central registry containing all metric families
-//! - **Metric Families**: Groups of metrics with the same name and labels
-//!   - **Counters**: Monotonically increasing values (delta-calculated)
-//!   - **Gauges**: Point-in-time values (direct updates)
-//! - **Label Types**: Strongly-typed label structures for each metric category
-//!
-//! ## Metric Categories
-//!
-//! ### Interface Metrics (Counters with Delta Calculation)
-//! - `interface_rx_bytes/tx_bytes`: Network traffic volume
-//! - `interface_rx_packets/tx_packets`: Packet counts
-//! - `interface_rx_errors/tx_errors`: Error counts
-//! - `interface_running`: Interface state gauge
-//!
-//! ### System Metrics (Gauges)
-//! - `system_cpu_load`: Current CPU utilization
-//! - `system_free_memory/total_memory`: Memory statistics
-//! - `system_info`: Router version/board information
-//! - `system_uptime_seconds`: Router uptime
-//!
-//! ### Connection Tracking (Gauges)
-//! - `connection_tracking_count`: Active connections by source/protocol
-//!
-//! ### WireGuard Metrics (Gauges)
-//! - `wireguard_peer_rx_bytes/tx_bytes`: WireGuard traffic
-//! - `wireguard_peer_latest_handshake`: Last handshake timestamp
-//! - `wireguard_peer_info`: Peer configuration state
-//!
-//! ### Certificate Metrics (Gauges)
-//! - `certificate_days_until_expiry`: Certificate expiration countdown
-//!
-//! ### Firewall Metrics (Counters)
-//! - `firewall_rule_bytes/packets`: Firewall rule match counters by section (filter, nat, mangle, raw)
-//!
-//! ### Scrape Status (Counters)
-//! - `scrape_success/errors`: Collection success/failure counts
-//! - `scrape_duration_milliseconds`: Collection timing
-//! - `connection_consecutive_errors`: Connection error tracking
-//!
-//! ## Delta Calculation
-//!
-//! Counter metrics from RouterOS are absolute values. This module automatically
-//! calculates deltas by:
-//! 1. Storing previous snapshot in `prev_iface` DashMap
-//! 2. Computing difference: `current_value - previous_value`
-//! 3. Handling counter resets (router reboot) by detecting decreases
-//! 4. Incrementing Prometheus counter by the delta amount
-//!
-//! ## Dynamic Label Management
-//!
-//! For dynamic entities (interfaces, WireGuard peers, certificates):
-//! - Labels are created on-demand during first collection
-//! - Stale labels are automatically cleaned up after 30 minutes
-//! - Cleanup runs every 20 collection cycles (~10 minutes default)
-//! - Prevents unbounded label growth from removed entities
-//!
-//! ## Thread Safety
-//!
-//! - Registry uses `Arc<Mutex<Registry>>` for safe concurrent access
-//! - Previous snapshots use `DashMap` for lock-free concurrent reads/writes
-//! - All metric updates are atomic and thread-safe
-//!
-//! ## Performance
-//!
-//! - O(1) metric lookup and update operations
-//! - Lock-free reads for previous snapshots via DashMap
-//! - Minimal allocation during hot path (delta calculation)
-//! - Efficient encoding for Prometheus scrape endpoint
 
 mod cleanup;
 mod init;
@@ -85,8 +9,9 @@ mod scrape;
 mod update;
 
 use crate::metrics::labels::{
-    CertificateLabels, ConntrackLabels, FirewallRuleLabels, InterfaceLabels, RouterLabels,
-    SystemInfoLabels, WireGuardPeerInfoLabels, WireGuardPeerLabels,
+    CertificateInfoLabels, CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels,
+    FirewallRuleLabels, InterfaceInfoLabels, InterfaceLabels, RouterLabels, SystemInfoLabels,
+    WireGuardPeerInfoLabels, WireGuardPeerLabels,
 };
 use dashmap::DashMap;
 use prometheus_client::metrics::counter::Counter;
@@ -148,6 +73,12 @@ pub struct MetricsRegistry {
     wireguard_peer_info: Family<WireGuardPeerInfoLabels, Gauge>,
     // certificate metrics
     certificate_days_until_expiry: Family<CertificateLabels, Gauge>,
+    certificate_info: Family<CertificateInfoLabels, Gauge>,
+    // interface info
+    interface_info: Family<InterfaceInfoLabels, Gauge>,
+    // firewall info
+    firewall_rule_info: Family<FirewallRuleInfoLabels, Gauge>,
+
     prev_iface: Arc<DashMap<InterfaceLabels, InterfaceSnapshot>>,
     prev_firewall_rules: Arc<DashMap<FirewallRuleLabels, (u64, u64)>>,
     prev_conntrack: Arc<DashMap<String, HashSet<ConntrackLabels>>>,
@@ -155,13 +86,20 @@ pub struct MetricsRegistry {
     prev_wireguard_peers: Arc<DashMap<String, HashSet<WireGuardPeerLabels>>>,
     prev_wireguard_peer_info:
         Arc<DashMap<String, HashMap<WireGuardPeerLabels, WireGuardPeerInfoLabels>>>,
+    prev_interface_info: Arc<DashMap<String, HashMap<InterfaceLabels, InterfaceInfoLabels>>>,
+    prev_certificate_info: Arc<DashMap<String, HashMap<CertificateLabels, CertificateInfoLabels>>>,
+    prev_firewall_rule_info:
+        Arc<DashMap<String, HashMap<FirewallRuleLabels, FirewallRuleInfoLabels>>>,
     prev_certificates: Arc<DashMap<String, HashSet<CertificateLabels>>>,
     prev_firewall_rules_by_router: Arc<DashMap<String, HashSet<FirewallRuleLabels>>>,
     conntrack_last_seen: Arc<DashMap<ConntrackLabels, Instant>>,
     firewall_rule_last_seen: Arc<DashMap<FirewallRuleLabels, Instant>>,
+    firewall_rule_info_last_seen: Arc<DashMap<FirewallRuleInfoLabels, Instant>>,
     wireguard_peer_last_seen: Arc<DashMap<WireGuardPeerLabels, Instant>>,
     wireguard_peer_info_last_seen: Arc<DashMap<WireGuardPeerInfoLabels, Instant>>,
     certificate_last_seen: Arc<DashMap<CertificateLabels, Instant>>,
+    certificate_info_last_seen: Arc<DashMap<CertificateInfoLabels, Instant>>,
+    interface_info_last_seen: Arc<DashMap<InterfaceInfoLabels, Instant>>,
     last_scrape_success: Arc<DashMap<String, Instant>>,
 }
 
@@ -218,6 +156,7 @@ mod tests {
 
     #[allow(clippy::too_many_arguments)]
     fn make_interface(
+        id: &str,
         name: &str,
         comment: &str,
         rx_bytes: u64,
@@ -229,6 +168,7 @@ mod tests {
         running: bool,
     ) -> InterfaceStats {
         InterfaceStats {
+            id: id.to_string(),
             name: name.to_string(),
             comment: comment.to_string(),
             rx_bytes,
@@ -260,8 +200,7 @@ mod tests {
                 .interface_rx_bytes
                 .get_or_create(&InterfaceLabels {
                     router: "test".to_string(),
-                    interface: "ether1".to_string(),
-                    comment: "".to_string(),
+                    id: "*1".to_string(),
                 })
                 .get(),
             0
@@ -271,7 +210,7 @@ mod tests {
     #[tokio::test]
     async fn test_update_metrics_first_time() {
         let registry = MetricsRegistry::new();
-        let iface = make_interface("ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
+        let iface = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
         let system = make_system("7.10", "RB750Gr3", "1d");
         let metrics = make_router_metrics("router1", vec![iface], system);
 
@@ -279,8 +218,7 @@ mod tests {
 
         let labels = InterfaceLabels {
             router: "router1".to_string(),
-            interface: "ether1".to_string(),
-            comment: "WAN".to_string(),
+            id: "*1".to_string(),
         };
         assert_eq!(
             registry.interface_rx_bytes.get_or_create(&labels).get(),
@@ -304,20 +242,19 @@ mod tests {
     async fn test_update_metrics_with_deltas() {
         let registry = MetricsRegistry::new();
 
-        let iface1 = make_interface("ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
+        let iface1 = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
         let system1 = make_system("7.10", "RB750Gr3", "1d");
         let metrics1 = make_router_metrics("router1", vec![iface1], system1);
         registry.update_metrics(&metrics1).await;
 
-        let iface2 = make_interface("ether1", "WAN", 1500, 2500, 15, 25, 0, 0, true);
+        let iface2 = make_interface("*1", "ether1", "WAN", 1500, 2500, 15, 25, 0, 0, true);
         let system2 = make_system("7.10", "RB750Gr3", "1d");
         let metrics2 = make_router_metrics("router1", vec![iface2], system2);
         registry.update_metrics(&metrics2).await;
 
         let labels = InterfaceLabels {
             router: "router1".to_string(),
-            interface: "ether1".to_string(),
-            comment: "WAN".to_string(),
+            id: "*1".to_string(),
         };
         assert_eq!(
             registry.interface_rx_bytes.get_or_create(&labels).get(),
@@ -341,20 +278,19 @@ mod tests {
     async fn test_update_metrics_baseline_skips_counters() {
         let registry = MetricsRegistry::new();
 
-        let iface1 = make_interface("ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
+        let iface1 = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
         let system1 = make_system("7.10", "RB750Gr3", "1d");
         let metrics1 = make_router_metrics("router1", vec![iface1], system1);
         registry.update_metrics_baseline(&metrics1).await;
 
         let labels = InterfaceLabels {
             router: "router1".to_string(),
-            interface: "ether1".to_string(),
-            comment: "WAN".to_string(),
+            id: "*1".to_string(),
         };
         assert_eq!(registry.interface_rx_bytes.get_or_create(&labels).get(), 0);
         assert_eq!(registry.interface_tx_bytes.get_or_create(&labels).get(), 0);
 
-        let iface2 = make_interface("ether1", "WAN", 1500, 2600, 15, 26, 0, 0, true);
+        let iface2 = make_interface("*1", "ether1", "WAN", 1500, 2600, 15, 26, 0, 0, true);
         let system2 = make_system("7.10", "RB750Gr3", "1d");
         let metrics2 = make_router_metrics("router1", vec![iface2], system2);
         registry.update_metrics(&metrics2).await;
@@ -373,20 +309,19 @@ mod tests {
     async fn test_update_metrics_counter_reset() {
         let registry = MetricsRegistry::new();
 
-        let iface1 = make_interface("ether1", "WAN", 5000, 6000, 50, 60, 2, 3, true);
+        let iface1 = make_interface("*1", "ether1", "WAN", 5000, 6000, 50, 60, 2, 3, true);
         let system1 = make_system("7.10", "RB750Gr3", "1d");
         let metrics1 = make_router_metrics("router1", vec![iface1], system1);
         registry.update_metrics(&metrics1).await;
 
-        let iface2 = make_interface("ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
+        let iface2 = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
         let system2 = make_system("7.10", "RB750Gr3", "1d");
         let metrics2 = make_router_metrics("router1", vec![iface2], system2);
         registry.update_metrics(&metrics2).await;
 
         let labels = InterfaceLabels {
             router: "router1".to_string(),
-            interface: "ether1".to_string(),
-            comment: "WAN".to_string(),
+            id: "*1".to_string(),
         };
         assert_eq!(
             registry.interface_rx_bytes.get_or_create(&labels).get(),
@@ -411,7 +346,7 @@ mod tests {
     #[tokio::test]
     async fn test_encode_metrics_contains_expected_names() {
         let registry = MetricsRegistry::new();
-        let iface = make_interface("ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
         let system = make_system("7.10", "RB750Gr3", "1d");
         let metrics = make_router_metrics("router1", vec![iface], system);
         registry.update_metrics(&metrics).await;
@@ -432,7 +367,7 @@ mod tests {
         assert!(encoded.contains("mikrotik_scrape_success_total"));
         assert!(encoded.contains("mikrotik_scrape_errors_total"));
         assert!(encoded.contains("router=\"router1\""));
-        assert!(encoded.contains("interface=\"ether1\""));
+        assert!(encoded.contains("id=\"*1\""));
     }
 
     #[tokio::test]
@@ -444,6 +379,7 @@ mod tests {
             let registry_clone = registry.clone();
             let task = tokio::spawn(async move {
                 let iface = make_interface(
+                    &format!("*{}", i),
                     &format!("ether{}", i),
                     "",
                     1000 * (i as u64 + 1),
@@ -467,8 +403,8 @@ mod tests {
 
         let encoded = registry.encode_metrics().await.expect("Failed to encode");
         for i in 0..5 {
-            assert!(encoded.contains(&format!("ether{}", i)));
             assert!(encoded.contains(&format!("router{}", i)));
+            assert!(encoded.contains(&format!("id=\"*{}\"", i)));
         }
     }
 
@@ -554,21 +490,19 @@ mod tests {
     async fn test_interface_labels_with_metrics() {
         let registry = MetricsRegistry::new();
 
-        let iface1 = make_interface("ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
-        let iface2 = make_interface("ether2", "LAN", 3000, 4000, 30, 40, 1, 2, false);
+        let iface1 = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
+        let iface2 = make_interface("*2", "ether2", "LAN", 3000, 4000, 30, 40, 1, 2, false);
         let system = make_system("7.10", "RB750Gr3", "1d");
         let metrics = make_router_metrics("router1", vec![iface1, iface2], system);
         registry.update_metrics(&metrics).await;
 
         let labels1 = InterfaceLabels {
             router: "router1".to_string(),
-            interface: "ether1".to_string(),
-            comment: "WAN".to_string(),
+            id: "*1".to_string(),
         };
         let labels2 = InterfaceLabels {
             router: "router1".to_string(),
-            interface: "ether2".to_string(),
-            comment: "LAN".to_string(),
+            id: "*2".to_string(),
         };
 
         assert_eq!(
@@ -586,7 +520,7 @@ mod tests {
     #[tokio::test]
     async fn test_system_metrics_gauge_values() {
         let registry = MetricsRegistry::new();
-        let iface = make_interface("ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
         let system = SystemResource {
             uptime: "1d2h3m4s".to_string(),
             cpu_load: 50,
@@ -625,7 +559,7 @@ mod tests {
     #[tokio::test]
     async fn test_connection_tracking_multi_router() {
         let registry = MetricsRegistry::new();
-        let iface = make_interface("ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
         let system = make_system("7.10", "RB750Gr3", "1d2h3m4s");
 
         // First update for router1 with TCP connections
@@ -740,7 +674,7 @@ mod tests {
     async fn test_system_info_stale_label_reset_on_version_change() {
         let registry = MetricsRegistry::new();
 
-        let iface = make_interface("ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
         let system_v1 = SystemResource {
             uptime: "1d".to_string(),
             cpu_load: 10,
@@ -791,7 +725,7 @@ mod tests {
     async fn test_system_info_no_reset_when_unchanged() {
         let registry = MetricsRegistry::new();
 
-        let iface = make_interface("ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
         let system = SystemResource {
             uptime: "1d".to_string(),
             cpu_load: 10,

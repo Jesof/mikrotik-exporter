@@ -6,9 +6,7 @@
 //! This module implements parsing of WireGuard interface and peer information
 //! from RouterOS API responses and structures for storing the parsed data.
 //!
-//! For peer identification, we use `allowed-address` instead of `public-key`
-//! to avoid collecting sensitive information. This approach provides a stable
-//! identifier for monitoring while maintaining privacy.
+//! For peer identification, we use `.id` as the primary key.
 
 use crate::mikrotik::types::WireGuardPeerStats;
 use std::collections::HashMap;
@@ -28,7 +26,7 @@ pub(crate) fn parse_wireguard_peers(
             continue;
         }
 
-        if let Some(interface) = sentence.get("interface") {
+        if let (Some(id), Some(interface)) = (sentence.get(".id"), sentence.get("interface")) {
             let rx_bytes = sentence
                 .get("rx")
                 .and_then(|v| v.parse::<u64>().ok())
@@ -45,6 +43,7 @@ pub(crate) fn parse_wireguard_peers(
 
             if let Some(allowed_address) = sentence.get("allowed-address") {
                 peers.push(WireGuardPeerStats {
+                    id: id.clone(),
                     interface: interface.clone(),
                     name: sentence
                         .get("name")
@@ -159,6 +158,7 @@ mod tests {
     #[test]
     fn test_parse_wireguard_peers_single() {
         let mut data = HashMap::new();
+        data.insert(".id".to_string(), "*1".to_string());
         data.insert("interface".to_string(), "wg1".to_string());
         data.insert("name".to_string(), "peer1".to_string());
         data.insert("comment".to_string(), "John".to_string());
@@ -173,6 +173,7 @@ mod tests {
 
         let result = parse_wireguard_peers(&[data]);
         assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id, "*1");
         assert_eq!(result[0].interface, "wg1");
         assert_eq!(result[0].name, "peer1");
         assert_eq!(result[0].comment, "John");
@@ -186,6 +187,7 @@ mod tests {
     #[test]
     fn test_parse_wireguard_peers_with_handshake() {
         let mut data = HashMap::new();
+        data.insert(".id".to_string(), "*1".to_string());
         data.insert("interface".to_string(), "wg1".to_string());
         data.insert("name".to_string(), "peer1".to_string());
         data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
@@ -199,6 +201,7 @@ mod tests {
 
         let result = parse_wireguard_peers(&[data]);
         assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id, "*1");
         assert_eq!(result[0].interface, "wg1");
         assert_eq!(result[0].name, "peer1");
         assert_eq!(result[0].allowed_address, "10.10.10.1/32");
@@ -211,12 +214,14 @@ mod tests {
     #[test]
     fn test_parse_wireguard_peers_missing_fields() {
         let mut data = HashMap::new();
+        data.insert(".id".to_string(), "*1".to_string());
         data.insert("interface".to_string(), "wg1".to_string());
         data.insert("name".to_string(), "peer1".to_string());
         data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
 
         let result = parse_wireguard_peers(&[data]);
         assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id, "*1");
         assert_eq!(result[0].interface, "wg1");
         assert_eq!(result[0].name, "peer1");
         assert_eq!(result[0].allowed_address, "10.10.10.1/32");
@@ -229,11 +234,13 @@ mod tests {
     #[test]
     fn test_parse_wireguard_peers_missing_name_field() {
         let mut data = HashMap::new();
+        data.insert(".id".to_string(), "*1".to_string());
         data.insert("interface".to_string(), "wg1".to_string());
         data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
 
         let result = parse_wireguard_peers(&[data]);
         assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id, "*1");
         assert_eq!(result[0].interface, "wg1");
         assert_eq!(result[0].name, "unnamed-peer");
         assert_eq!(result[0].comment, "");
@@ -243,6 +250,7 @@ mod tests {
     #[test]
     fn test_parse_wireguard_peers_invalid_numbers() {
         let mut data = HashMap::new();
+        data.insert(".id".to_string(), "*1".to_string());
         data.insert("interface".to_string(), "wg1".to_string());
         data.insert("name".to_string(), "peer1".to_string());
         data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
@@ -258,6 +266,7 @@ mod tests {
     #[test]
     fn test_parse_wireguard_peers_missing_interface() {
         let mut data = HashMap::new();
+        data.insert(".id".to_string(), "*1".to_string());
         data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
 
         let result = parse_wireguard_peers(&[data]);
@@ -267,6 +276,7 @@ mod tests {
     #[test]
     fn test_parse_wireguard_peers_missing_allowed_address() {
         let mut data = HashMap::new();
+        data.insert(".id".to_string(), "*1".to_string());
         data.insert("interface".to_string(), "wg1".to_string());
         data.insert("name".to_string(), "peer1".to_string());
 
@@ -277,6 +287,7 @@ mod tests {
     #[test]
     fn test_parse_wireguard_peers_multiple() {
         let mut peer1 = HashMap::new();
+        peer1.insert(".id".to_string(), "*1".to_string());
         peer1.insert("interface".to_string(), "wg1".to_string());
         peer1.insert("name".to_string(), "peer1".to_string());
         peer1.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
@@ -288,6 +299,7 @@ mod tests {
         peer1.insert("tx".to_string(), "2048".to_string());
 
         let mut peer2 = HashMap::new();
+        peer2.insert(".id".to_string(), "*2".to_string());
         peer2.insert("interface".to_string(), "wg1".to_string());
         peer2.insert("name".to_string(), "peer2".to_string());
         peer2.insert("allowed-address".to_string(), "10.10.10.2/32".to_string());
@@ -307,6 +319,7 @@ mod tests {
     #[test]
     fn test_parse_wireguard_peers_disabled() {
         let mut data = HashMap::new();
+        data.insert(".id".to_string(), "*1".to_string());
         data.insert("interface".to_string(), "wg1".to_string());
         data.insert("name".to_string(), "peer1".to_string());
         data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
@@ -319,6 +332,7 @@ mod tests {
     #[test]
     fn test_parse_wireguard_peers_current_endpoint_only() {
         let mut data = HashMap::new();
+        data.insert(".id".to_string(), "*1".to_string());
         data.insert("interface".to_string(), "wg1".to_string());
         data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
         data.insert(

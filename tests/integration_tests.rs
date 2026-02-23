@@ -165,6 +165,7 @@ async fn test_metrics_update_and_retrieval() {
 
     // Create sample metrics data
     let iface = InterfaceStats {
+        id: "*1".to_string(),
         name: "ether1".to_string(),
         comment: "WAN".to_string(),
         rx_bytes: 1000,

@@ -33,14 +33,12 @@ kubectl apply -k k8s/
 | ---------------------------------------  | ------- | --------------------------------- |
 | `mikrotik_interface_rx_bytes_total`      | counter | Received bytes                    |
 | `mikrotik_interface_tx_bytes_total`      | counter | Transmitted bytes                 |
+| `mikrotik_interface_info`                | gauge   | Interface metadata (name, comment)|
 | `mikrotik_system_cpu_load`               | gauge   | CPU load (%)                      |
 | `mikrotik_system_free_memory_bytes`      | gauge   | Free memory                       |
-| `mikrotik_scrape_duration_milliseconds`  | gauge   | Scrape duration                   |
-| `mikrotik_connection_pool_size`          | gauge   | Connection pool size              |
-| `mikrotik_connection_tracking_count`     | gauge   | Connection tracking               |
 | `mikrotik_wireguard_peer_rx_bytes`       | gauge   | WireGuard RX bytes                |
-| `mikrotik_wireguard_peer_tx_bytes`       | gauge   | WireGuard TX bytes                |
-| `mikrotik_certificate_days_until_expiry` | gauge   | Days until certificate expiry     |
+| `mikrotik_wireguard_peer_info`           | gauge   | WireGuard metadata                |
+| `mikrotik_firewall_rule_bytes_total`     | counter | Firewall traffic                  |
 
 [Full metrics list →](#full-metrics-list)
 
@@ -156,7 +154,7 @@ MIT - see [LICENSE](LICENSE)
 
 ## Full Metrics List
 
-### Interfaces (Labels: router, interface)
+### Interfaces (Labels: router, id)
 
 | Metric                                | Type    | Description                   |
 | ------------------------------------- | ------- | ----------------------------- |
@@ -167,6 +165,7 @@ MIT - see [LICENSE](LICENSE)
 | `mikrotik_interface_rx_errors_total`  | counter | Receive errors                |
 | `mikrotik_interface_tx_errors_total`  | counter | Transmit errors               |
 | `mikrotik_interface_running`          | gauge   | Status (1=running, 0=stopped) |
+| `mikrotik_interface_info`             | gauge   | Metadata (name, comment)      |
 
 ### System (Labels: router, version, board)
 
@@ -197,20 +196,21 @@ MIT - see [LICENSE](LICENSE)
 | --------------------------------------| ------ | ----------------------------------------- |
 | `mikrotik_connection_tracking_count`  | gauge  | Connection count by src/protocol/ip       |
 
-### WireGuard Peers (Labels: router, interface, allowed_address)
+### WireGuard Peers (Labels: router, id)
 
 | Metric                                     | Type   | Description                                   |
 | ------------------------------------------ | ------ | --------------------------------------------- |
 | `mikrotik_wireguard_peer_rx_bytes`         | gauge  | Received bytes from peer                      |
 | `mikrotik_wireguard_peer_tx_bytes`         | gauge  | Transmitted bytes to peer                     |
 | `mikrotik_wireguard_peer_latest_handshake` | gauge  | Unix timestamp of last handshake              |
-| `mikrotik_wireguard_peer_info`             | gauge  | Peer metadata (name, endpoint, comment)       |
+| `mikrotik_wireguard_peer_info`             | gauge  | Metadata (name, endpoint, comment, etc.)      |
 
-### Certificates (Labels: router, name)
+### Certificates (Labels: router, id)
 
-| Metric                                      | Type   | Description                                                                 |
-| ------------------------------------------- | ------ | --------------------------------------------------------------------------- |
-| `mikrotik_certificate_days_until_expiry`    | gauge  | Number of days until certificate expiry (negative values indicate expired)  |
+| Metric                                      | Type   | Description                               |
+| ------------------------------------------- | ------ | ----------------------------------------- |
+| `mikrotik_certificate_days_until_expiry`    | gauge  | Days until certificate expiry             |
+| `mikrotik_certificate_info`                 | gauge  | Metadata (name, comment)                  |
 
 The `mikrotik_certificate_days_until_expiry` metric tracks the number of days until certificate expiration on the router.
 Both RouterOS certificate expiration date formats are supported:
@@ -226,24 +226,17 @@ For monitoring, you can use alerts, for example:
 - Warning when `mikrotik_certificate_days_until_expiry < 30` (certificate expires in less than 30 days)
 - Critical when `mikrotik_certificate_days_until_expiry < 0` (certificate already expired)
 
-### Firewall Rules (Labels: router, rule_id, chain, action, ip_version, section)
+### Firewall Rules (Labels: router, id, chain, action, ip_version, section)
 
 | Metric                                 | Type    | Description                          |
 | -------------------------------------- | ------- | ------------------------------------ |
 | `mikrotik_firewall_rule_bytes_total`   | counter | Bytes matching firewall rules        |
 | `mikrotik_firewall_rule_packets_total` | counter | Packets matching firewall rules      |
-
-Firewall metrics are collected for all active rules in filter, nat, mangle, and raw sections.
-- `rule_id` - unique rule identifier in RouterOS (e.g., `*1A2`)
-- `section` indicates the firewall section:
-  - `filter` - basic filtering rules
-  - `nat` - network address translation rules
-  - `mangle` - packet modification rules
-  - `raw` - packet preprocessing rules
+| `mikrotik_firewall_rule_info`          | gauge   | Metadata (comment)                   |
 
 ## Project Architecture
 
-```
+```tree
 src/
 ├── lib.rs                  # Public library
 ├── main.rs                 # Entry point

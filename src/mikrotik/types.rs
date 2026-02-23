@@ -6,6 +6,7 @@
 /// Statistics for a network interface
 #[derive(Debug, Clone)]
 pub struct InterfaceStats {
+    pub id: String,
     pub name: String,
     pub comment: String,
     pub rx_bytes: u64,
@@ -40,6 +41,7 @@ pub struct ConnectionTrackingStats {
 /// Certificate information from a MikroTik router
 #[derive(Debug, Clone)]
 pub struct CertificateStats {
+    pub id: String,
     pub name: String,
     pub comment: String,
     pub days_until_expiry: i64,
@@ -48,6 +50,7 @@ pub struct CertificateStats {
 /// Statistics for a WireGuard peer
 #[derive(Debug, Clone, PartialEq)]
 pub struct WireGuardPeerStats {
+    pub id: String,
     pub interface: String,
     pub name: String,
     pub comment: String,
@@ -90,6 +93,7 @@ mod tests {
     #[test]
     fn test_interface_stats_creation() {
         let stats = InterfaceStats {
+            id: "*1".to_string(),
             name: "ether1".to_string(),
             comment: "WAN".to_string(),
             rx_bytes: 1000,
@@ -101,6 +105,7 @@ mod tests {
             running: true,
         };
 
+        assert_eq!(stats.id, "*1");
         assert_eq!(stats.name, "ether1");
         assert_eq!(stats.comment, "WAN");
         assert_eq!(stats.rx_bytes, 1000);
@@ -130,6 +135,7 @@ mod tests {
         let metrics = RouterMetrics {
             router_name: "main-router".to_string(),
             interfaces: vec![InterfaceStats {
+                id: "*1".to_string(),
                 name: "ether1".to_string(),
                 comment: "WAN".to_string(),
                 rx_bytes: 1000,
@@ -150,6 +156,7 @@ mod tests {
             },
             connection_tracking: Vec::new(),
             wireguard_peers: vec![WireGuardPeerStats {
+                id: "*1".to_string(),
                 interface: "wg1".to_string(),
                 name: "peer1".to_string(),
                 comment: "John".to_string(),
@@ -160,6 +167,7 @@ mod tests {
                 latest_handshake: None,
             }],
             certificate_stats: vec![CertificateStats {
+                id: "*1".to_string(),
                 name: "cert1".to_string(),
                 comment: "Web".to_string(),
                 days_until_expiry: 30,
@@ -178,10 +186,13 @@ mod tests {
 
         assert_eq!(metrics.router_name, "main-router");
         assert_eq!(metrics.interfaces.len(), 1);
+        assert_eq!(metrics.interfaces[0].id, "*1");
         assert_eq!(metrics.interfaces[0].name, "ether1");
         assert_eq!(metrics.system.version, "7.10");
         assert_eq!(metrics.wireguard_peers.len(), 1);
+        assert_eq!(metrics.wireguard_peers[0].id, "*1");
         assert_eq!(metrics.certificate_stats.len(), 1);
+        assert_eq!(metrics.certificate_stats[0].id, "*1");
         assert_eq!(metrics.certificate_stats[0].name, "cert1");
         assert_eq!(metrics.certificate_stats[0].days_until_expiry, 30);
         assert_eq!(metrics.firewall_rules.len(), 1);
@@ -197,6 +208,7 @@ mod tests {
     #[test]
     fn test_interface_stats_clone() {
         let stats = InterfaceStats {
+            id: "*1".to_string(),
             name: "ether1".to_string(),
             comment: "WAN".to_string(),
             rx_bytes: 1000,
@@ -209,6 +221,7 @@ mod tests {
         };
 
         let cloned = stats.clone();
+        assert_eq!(stats.id, cloned.id);
         assert_eq!(stats.name, cloned.name);
         assert_eq!(stats.comment, cloned.comment);
         assert_eq!(stats.rx_bytes, cloned.rx_bytes);

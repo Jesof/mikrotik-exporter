@@ -126,9 +126,6 @@ pub fn start_collection_loop(
 
             let cycle_start = std::time::Instant::now();
 
-            // Track active interfaces for cleanup
-            let active_interfaces = Arc::new(tokio::sync::Mutex::new(HashSet::new()));
-
             // Collect metrics from all routers
             let mut tasks = Vec::new();
             for router in &config.routers {
@@ -137,7 +134,6 @@ pub fn start_collection_loop(
                     pool.clone(),
                     metrics.clone(),
                     system_cache.clone(),
-                    active_interfaces.clone(),
                     gap_reset_threshold,
                 );
                 tasks.push(task);
@@ -155,22 +151,16 @@ pub fn start_collection_loop(
             // Record full collection cycle duration
             metrics.record_collection_cycle_duration(cycle_start.elapsed().as_secs_f64());
 
-            // Periodic cleanup of stale interface metrics
+            // Periodic cleanup
             collection_cycle += 1;
             if collection_cycle % CLEANUP_EVERY_N_CYCLES == 0 {
-                let active_ifaces = active_interfaces.lock().await;
-                metrics.cleanup_stale_interfaces(&active_ifaces).await;
                 metrics
                     .cleanup_expired_dynamic_labels(STALE_LABEL_TTL)
                     .await;
                 metrics.cleanup_stale_routers(&active_routers).await;
                 system_cache.cleanup_stale(&active_routers).await;
                 pool.cleanup_states(&active_pool_keys).await;
-                tracing::debug!(
-                    "Cleanup cycle {} completed (tracked {} active interfaces)",
-                    collection_cycle,
-                    active_ifaces.len()
-                );
+                tracing::debug!("Cleanup cycle {} completed", collection_cycle,);
             }
         }
     })

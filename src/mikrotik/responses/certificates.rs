@@ -11,6 +11,11 @@ pub(crate) fn parse_certificates(sentences: &[HashMap<String, String>]) -> Vec<C
     let mut certificates = Vec::new();
 
     for sentence in sentences {
+        let id = match sentence.get(".id") {
+            Some(id) if !id.is_empty() => id.clone(),
+            _ => continue,
+        };
+
         let name = match sentence.get("name") {
             Some(n) if !n.is_empty() => n.clone(),
             _ => continue,
@@ -33,6 +38,7 @@ pub(crate) fn parse_certificates(sentences: &[HashMap<String, String>]) -> Vec<C
         }
 
         certificates.push(CertificateStats {
+            id,
             name,
             comment: sentence.get("comment").cloned().unwrap_or_default(),
             days_until_expiry,
@@ -142,12 +148,14 @@ mod tests {
     #[test]
     fn test_parse_certificates_legacy_format() {
         let mut sentence1 = HashMap::new();
+        sentence1.insert(".id".to_string(), "*1".to_string());
         sentence1.insert("name".to_string(), "cert1".to_string());
         sentence1.insert("comment".to_string(), "Web".to_string());
         // Use a future date that's definitely in the future
         sentence1.insert("expiration".to_string(), "Jan/01/2030 12:00:00".to_string());
 
         let mut sentence2 = HashMap::new();
+        sentence2.insert(".id".to_string(), "*2".to_string());
         sentence2.insert("name".to_string(), "cert2".to_string());
         sentence2.insert("comment".to_string(), "API".to_string());
         // Use another future date
@@ -157,8 +165,10 @@ mod tests {
         let certificates = parse_certificates(&sentences);
 
         assert_eq!(certificates.len(), 2);
+        assert_eq!(certificates[0].id, "*1");
         assert_eq!(certificates[0].name, "cert1");
         assert_eq!(certificates[0].comment, "Web");
+        assert_eq!(certificates[1].id, "*2");
         assert_eq!(certificates[1].name, "cert2");
         assert_eq!(certificates[1].comment, "API");
     }
@@ -166,6 +176,7 @@ mod tests {
     #[test]
     fn test_parse_certificates_new_format() {
         let mut sentence1 = HashMap::new();
+        sentence1.insert(".id".to_string(), "*1".to_string());
         sentence1.insert("name".to_string(), "cert1".to_string());
         // Use a future date that's definitely in the future in ISO format
         sentence1.insert(
@@ -174,6 +185,7 @@ mod tests {
         );
 
         let mut sentence2 = HashMap::new();
+        sentence2.insert(".id".to_string(), "*2".to_string());
         sentence2.insert("name".to_string(), "cert2".to_string());
         // Use another future date in ISO format
         sentence2.insert(
@@ -185,13 +197,16 @@ mod tests {
         let certificates = parse_certificates(&sentences);
 
         assert_eq!(certificates.len(), 2);
+        assert_eq!(certificates[0].id, "*1");
         assert_eq!(certificates[0].name, "cert1");
+        assert_eq!(certificates[1].id, "*2");
         assert_eq!(certificates[1].name, "cert2");
     }
 
     #[test]
     fn test_parse_certificates_prefer_new_format() {
         let mut sentence = HashMap::new();
+        sentence.insert(".id".to_string(), "*1".to_string());
         sentence.insert("name".to_string(), "cert1".to_string());
         // Both fields present - should prefer "invalid-after"
         sentence.insert(
@@ -204,12 +219,14 @@ mod tests {
         let certificates = parse_certificates(&sentences);
 
         assert_eq!(certificates.len(), 1);
+        assert_eq!(certificates[0].id, "*1");
         assert_eq!(certificates[0].name, "cert1");
     }
 
     #[test]
     fn test_parse_certificates_with_expired() {
         let mut sentence = HashMap::new();
+        sentence.insert(".id".to_string(), "*1".to_string());
         sentence.insert("name".to_string(), "expired-cert".to_string());
         sentence.insert("expiration".to_string(), "Jan/01/2020 12:00:00".to_string());
 
@@ -242,6 +259,7 @@ mod tests {
     #[test]
     fn test_parse_certificates_skip_invalid() {
         let mut sentence = HashMap::new();
+        sentence.insert(".id".to_string(), "*1".to_string());
         sentence.insert("name".to_string(), "invalid".to_string());
         sentence.insert("expiration".to_string(), "invalid-date".to_string());
 

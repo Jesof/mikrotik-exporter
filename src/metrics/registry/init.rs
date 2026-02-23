@@ -4,8 +4,9 @@
 //! Registry initialization and metric registration
 
 use crate::metrics::labels::{
-    CertificateLabels, ConntrackLabels, FirewallRuleLabels, InterfaceLabels, RouterLabels,
-    SystemInfoLabels, WireGuardPeerInfoLabels, WireGuardPeerLabels,
+    CertificateInfoLabels, CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels,
+    FirewallRuleLabels, InterfaceInfoLabels, InterfaceLabels, RouterLabels, SystemInfoLabels,
+    WireGuardPeerInfoLabels, WireGuardPeerLabels,
 };
 use dashmap::DashMap;
 use prometheus_client::metrics::counter::Counter;
@@ -65,18 +66,32 @@ impl MetricsRegistry {
             interface_running.clone(),
         );
 
+        let interface_info = Family::<InterfaceInfoLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_interface_info",
+            "Static interface info (value=1)",
+            interface_info.clone(),
+        );
+
         // Firewall rule counters
         let firewall_rule_bytes = Family::<FirewallRuleLabels, Counter>::default();
         registry.register(
             "mikrotik_firewall_rule_bytes",
-            "Bytes matched by firewall rule (by section: filter, nat, mangle, raw)",
+            "Bytes matched by firewall rule",
             firewall_rule_bytes.clone(),
         );
         let firewall_rule_packets = Family::<FirewallRuleLabels, Counter>::default();
         registry.register(
             "mikrotik_firewall_rule_packets",
-            "Packets matched by firewall rule (by section: filter, nat, mangle, raw)",
+            "Packets matched by firewall rule",
             firewall_rule_packets.clone(),
+        );
+
+        let firewall_rule_info = Family::<FirewallRuleInfoLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_firewall_rule_info",
+            "Static firewall rule info (value=1)",
+            firewall_rule_info.clone(),
         );
 
         let system_cpu_load = Family::<RouterLabels, Gauge>::default();
@@ -203,6 +218,13 @@ impl MetricsRegistry {
             certificate_days_until_expiry.clone(),
         );
 
+        let certificate_info = Family::<CertificateInfoLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_certificate_info",
+            "Static certificate info (value=1)",
+            certificate_info.clone(),
+        );
+
         Self {
             registry: Arc::new(Mutex::new(registry)),
             interface_rx_bytes,
@@ -233,19 +255,28 @@ impl MetricsRegistry {
             wireguard_peer_latest_handshake,
             wireguard_peer_info,
             certificate_days_until_expiry,
+            certificate_info,
+            interface_info,
+            firewall_rule_info,
             prev_iface: Arc::new(DashMap::new()),
             prev_firewall_rules: Arc::new(DashMap::new()),
             prev_conntrack: Arc::new(DashMap::new()),
             prev_system_info: Arc::new(DashMap::new()),
             prev_wireguard_peers: Arc::new(DashMap::new()),
             prev_wireguard_peer_info: Arc::new(DashMap::new()),
+            prev_interface_info: Arc::new(DashMap::new()),
+            prev_certificate_info: Arc::new(DashMap::new()),
+            prev_firewall_rule_info: Arc::new(DashMap::new()),
             prev_certificates: Arc::new(DashMap::new()),
             prev_firewall_rules_by_router: Arc::new(DashMap::new()),
             conntrack_last_seen: Arc::new(DashMap::new()),
             firewall_rule_last_seen: Arc::new(DashMap::new()),
+            firewall_rule_info_last_seen: Arc::new(DashMap::new()),
             wireguard_peer_last_seen: Arc::new(DashMap::new()),
             wireguard_peer_info_last_seen: Arc::new(DashMap::new()),
             certificate_last_seen: Arc::new(DashMap::new()),
+            certificate_info_last_seen: Arc::new(DashMap::new()),
+            interface_info_last_seen: Arc::new(DashMap::new()),
             last_scrape_success: Arc::new(DashMap::new()),
         }
     }

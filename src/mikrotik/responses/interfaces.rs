@@ -9,8 +9,9 @@ use std::collections::HashMap;
 pub(crate) fn parse_interfaces(sentences: &[HashMap<String, String>]) -> Vec<InterfaceStats> {
     let mut out = Vec::new();
     for s in sentences {
-        if let (Some(name), Some(_type)) = (s.get("name"), s.get("type")) {
+        if let (Some(id), Some(name), Some(_type)) = (s.get(".id"), s.get("name"), s.get("type")) {
             out.push(InterfaceStats {
+                id: id.clone(),
                 name: name.clone(),
                 comment: s.get("comment").cloned().unwrap_or_default(),
                 rx_bytes: s.get("rx-byte").and_then(|v| v.parse().ok()).unwrap_or(0),
@@ -33,6 +34,7 @@ mod tests {
     #[test]
     fn test_parse_interfaces_complete() {
         let mut iface1 = HashMap::new();
+        iface1.insert(".id".to_string(), "*1".to_string());
         iface1.insert("name".to_string(), "ether1".to_string());
         iface1.insert("comment".to_string(), "WAN".to_string());
         iface1.insert("type".to_string(), "ether".to_string());
@@ -40,6 +42,7 @@ mod tests {
         iface1.insert("running".to_string(), "true".to_string());
 
         let mut iface2 = HashMap::new();
+        iface2.insert(".id".to_string(), "*2".to_string());
         iface2.insert("name".to_string(), "ether2".to_string());
         iface2.insert("type".to_string(), "ether".to_string());
         iface2.insert("running".to_string(), "false".to_string());
@@ -47,9 +50,11 @@ mod tests {
         let result = parse_interfaces(&[iface1, iface2]);
 
         assert_eq!(result.len(), 2);
+        assert_eq!(result[0].id, "*1");
         assert_eq!(result[0].name, "ether1");
         assert_eq!(result[0].comment, "WAN");
         assert!(result[0].running);
+        assert_eq!(result[1].id, "*2");
         assert_eq!(result[1].name, "ether2");
         assert!(!result[1].running);
     }
@@ -57,12 +62,14 @@ mod tests {
     #[test]
     fn test_parse_interfaces_missing_values() {
         let mut iface = HashMap::new();
+        iface.insert(".id".to_string(), "*1".to_string());
         iface.insert("name".to_string(), "ether1".to_string());
         iface.insert("type".to_string(), "ether".to_string());
 
         let result = parse_interfaces(&[iface]);
 
         assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id, "*1");
         assert_eq!(result[0].name, "ether1");
         assert_eq!(result[0].rx_bytes, 0);
         assert_eq!(result[0].tx_bytes, 0);

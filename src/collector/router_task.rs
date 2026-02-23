@@ -40,10 +40,8 @@
 //! - Trace-level logging for debugging with full error context
 
 use crate::config::RouterConfig;
-use crate::metrics::labels::InterfaceLabels;
 use crate::metrics::{MetricsRegistry, RouterLabels};
 use crate::mikrotik::{ConnectionPool, MikroTikClient};
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -54,7 +52,6 @@ pub(super) fn spawn_router_collection(
     pool: Arc<ConnectionPool>,
     metrics: MetricsRegistry,
     system_cache: SystemInfoCache,
-    active_interfaces: Arc<tokio::sync::Mutex<HashSet<InterfaceLabels>>>,
     gap_reset_threshold: Duration,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -70,18 +67,6 @@ pub(super) fn spawn_router_collection(
             Ok(m) => {
                 let end = std::time::Instant::now();
                 let duration = end.duration_since(start).as_secs_f64();
-
-                // Track active interfaces
-                {
-                    let mut active = active_interfaces.lock().await;
-                    for iface in &m.interfaces {
-                        active.insert(InterfaceLabels {
-                            router: router_name.clone(),
-                            interface: iface.name.clone(),
-                            comment: iface.comment.clone(),
-                        });
-                    }
-                }
 
                 let gap = metrics.record_scrape_success_and_check_gap(
                     &router_label,

@@ -92,6 +92,7 @@ async fn metrics_contains_router_data_after_update() {
     let state = make_state(vec![test_router("myrouter")]);
 
     let iface = InterfaceStats {
+        id: "*1".to_string(),
         name: "ether1".to_string(),
         comment: "WAN".to_string(),
         rx_bytes: 1000,
@@ -148,7 +149,10 @@ async fn metrics_contains_router_data_after_update() {
     .unwrap();
 
     assert!(body.contains("router=\"myrouter\""));
-    assert!(body.contains("interface=\"ether1\""));
+    assert!(body.contains("id=\"*1\""));
+    assert!(body.contains(
+        "mikrotik_interface_info{router=\"myrouter\",id=\"*1\",name=\"ether1\",comment=\"WAN\"} 1"
+    ));
     assert!(body.contains("mikrotik_system_cpu_load"));
 }
 
@@ -158,6 +162,7 @@ async fn metrics_correctly_calculates_interface_counters() {
 
     // First update with initial values
     let iface = InterfaceStats {
+        id: "*1".to_string(),
         name: "ether1".to_string(),
         comment: "WAN".to_string(),
         rx_bytes: 1000,
@@ -198,6 +203,7 @@ async fn metrics_correctly_calculates_interface_counters() {
 
     // Second update with incremented values
     let iface2 = InterfaceStats {
+        id: "*1".to_string(),
         name: "ether1".to_string(),
         comment: "WAN".to_string(),
         rx_bytes: 3000, // +2000
@@ -245,31 +251,12 @@ async fn metrics_correctly_calculates_interface_counters() {
     .unwrap();
 
     // Check that counter starts with initial values and increments by delta
-    // First update: rx_bytes=1000, tx_bytes=2000, rx_packets=10, tx_packets=20
-    // Second update: delta rx=2000, delta tx=3000, delta rx_pkts=15, delta tx_pkts=15
-    // Final counter: rx=3000, tx=5000, rx_pkts=25, tx_pkts=35
-    assert!(body.contains(
-        "mikrotik_interface_rx_bytes_total{router=\"router1\",interface=\"ether1\",comment=\"WAN\"} 3000"
-    ));
-    assert!(body.contains(
-        "mikrotik_interface_tx_bytes_total{router=\"router1\",interface=\"ether1\",comment=\"WAN\"} 5000"
-    ));
-    assert!(body.contains(
-        "mikrotik_interface_rx_packets_total{router=\"router1\",interface=\"ether1\",comment=\"WAN\"} 25"
-    ));
-    assert!(body.contains(
-        "mikrotik_interface_tx_packets_total{router=\"router1\",interface=\"ether1\",comment=\"WAN\"} 35"
-    ));
-    assert!(
-        body.contains(
-            "mikrotik_interface_rx_errors_total{router=\"router1\",interface=\"ether1\",comment=\"WAN\"} 1"
-        )
-    );
-    assert!(
-        body.contains(
-            "mikrotik_interface_tx_errors_total{router=\"router1\",interface=\"ether1\",comment=\"WAN\"} 4"
-        )
-    );
+    assert!(body.contains("mikrotik_interface_rx_bytes_total{router=\"router1\",id=\"*1\"} 3000"));
+    assert!(body.contains("mikrotik_interface_tx_bytes_total{router=\"router1\",id=\"*1\"} 5000"));
+    assert!(body.contains("mikrotik_interface_rx_packets_total{router=\"router1\",id=\"*1\"} 25"));
+    assert!(body.contains("mikrotik_interface_tx_packets_total{router=\"router1\",id=\"*1\"} 35"));
+    assert!(body.contains("mikrotik_interface_rx_errors_total{router=\"router1\",id=\"*1\"} 1"));
+    assert!(body.contains("mikrotik_interface_tx_errors_total{router=\"router1\",id=\"*1\"} 4"));
 }
 
 // --- /health endpoint ---
