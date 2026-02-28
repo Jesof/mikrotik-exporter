@@ -170,7 +170,7 @@ jobs:
       - name: Generate coverage
         run: cargo tarpaulin --out Xml --out Html --output-dir coverage
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: ./coverage
