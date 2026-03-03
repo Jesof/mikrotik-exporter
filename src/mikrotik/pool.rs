@@ -261,13 +261,20 @@ impl ConnectionPool {
     ///
     /// This method is internal (pub(super)) to the mikrotik module.
     /// It implements connection pooling with exponential backoff for failed connections.
+    ///
+    /// The `group` parameter allows multiple concurrent connections to the same router
+    /// by using different pool keys (e.g., "system", "conntrack", "vpn", "firewall").
     pub(super) async fn get_connection(
         &self,
         addr: &str,
         username: &str,
         password: &str,
+        group: Option<&str>,
     ) -> Result<PooledConnectionGuard, Box<dyn std::error::Error + Send + Sync>> {
-        let key = format!("{addr}:{username}");
+        let key = match group {
+            Some(g) => format!("{addr}:{username}:{g}"),
+            None => format!("{addr}:{username}"),
+        };
 
         tracing::trace!("Requesting connection for key: {}", key);
 
@@ -379,24 +386,38 @@ impl ConnectionPool {
     }
 
     /// Record successful operation
-    pub(super) async fn record_success(&self, addr: &str, username: &str) {
-        let key = format!("{addr}:{username}");
+    pub(super) async fn record_success(&self, addr: &str, username: &str, group: Option<&str>) {
+        let key = match group {
+            Some(g) => format!("{addr}:{username}:{g}"),
+            None => format!("{addr}:{username}"),
+        };
         let mut states = self.connection_states.lock().await;
         let state = states.entry(key).or_insert_with(ConnectionState::new);
         state.record_success();
     }
 
     /// Record failed operation
-    pub(super) async fn record_error(&self, addr: &str, username: &str) {
-        let key = format!("{addr}:{username}");
+    pub(super) async fn record_error(&self, addr: &str, username: &str, group: Option<&str>) {
+        let key = match group {
+            Some(g) => format!("{addr}:{username}:{g}"),
+            None => format!("{addr}:{username}"),
+        };
         let mut states = self.connection_states.lock().await;
         let state = states.entry(key).or_insert_with(ConnectionState::new);
         state.record_error();
     }
 
     /// Get connection state for metrics
-    pub async fn get_connection_state(&self, addr: &str, username: &str) -> Option<(u32, bool)> {
-        let key = format!("{addr}:{username}");
+    pub async fn get_connection_state(
+        &self,
+        addr: &str,
+        username: &str,
+        group: Option<&str>,
+    ) -> Option<(u32, bool)> {
+        let key = match group {
+            Some(g) => format!("{addr}:{username}:{g}"),
+            None => format!("{addr}:{username}"),
+        };
         let states = self.connection_states.lock().await;
         states
             .get(&key)
@@ -551,7 +572,7 @@ mod tests {
     #[tokio::test]
     async fn test_record_success() {
         let pool = ConnectionPool::new();
-        pool.record_success("192.168.1.1", "admin").await;
+        pool.record_success("192.168.1.1", "admin", None).await;
 
         let states = pool.connection_states.lock().await;
         let key = "192.168.1.1:admin";
@@ -562,7 +583,7 @@ mod tests {
     #[tokio::test]
     async fn test_record_error() {
         let pool = ConnectionPool::new();
-        pool.record_error("192.168.1.1", "admin").await;
+        pool.record_error("192.168.1.1", "admin", None).await;
 
         let states = pool.connection_states.lock().await;
         let key = "192.168.1.1:admin";
@@ -573,10 +594,12 @@ mod tests {
     #[tokio::test]
     async fn test_get_connection_state() {
         let pool = ConnectionPool::new();
-        pool.record_error("192.168.1.1", "admin").await;
-        pool.record_error("192.168.1.1", "admin").await;
+        pool.record_error("192.168.1.1", "admin", None).await;
+        pool.record_error("192.168.1.1", "admin", None).await;
 
-        let result = pool.get_connection_state("192.168.1.1", "admin").await;
+        let result = pool
+            .get_connection_state("192.168.1.1", "admin", None)
+            .await;
         assert!(result.is_some());
 
         let (errors, has_success) = result.unwrap();

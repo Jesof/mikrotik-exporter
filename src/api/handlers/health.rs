@@ -45,7 +45,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> impl IntoRespon
         // Get actual consecutive errors from connection pool state
         let consecutive_errors = if let Some((errors, _)) = state
             .pool
-            .get_connection_state(&router.address, &router.username)
+            .get_connection_state(&router.address, &router.username, None)
             .await
         {
             errors

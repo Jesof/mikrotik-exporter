@@ -94,7 +94,7 @@ pub(super) fn spawn_router_collection(
 
                 // Update connection error count
                 if let Some((errors, _)) = pool
-                    .get_connection_state(&router.address, &router.username)
+                    .get_connection_state(&router.address, &router.username, None)
                     .await
                 {
                     metrics.update_connection_errors(&router_label, errors);
@@ -121,7 +121,7 @@ pub(super) fn spawn_router_collection(
 
                 // Update connection error count
                 if let Some((errors, _)) = pool
-                    .get_connection_state(&router.address, &router.username)
+                    .get_connection_state(&router.address, &router.username, None)
                     .await
                 {
                     metrics.update_connection_errors(&router_label, errors);

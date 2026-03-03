@@ -150,6 +150,7 @@ impl MikroTikClient {
                 &self.config.address,
                 &self.config.username,
                 self.config.password.expose_secret(),
+                Some("system"),
             )
             .await?;
 
@@ -160,11 +161,11 @@ impl MikroTikClient {
         let success = system_result.is_ok() && interfaces_result.is_ok();
         if success {
             self.pool
-                .record_success(&self.config.address, &self.config.username)
+                .record_success(&self.config.address, &self.config.username, Some("system"))
                 .await;
         } else {
             self.pool
-                .record_error(&self.config.address, &self.config.username)
+                .record_error(&self.config.address, &self.config.username, Some("system"))
                 .await;
         }
 
@@ -185,6 +186,7 @@ impl MikroTikClient {
                 &self.config.address,
                 &self.config.username,
                 self.config.password.expose_secret(),
+                Some("conntrack"),
             )
             .await?;
 
@@ -216,6 +218,7 @@ impl MikroTikClient {
                 &self.config.address,
                 &self.config.username,
                 self.config.password.expose_secret(),
+                Some("vpn"),
             )
             .await?;
 
@@ -240,6 +243,7 @@ impl MikroTikClient {
                 &self.config.address,
                 &self.config.username,
                 self.config.password.expose_secret(),
+                Some("firewall"),
             )
             .await?;
 
@@ -377,36 +381,32 @@ impl MikroTikClient {
     }
 
     async fn test_connection_real(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Get connection from pool (returns RAII guard that auto-releases on drop)
         let mut guard = self
             .pool
             .get_connection(
                 &self.config.address,
                 &self.config.username,
                 self.config.password.expose_secret(),
+                None,
             )
             .await?;
 
         let conn = guard.get_mut();
 
-        // Execute a minimal command to test connectivity
         let result = conn.command("/system/resource/print", &[]).await;
 
-        // Record connection state BEFORE dropping guard to prevent race condition
         if result.is_ok() {
             self.pool
-                .record_success(&self.config.address, &self.config.username)
+                .record_success(&self.config.address, &self.config.username, None)
                 .await;
         } else {
             self.pool
-                .record_error(&self.config.address, &self.config.username)
+                .record_error(&self.config.address, &self.config.username, None)
                 .await;
         }
 
-        // Explicitly drop guard AFTER state is recorded
         drop(guard);
 
-        // Process the result
         let _sentences = result?;
         Ok(())
     }
