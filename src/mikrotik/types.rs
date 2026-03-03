@@ -4,7 +4,7 @@
 //! Type definitions for `MikroTik` metrics
 
 /// Statistics for a network interface
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InterfaceStats {
     pub id: String,
     pub name: String,
@@ -19,7 +19,7 @@ pub struct InterfaceStats {
 }
 
 /// System resource information from a `MikroTik` router
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SystemResource {
     pub uptime: String,
     pub cpu_load: u64,
@@ -30,7 +30,7 @@ pub struct SystemResource {
 }
 
 /// Connection tracking statistics per source address
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ConnectionTrackingStats {
     pub src_address: String,
     pub protocol: String,
@@ -39,7 +39,7 @@ pub struct ConnectionTrackingStats {
 }
 
 /// Certificate information from a `MikroTik` router
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CertificateStats {
     pub id: String,
     pub name: String,
@@ -47,7 +47,7 @@ pub struct CertificateStats {
 }
 
 /// Statistics for a `WireGuard` peer
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct WireGuardPeerStats {
     pub id: String,
     pub interface: String,
@@ -61,7 +61,7 @@ pub struct WireGuardPeerStats {
 }
 
 /// Statistics for firewall rules
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FirewallRuleStats {
     pub id: String,
     pub comment: String,
@@ -74,7 +74,7 @@ pub struct FirewallRuleStats {
 }
 
 /// Complete metrics snapshot from a router
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RouterMetrics {
     pub router_name: String,
     pub interfaces: Vec<InterfaceStats>,

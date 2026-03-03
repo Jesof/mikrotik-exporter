@@ -78,8 +78,8 @@ mod backoff {
     /// Error threshold for long backoff period (1 hour)
     pub const LONG_BACKOFF_ERROR_THRESHOLD: u32 = 10;
 
-    /// Long backoff duration after many consecutive errors (1 hour)
-    pub const LONG_BACKOFF_DURATION: Duration = Duration::from_secs(3600);
+    /// Long backoff duration after many consecutive errors (10 minutes)
+    pub const LONG_BACKOFF_DURATION: Duration = Duration::from_secs(600);
 
     /// Maximum exponent for exponential backoff (2^8 = 256 seconds)
     pub const MAX_BACKOFF_EXPONENT: u32 = 8;
@@ -280,15 +280,15 @@ impl ConnectionPool {
 
             if state.should_skip_attempt() {
                 let delay = state.backoff_delay();
-                tracing::debug!(
-                    "Skipping connection attempt to {} (backoff: {} consecutive errors, delay: {:?})",
+                tracing::info!(
+                    "Router {} in backoff mode ({} consecutive errors, next retry in {:?})",
                     addr,
                     state.consecutive_errors,
                     delay
                 );
                 return Err(format!(
-                    "Connection to {} temporarily disabled due to {} consecutive errors",
-                    addr, state.consecutive_errors
+                    "Connection to {} temporarily disabled due to {} consecutive errors. Will retry in {:?}",
+                    addr, state.consecutive_errors, delay
                 )
                 .into());
             }
