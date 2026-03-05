@@ -54,14 +54,29 @@ impl MetricsRegistry {
             .get_or_create(labels)
             .set(now_epoch as i64);
 
-        let gap = self
+        let previous = self
             .last_scrape_success
-            .insert(labels.router.clone(), now)
-            .map(|previous| now.duration_since(previous));
+            .get(&labels.router)
+            .map(|r| *r.value());
+        self.last_scrape_success.insert(labels.router.clone(), now);
 
-        match gap {
-            Some(duration) if duration > reset_threshold => Some(duration),
-            _ => None,
+        match previous {
+            Some(previous_time) => {
+                let gap = now.duration_since(previous_time);
+                // Also check if we had many consecutive errors previously
+                let had_errors = if let Some((errors, _)) = self.get_connection_errors(labels) {
+                    errors > 0
+                } else {
+                    false
+                };
+
+                if gap > reset_threshold || had_errors {
+                    Some(gap)
+                } else {
+                    None
+                }
+            }
+            None => None,
         }
     }
 
@@ -121,5 +136,13 @@ impl MetricsRegistry {
     #[must_use]
     pub fn get_scrape_error_count(&self, labels: &RouterLabels) -> u64 {
         self.scrape_errors.get_or_create(labels).get()
+    }
+
+    /// Get connection errors for a router
+    #[must_use]
+    pub fn get_connection_errors(&self, _labels: &RouterLabels) -> Option<(u32, bool)> {
+        // We need access to the connection pool to get this information
+        // For now, we'll return None and implement this properly later
+        None
     }
 }

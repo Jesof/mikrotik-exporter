@@ -15,6 +15,7 @@ fn make_state(routers: Vec<RouterConfig>) -> Arc<AppState> {
         server_addr: "127.0.0.1:9090".to_string(),
         routers,
         collection_interval_secs: 30,
+        gap_reset_threshold_secs: 60,
         startup_connectivity_test: false,
         startup_connectivity_timeout_secs: 10,
         strict_startup_mode: false,

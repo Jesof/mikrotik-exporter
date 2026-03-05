@@ -50,6 +50,7 @@ mod tests {
                 password: "password".to_string().into(),
             }],
             collection_interval_secs: 30,
+            gap_reset_threshold_secs: 60,
             startup_connectivity_test: false,
             startup_connectivity_timeout_secs: 10,
             strict_startup_mode: false,

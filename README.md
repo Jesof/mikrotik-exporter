@@ -50,6 +50,7 @@ kubectl apply -k k8s/
 SERVER_ADDR=0.0.0.0:9090                    # HTTP server bind address
 ROUTERS_CONFIG=[{...}]                      # JSON array of routers (recommended)
 COLLECTION_INTERVAL_SECONDS=30              # Metrics collection interval
+GAP_RESET_THRESHOLD_SECONDS=60              # Threshold for resetting counter baselines after scrape gaps
 STARTUP_CONNECTIVITY_TEST=false             # Check router availability at startup
 STARTUP_CONNECTIVITY_TIMEOUT_SECS=10        # Connectivity test timeout (seconds)
 STRICT_STARTUP_MODE=false                   # Exit if routers are unavailable

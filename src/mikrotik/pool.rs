@@ -73,16 +73,16 @@ mod backoff {
     use std::time::Duration;
 
     /// Minimum consecutive errors before backoff applies
-    pub const MIN_ERRORS_FOR_BACKOFF: u32 = 3;
+    pub const MIN_ERRORS_FOR_BACKOFF: u32 = 2; // Reduced from 3
 
-    /// Error threshold for long backoff period (1 hour)
-    pub const LONG_BACKOFF_ERROR_THRESHOLD: u32 = 10;
+    /// Error threshold for long backoff period
+    pub const LONG_BACKOFF_ERROR_THRESHOLD: u32 = 5; // Reduced from 10
 
-    /// Long backoff duration after many consecutive errors (10 minutes)
-    pub const LONG_BACKOFF_DURATION: Duration = Duration::from_secs(600);
+    /// Long backoff duration after many consecutive errors (2 minutes)
+    pub const LONG_BACKOFF_DURATION: Duration = Duration::from_secs(120); // Reduced from 600
 
-    /// Maximum exponent for exponential backoff (2^8 = 256 seconds)
-    pub const MAX_BACKOFF_EXPONENT: u32 = 8;
+    /// Maximum exponent for exponential backoff (2^6 = 64 seconds)
+    pub const MAX_BACKOFF_EXPONENT: u32 = 6; // Reduced from 8
 }
 
 /// Connection pool for reusing `RouterOS` connections
@@ -512,39 +512,42 @@ mod tests {
         state.record_error();
         assert_eq!(state.backoff_delay(), Duration::from_secs(8));
 
-        // After 8 errors -> 2^8 = 256 seconds (max power before capping)
-        for _ in 0..5 {
-            state.record_error();
-        }
-        assert_eq!(state.consecutive_errors, 8);
-        assert_eq!(state.backoff_delay(), Duration::from_secs(256));
-
-        // After 9+ errors -> still 2^8 = 256 due to min(8) in formula
+        // After 4 errors -> 2^4 = 16 seconds
         state.record_error();
-        assert_eq!(state.consecutive_errors, 9);
-        assert_eq!(state.backoff_delay(), Duration::from_secs(256));
+        assert_eq!(state.backoff_delay(), Duration::from_secs(16));
 
-        // Even with many more errors, stays at 256
+        // After 5 errors -> 2^5 = 32 seconds
+        state.record_error();
+        assert_eq!(state.backoff_delay(), Duration::from_secs(32));
+
+        // After 6 errors -> 2^6 = 64 seconds (max power before capping with new parameters)
+        state.record_error();
+        assert_eq!(state.consecutive_errors, 6);
+        assert_eq!(state.backoff_delay(), Duration::from_secs(64));
+
+        // After 7+ errors -> still 2^6 = 64 due to min(6) in formula
+        state.record_error();
+        assert_eq!(state.consecutive_errors, 7);
+        assert_eq!(state.backoff_delay(), Duration::from_secs(64));
+
+        // Even with many more errors, stays at 64
         for _ in 0..10 {
             state.record_error();
         }
-        assert_eq!(state.backoff_delay(), Duration::from_secs(256));
+        assert_eq!(state.backoff_delay(), Duration::from_secs(64));
     }
 
     #[test]
     fn test_connection_state_should_skip_attempt() {
         let mut state = ConnectionState::new();
 
-        // Less than 3 errors -> should not skip
+        // Less than 2 errors -> should not skip
         assert!(!state.should_skip_attempt());
 
         state.record_error();
         assert!(!state.should_skip_attempt());
 
-        state.record_error();
-        assert!(!state.should_skip_attempt());
-
-        // 3 errors -> should skip (backoff)
+        // 2 errors -> should skip (backoff)
         state.record_error();
         assert!(state.should_skip_attempt());
     }

@@ -97,28 +97,33 @@ impl MikroTikClient {
                 "Router '{}' collection succeeded for all groups",
                 self.config.name
             );
-        } else if !system_ok && !conntrack_ok && !vpn_ok && !firewall_ok {
-            return Err(format!(
-                "Router '{}' collection failed: all groups timed out or failed",
-                self.config.name
-            )
-            .into());
         } else {
-            let groups: Vec<&str> = [
-                (!system_ok).then_some("system"),
-                (!conntrack_ok).then_some("conntrack"),
-                (!vpn_ok).then_some("vpn/certs"),
+            let failed_groups: Vec<&str> = [
+                (!system_ok).then_some("system/interfaces"),
+                (!conntrack_ok).then_some("connection tracking"),
+                (!vpn_ok).then_some("VPN/certificates"),
                 (!firewall_ok).then_some("firewall"),
             ]
             .iter()
             .filter_map(|&x| x)
             .collect();
 
-            tracing::warn!(
-                "Router '{}' partial collection failure - failed groups: {:?}",
-                self.config.name,
-                groups
-            );
+            if !failed_groups.is_empty() {
+                tracing::warn!(
+                    "Router '{}' partial collection - failed groups: {:?}",
+                    self.config.name,
+                    failed_groups
+                );
+            }
+
+            // If system group failed, it's a critical error
+            if !system_ok {
+                return Err(format!(
+                    "Router '{}' critical collection failure - system/interfaces group failed",
+                    self.config.name
+                )
+                .into());
+            }
         }
 
         let (system, interfaces) = g1.ok().and_then(Result::ok).unwrap_or_default();

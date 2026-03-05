@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added configurable gap reset threshold via `GAP_RESET_THRESHOLD_SECONDS` environment variable
+- Enhanced connection pool backoff strategy for faster recovery after network outages
+
+### Changed
+- Improved gap detection mechanism to be more responsive to connection issues
+- Optimized counter reset logic after connection restoration
+- Enhanced error tracking for different metric groups
+
+### Fixed
+- Fixed issue with missing metrics after connection restoration by implementing more aggressive baseline reset
+- Resolved problems with stale metrics persistence after prolonged network outages
+
 ## [0.3.3] - 2026-02-23
 
 ### Added

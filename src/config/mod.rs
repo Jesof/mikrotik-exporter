@@ -16,12 +16,16 @@ mod defaults {
     pub const SERVER_ADDR: &str = "0.0.0.0:9090";
     pub const ROUTEROS_USERNAME: &str = "admin";
     pub const ROUTEROS_PASSWORD: &str = "";
+    pub const COLLECTION_INTERVAL_SECS: u64 = 30;
+    pub const GAP_RESET_THRESHOLD_SECS: u64 = 60; // More sensitive default
 }
 
 /// Environment variable names used by the application
 mod env_vars {
     pub const SERVER_ADDR: &str = "SERVER_ADDR";
     pub const ROUTERS_CONFIG: &str = "ROUTERS_CONFIG";
+    pub const COLLECTION_INTERVAL_SECONDS: &str = "COLLECTION_INTERVAL_SECONDS";
+    pub const GAP_RESET_THRESHOLD_SECONDS: &str = "GAP_RESET_THRESHOLD_SECONDS";
 }
 
 /// Configuration for a single `MikroTik` router
@@ -170,6 +174,8 @@ pub struct Config {
     pub routers: Vec<RouterConfig>,
     /// Interval between metrics collection cycles in seconds (default: 30)
     pub collection_interval_secs: u64,
+    /// Threshold for resetting counter baselines after gap in scrapes (default: 60)
+    pub gap_reset_threshold_secs: u64,
     /// Whether to perform connectivity testing during startup (default: false)
     ///
     /// When enabled, the application will test connectivity to all configured routers
@@ -192,7 +198,8 @@ impl Default for Config {
         Config {
             server_addr: defaults::SERVER_ADDR.to_string(),
             routers: vec![],
-            collection_interval_secs: 30,
+            collection_interval_secs: defaults::COLLECTION_INTERVAL_SECS,
+            gap_reset_threshold_secs: defaults::GAP_RESET_THRESHOLD_SECS,
             startup_connectivity_test: false,
             startup_connectivity_timeout_secs: 10,
             strict_startup_mode: false,
@@ -210,6 +217,7 @@ impl Config {
     /// - `SERVER_ADDR` - HTTP server bind address (default: "0.0.0.0:9090")
     /// - `ROUTERS_CONFIG` - JSON array of router configurations
     /// - `COLLECTION_INTERVAL_SECONDS` - Metrics collection interval in seconds (default: 30)
+    /// - `GAP_RESET_THRESHOLD_SECONDS` - Threshold for resetting counter baselines (default: 60)
     /// - `STARTUP_CONNECTIVITY_TEST` - Test router connectivity during startup (default: false)
     /// - `STARTUP_CONNECTIVITY_TIMEOUT_SECS` - Timeout for startup connectivity tests (default: 10)
     /// - `STRICT_STARTUP_MODE` - Exit if any router is unreachable during startup (default: false)
@@ -265,10 +273,15 @@ impl Config {
             }
         };
 
-        let collection_interval_secs = std::env::var("COLLECTION_INTERVAL_SECONDS")
+        let collection_interval_secs = std::env::var(env_vars::COLLECTION_INTERVAL_SECONDS)
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(30);
+            .unwrap_or(defaults::COLLECTION_INTERVAL_SECS);
+
+        let gap_reset_threshold_secs = std::env::var(env_vars::GAP_RESET_THRESHOLD_SECONDS)
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(defaults::GAP_RESET_THRESHOLD_SECS);
 
         // Validate and filter router configurations
         let routers: Vec<RouterConfig> = routers
@@ -327,6 +340,7 @@ impl Config {
             server_addr,
             routers,
             collection_interval_secs,
+            gap_reset_threshold_secs,
             startup_connectivity_test,
             startup_connectivity_timeout_secs,
             strict_startup_mode,
