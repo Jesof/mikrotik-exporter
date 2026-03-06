@@ -117,8 +117,9 @@ pub use metrics::{MetricsRegistry, RouterLabels};
 
 /// `MikroTik` connection pool and metric input types
 pub use mikrotik::{
-    CertificateStats, ConnectionPool, ConnectionTrackingStats, FirewallRuleStats, InterfaceStats,
-    RouterMetrics, SystemResource, WireGuardPeerStats,
+    CertificateStats, CollectionStatus, CollectionStatusParts, ConnectionPool,
+    ConnectionTrackingStats, FetchState, FirewallRuleStats, InterfaceStats, RouterMetrics,
+    SystemResource, WireGuardPeerStats,
 };
 
 /// `RouterOS` wire protocol length encoding (public for tests)

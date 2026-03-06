@@ -4,8 +4,8 @@
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use mikrotik_exporter::{
-    AppState, Config, ConnectionPool, InterfaceStats, MetricsRegistry, RouterConfig, RouterLabels,
-    RouterMetrics, SystemResource, create_router,
+    AppState, CollectionStatus, Config, ConnectionPool, InterfaceStats, MetricsRegistry,
+    RouterConfig, RouterLabels, RouterMetrics, SystemResource, create_router,
 };
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -115,6 +115,7 @@ async fn metrics_contains_router_data_after_update() {
     };
     let metrics = RouterMetrics {
         router_name: "myrouter".to_string(),
+        collection_status: CollectionStatus::default(),
         interfaces: vec![iface],
         system,
         connection_tracking: Vec::new(),
@@ -184,6 +185,7 @@ async fn metrics_correctly_calculates_interface_counters() {
     };
     let metrics1 = RouterMetrics {
         router_name: "router1".to_string(),
+        collection_status: CollectionStatus::default(),
         interfaces: vec![iface],
         system: system.clone(),
         connection_tracking: Vec::new(),
@@ -217,6 +219,7 @@ async fn metrics_correctly_calculates_interface_counters() {
     };
     let metrics2 = RouterMetrics {
         router_name: "router1".to_string(),
+        collection_status: CollectionStatus::default(),
         interfaces: vec![iface2],
         system,
         connection_tracking: Vec::new(),

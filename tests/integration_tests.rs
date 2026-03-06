@@ -13,8 +13,8 @@
 
 use dotenvy::dotenv;
 use mikrotik_exporter::{
-    ConnectionPool, FirewallRuleStats, InterfaceStats, MetricsRegistry, RouterLabels,
-    RouterMetrics, SystemResource,
+    CollectionStatus, ConnectionPool, FirewallRuleStats, InterfaceStats, MetricsRegistry,
+    RouterLabels, RouterMetrics, SystemResource,
 };
 use std::sync::Arc;
 
@@ -188,6 +188,7 @@ async fn test_metrics_update_and_retrieval() {
 
     let router_metrics = RouterMetrics {
         router_name: "test-router".to_string(),
+        collection_status: CollectionStatus::default(),
         interfaces: vec![iface],
         system,
         connection_tracking: Vec::new(),

@@ -103,6 +103,7 @@ pub(crate) struct PooledConnectionGuard {
     connection: Option<RouterOsConnection>,
     pool: ConnectionPool,
     key: String,
+    broken: bool,
 }
 
 impl PooledConnectionGuard {
@@ -110,18 +111,27 @@ impl PooledConnectionGuard {
     pub(super) fn get_mut(&mut self) -> &mut RouterOsConnection {
         self.connection.as_mut().expect("Connection already taken")
     }
+
+    /// Mark current connection as broken so it won't be returned to pool.
+    pub(super) fn mark_broken(&mut self) {
+        self.broken = true;
+    }
 }
 
 impl Drop for PooledConnectionGuard {
     fn drop(&mut self) {
         if let Some(conn) = self.connection.take() {
-            // Send connection back to pool via channel (non-blocking)
-            // If send fails, pool is shutting down - connection will be dropped
-            if self.pool.return_tx.send((self.key.clone(), conn)).is_err() {
-                tracing::debug!(
-                    "Failed to return connection (pool shutting down): {}",
-                    self.key
-                );
+            if self.broken {
+                tracing::debug!("Dropping broken connection: {}", self.key);
+            } else {
+                // Send connection back to pool via channel (non-blocking)
+                // If send fails, pool is shutting down - connection will be dropped
+                if self.pool.return_tx.send((self.key.clone(), conn)).is_err() {
+                    tracing::debug!(
+                        "Failed to return connection (pool shutting down): {}",
+                        self.key
+                    );
+                }
             }
         }
 
@@ -382,6 +392,7 @@ impl ConnectionPool {
             connection: Some(conn),
             pool: self.clone(),
             key,
+            broken: false,
         })
     }
 
@@ -414,14 +425,34 @@ impl ConnectionPool {
         username: &str,
         group: Option<&str>,
     ) -> Option<(u32, bool)> {
-        let key = match group {
-            Some(g) => format!("{addr}:{username}:{g}"),
-            None => format!("{addr}:{username}"),
-        };
         let states = self.connection_states.lock().await;
-        states
-            .get(&key)
-            .map(|state| (state.consecutive_errors, state.last_success_time.is_some()))
+
+        if let Some(g) = group {
+            let key = format!("{addr}:{username}:{g}");
+            return states
+                .get(&key)
+                .map(|state| (state.consecutive_errors, state.last_success_time.is_some()));
+        }
+
+        let base_key = format!("{addr}:{username}");
+        let grouped_prefix = format!("{base_key}:");
+        let mut max_errors: u32 = 0;
+        let mut has_success = false;
+        let mut found = false;
+
+        for (key, state) in states.iter() {
+            if key == &base_key || key.starts_with(&grouped_prefix) {
+                found = true;
+                max_errors = max_errors.max(state.consecutive_errors);
+                has_success |= state.last_success_time.is_some();
+            }
+        }
+
+        if found {
+            Some((max_errors, has_success))
+        } else {
+            None
+        }
     }
 
     /// Get pool statistics for metrics
@@ -450,7 +481,11 @@ impl ConnectionPool {
     pub async fn cleanup_states(&self, active_keys: &HashSet<String>) {
         let mut states = self.connection_states.lock().await;
         let before_count = states.len();
-        states.retain(|key, _| active_keys.contains(key));
+        states.retain(|key, _| {
+            active_keys
+                .iter()
+                .any(|base_key| key == base_key || key.starts_with(&format!("{base_key}:")))
+        });
         let removed = before_count - states.len();
         if removed > 0 {
             tracing::debug!("Removed {} stale connection state entries", removed);
@@ -608,6 +643,48 @@ mod tests {
         let (errors, has_success) = result.unwrap();
         assert_eq!(errors, 2);
         assert!(!has_success);
+    }
+
+    #[tokio::test]
+    async fn test_get_connection_state_aggregates_groups_when_group_none() {
+        let pool = ConnectionPool::new();
+        pool.record_error("192.168.1.1", "admin", Some("system"))
+            .await;
+        pool.record_error("192.168.1.1", "admin", Some("system"))
+            .await;
+        pool.record_success("192.168.1.1", "admin", Some("firewall"))
+            .await;
+
+        let result = pool
+            .get_connection_state("192.168.1.1", "admin", None)
+            .await;
+
+        assert!(result.is_some());
+        let (errors, has_success) = result.expect("aggregated state should exist");
+        assert_eq!(errors, 2);
+        assert!(has_success);
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_states_keeps_grouped_keys_for_active_router() {
+        let pool = ConnectionPool::new();
+        pool.record_error("192.168.1.1:8728", "admin", Some("system"))
+            .await;
+        pool.record_error("192.168.1.1:8728", "admin", Some("firewall"))
+            .await;
+
+        let active = HashSet::from(["192.168.1.1:8728:admin".to_string()]);
+        pool.cleanup_states(&active).await;
+
+        let system_state = pool
+            .get_connection_state("192.168.1.1:8728", "admin", Some("system"))
+            .await;
+        let firewall_state = pool
+            .get_connection_state("192.168.1.1:8728", "admin", Some("firewall"))
+            .await;
+
+        assert!(system_state.is_some());
+        assert!(firewall_state.is_some());
     }
 
     #[tokio::test]

@@ -109,8 +109,11 @@ impl Default for MetricsRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mikrotik::types::FirewallRuleStats;
-    use crate::mikrotik::{ConnectionTrackingStats, InterfaceStats, RouterMetrics, SystemResource};
+    use crate::mikrotik::{
+        CertificateStats, CollectionStatus, CollectionStatusParts, ConnectionTrackingStats,
+        FetchState, FirewallRuleStats, InterfaceStats, RouterMetrics, SystemResource,
+        WireGuardPeerStats,
+    };
 
     fn make_router_metrics(
         router_name: &str,
@@ -119,6 +122,7 @@ mod tests {
     ) -> RouterMetrics {
         RouterMetrics {
             router_name: router_name.to_string(),
+            collection_status: CollectionStatus::default(),
             interfaces,
             system,
             connection_tracking: Vec::new(),
@@ -186,6 +190,34 @@ mod tests {
             total_memory: 1024 * 1024 * 1024,
             version: version.to_string(),
             board_name: board_name.to_string(),
+        }
+    }
+
+    fn make_partial_status(
+        conntrack: FetchState,
+        wireguard: FetchState,
+        certificates: FetchState,
+        firewall: FetchState,
+    ) -> CollectionStatus {
+        CollectionStatus::from_parts(CollectionStatusParts {
+            system_interfaces: FetchState::Complete,
+            conntrack,
+            wireguard,
+            certificates,
+            firewall,
+        })
+    }
+
+    fn make_firewall_rule(id: &str, bytes: u64, packets: u64) -> FirewallRuleStats {
+        FirewallRuleStats {
+            id: id.to_string(),
+            comment: format!("rule-{id}"),
+            chain: "forward".to_string(),
+            action: "accept".to_string(),
+            bytes,
+            packets,
+            ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
         }
     }
 
@@ -664,6 +696,163 @@ mod tests {
                 .get_or_create(&labels2_icmp)
                 .get(),
             10
+        );
+    }
+
+    #[tokio::test]
+    async fn test_conntrack_partial_snapshot_preserves_previous_series() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        let mut metrics_full = make_router_metrics("router1", vec![iface.clone()], system.clone());
+        metrics_full.connection_tracking = vec![
+            make_conntrack("192.168.1.1", "tcp", 100, "ipv4"),
+            make_conntrack("192.168.1.1", "udp", 50, "ipv4"),
+        ];
+        registry.update_metrics(&metrics_full);
+
+        let mut metrics_partial =
+            make_router_metrics("router1", vec![iface.clone()], system.clone());
+        metrics_partial.collection_status = make_partial_status(
+            FetchState::Partial,
+            FetchState::Failed,
+            FetchState::Failed,
+            FetchState::Failed,
+        );
+        metrics_partial.connection_tracking =
+            vec![make_conntrack("192.168.1.1", "tcp", 150, "ipv4")];
+        registry.update_metrics(&metrics_partial);
+
+        let labels_tcp = ConntrackLabels {
+            router: "router1".to_string(),
+            src_address: "192.168.1.1".to_string(),
+            protocol: "tcp".to_string(),
+            ip_version: "ipv4".to_string(),
+        };
+        let labels_udp = ConntrackLabels {
+            router: "router1".to_string(),
+            src_address: "192.168.1.1".to_string(),
+            protocol: "udp".to_string(),
+            ip_version: "ipv4".to_string(),
+        };
+
+        assert_eq!(
+            registry
+                .connection_tracking_count
+                .get_or_create(&labels_tcp)
+                .get(),
+            150
+        );
+        assert_eq!(
+            registry
+                .connection_tracking_count
+                .get_or_create(&labels_udp)
+                .get(),
+            50,
+            "UDP series should be preserved during partial conntrack snapshot"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_certificates_preserved_when_only_wireguard_updates() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        let mut metrics_full = make_router_metrics("router1", vec![iface.clone()], system.clone());
+        metrics_full.wireguard_peers = vec![WireGuardPeerStats {
+            id: "*wg1".to_string(),
+            interface: "wg1".to_string(),
+            name: "peer1".to_string(),
+            comment: String::new(),
+            allowed_address: "10.0.0.2/32".to_string(),
+            endpoint: Some("1.1.1.1:51820".to_string()),
+            rx_bytes: 100,
+            tx_bytes: 200,
+            latest_handshake: Some(1000),
+        }];
+        metrics_full.certificate_stats = vec![CertificateStats {
+            id: "*cert1".to_string(),
+            name: "cert1".to_string(),
+            days_until_expiry: 30,
+        }];
+        registry.update_metrics(&metrics_full);
+
+        let mut metrics_partial = make_router_metrics("router1", vec![iface], system);
+        metrics_partial.collection_status = make_partial_status(
+            FetchState::Failed,
+            FetchState::Complete,
+            FetchState::Failed,
+            FetchState::Failed,
+        );
+        metrics_partial.wireguard_peers = vec![WireGuardPeerStats {
+            id: "*wg1".to_string(),
+            interface: "wg1".to_string(),
+            name: "peer1".to_string(),
+            comment: String::new(),
+            allowed_address: "10.0.0.2/32".to_string(),
+            endpoint: Some("1.1.1.1:51820".to_string()),
+            rx_bytes: 500,
+            tx_bytes: 700,
+            latest_handshake: Some(2000),
+        }];
+        registry.update_metrics(&metrics_partial);
+
+        let cert_labels = CertificateLabels {
+            router: "router1".to_string(),
+            id: "*cert1".to_string(),
+            name: "cert1".to_string(),
+        };
+        assert_eq!(
+            registry
+                .certificate_days_until_expiry
+                .get_or_create(&cert_labels)
+                .get(),
+            30,
+            "Certificate metric should not be removed when certificate fetch failed"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_firewall_partial_snapshot_preserves_previous_rules() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        let mut metrics_full = make_router_metrics("router1", vec![iface.clone()], system.clone());
+        metrics_full.firewall_rules = vec![
+            make_firewall_rule("*f1", 1000, 10),
+            make_firewall_rule("*f2", 2000, 20),
+        ];
+        registry.update_metrics(&metrics_full);
+
+        let mut metrics_partial = make_router_metrics("router1", vec![iface], system);
+        metrics_partial.collection_status = make_partial_status(
+            FetchState::Failed,
+            FetchState::Failed,
+            FetchState::Failed,
+            FetchState::Partial,
+        );
+        metrics_partial.firewall_rules = vec![make_firewall_rule("*f1", 1500, 15)];
+        registry.update_metrics(&metrics_partial);
+
+        let stale_rule_labels = FirewallRuleLabels {
+            router: "router1".to_string(),
+            id: "*f2".to_string(),
+            chain: "forward".to_string(),
+            action: "accept".to_string(),
+            ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
+        };
+
+        assert_eq!(
+            registry
+                .firewall_rule_bytes
+                .get_or_create(&stale_rule_labels)
+                .get(),
+            2000,
+            "Stale firewall rule should be preserved during partial firewall snapshot"
         );
     }
 

@@ -74,9 +74,184 @@ pub struct FirewallRuleStats {
 }
 
 /// Complete metrics snapshot from a router
+#[derive(Debug, Clone)]
+pub struct CollectionStatus {
+    bits: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FetchState {
+    Failed,
+    Partial,
+    Complete,
+}
+
+impl FetchState {
+    #[must_use]
+    pub fn any_ok(self) -> bool {
+        !matches!(self, Self::Failed)
+    }
+
+    #[must_use]
+    pub fn complete(self) -> bool {
+        matches!(self, Self::Complete)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CollectionStatusParts {
+    pub system_interfaces: FetchState,
+    pub conntrack: FetchState,
+    pub wireguard: FetchState,
+    pub certificates: FetchState,
+    pub firewall: FetchState,
+}
+
+impl Default for CollectionStatusParts {
+    fn default() -> Self {
+        Self {
+            system_interfaces: FetchState::Complete,
+            conntrack: FetchState::Complete,
+            wireguard: FetchState::Complete,
+            certificates: FetchState::Complete,
+            firewall: FetchState::Complete,
+        }
+    }
+}
+
+impl Default for CollectionStatus {
+    fn default() -> Self {
+        Self {
+            bits: 0b11_1111_1111,
+        }
+    }
+}
+
+impl CollectionStatus {
+    const SYSTEM_INTERFACES_OK: u16 = 1 << 0;
+    const CONNTRACK_OK: u16 = 1 << 1;
+    const VPN_CERTS_OK: u16 = 1 << 2;
+    const FIREWALL_OK: u16 = 1 << 3;
+    const CONNTRACK_COMPLETE_OK: u16 = 1 << 4;
+    const WIREGUARD_OK: u16 = 1 << 5;
+    const CERTIFICATES_OK: u16 = 1 << 6;
+    const FIREWALL_COMPLETE_OK: u16 = 1 << 7;
+    const FIREWALL_INFO_COMPLETE_OK: u16 = 1 << 8;
+
+    #[must_use]
+    pub fn from_group_results(results: [bool; 4]) -> Self {
+        let [
+            system_interfaces_ok,
+            conntrack_ok,
+            vpn_certs_ok,
+            firewall_ok,
+        ] = results;
+        let mut bits = 0;
+        if system_interfaces_ok {
+            bits |= Self::SYSTEM_INTERFACES_OK;
+        }
+        if conntrack_ok {
+            bits |= Self::CONNTRACK_OK;
+        }
+        if vpn_certs_ok {
+            bits |= Self::VPN_CERTS_OK;
+        }
+        if firewall_ok {
+            bits |= Self::FIREWALL_OK;
+        }
+        Self { bits }
+    }
+
+    #[must_use]
+    pub fn from_parts(parts: CollectionStatusParts) -> Self {
+        let mut bits = 0;
+        if parts.system_interfaces.any_ok() {
+            bits |= Self::SYSTEM_INTERFACES_OK;
+        }
+        if parts.conntrack.any_ok() {
+            bits |= Self::CONNTRACK_OK;
+        }
+        if parts.wireguard.any_ok() || parts.certificates.any_ok() {
+            bits |= Self::VPN_CERTS_OK;
+        }
+        if parts.firewall.any_ok() {
+            bits |= Self::FIREWALL_OK;
+        }
+        if parts.conntrack.complete() {
+            bits |= Self::CONNTRACK_COMPLETE_OK;
+        }
+        if parts.wireguard.any_ok() {
+            bits |= Self::WIREGUARD_OK;
+        }
+        if parts.certificates.any_ok() {
+            bits |= Self::CERTIFICATES_OK;
+        }
+        if parts.firewall.complete() {
+            bits |= Self::FIREWALL_COMPLETE_OK;
+            bits |= Self::FIREWALL_INFO_COMPLETE_OK;
+        }
+        Self { bits }
+    }
+
+    #[must_use]
+    pub fn system_interfaces_ok(&self) -> bool {
+        self.bits & Self::SYSTEM_INTERFACES_OK != 0
+    }
+
+    #[must_use]
+    pub fn conntrack_ok(&self) -> bool {
+        self.bits & Self::CONNTRACK_OK != 0
+    }
+
+    #[must_use]
+    pub fn vpn_certs_ok(&self) -> bool {
+        self.bits & Self::VPN_CERTS_OK != 0
+    }
+
+    #[must_use]
+    pub fn conntrack_complete_ok(&self) -> bool {
+        self.bits & Self::CONNTRACK_COMPLETE_OK != 0
+    }
+
+    #[must_use]
+    pub fn wireguard_ok(&self) -> bool {
+        self.bits & Self::WIREGUARD_OK != 0
+    }
+
+    #[must_use]
+    pub fn certificates_ok(&self) -> bool {
+        self.bits & Self::CERTIFICATES_OK != 0
+    }
+
+    #[must_use]
+    pub fn firewall_ok(&self) -> bool {
+        self.bits & Self::FIREWALL_OK != 0
+    }
+
+    #[must_use]
+    pub fn firewall_complete_ok(&self) -> bool {
+        self.bits & Self::FIREWALL_COMPLETE_OK != 0
+    }
+
+    #[must_use]
+    pub fn firewall_info_complete_ok(&self) -> bool {
+        self.bits & Self::FIREWALL_INFO_COMPLETE_OK != 0
+    }
+
+    #[must_use]
+    pub fn all_ok(&self) -> bool {
+        self.system_interfaces_ok()
+            && self.conntrack_ok()
+            && self.vpn_certs_ok()
+            && self.firewall_ok()
+    }
+}
+
+/// Complete metrics snapshot from a router
 #[derive(Debug, Clone, Default)]
 pub struct RouterMetrics {
     pub router_name: String,
+    pub collection_status: CollectionStatus,
     pub interfaces: Vec<InterfaceStats>,
     pub system: SystemResource,
     pub connection_tracking: Vec<ConnectionTrackingStats>,
@@ -133,6 +308,7 @@ mod tests {
     fn test_router_metrics_creation() {
         let metrics = RouterMetrics {
             router_name: "main-router".to_string(),
+            collection_status: CollectionStatus::default(),
             interfaces: vec![InterfaceStats {
                 id: "*1".to_string(),
                 name: "ether1".to_string(),

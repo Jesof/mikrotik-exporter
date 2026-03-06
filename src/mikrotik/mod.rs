@@ -21,8 +21,8 @@ pub use pool::ConnectionPool;
 
 /// Types for router metrics and statistics
 pub use types::{
-    CertificateStats, ConnectionTrackingStats, FirewallRuleStats, InterfaceStats, RouterMetrics,
-    SystemResource, WireGuardPeerStats,
+    CertificateStats, CollectionStatus, CollectionStatusParts, ConnectionTrackingStats, FetchState,
+    FirewallRuleStats, InterfaceStats, RouterMetrics, SystemResource, WireGuardPeerStats,
 };
 
 pub use connection::encode_length;
