@@ -54,6 +54,19 @@ struct FirewallGroupData {
     complete_ok: bool,
 }
 
+fn timeout_group_ok<T>(
+    group: &std::result::Result<Result<T>, tokio::time::error::Elapsed>,
+) -> bool {
+    group.as_ref().map(Result::is_ok).unwrap_or(false)
+}
+
+fn failed_group_names(groups: &[(&'static str, bool)]) -> Vec<&'static str> {
+    groups
+        .iter()
+        .filter_map(|(name, ok)| (!*ok).then_some(*name))
+        .collect()
+}
+
 impl MikroTikClient {
     /// Creates a new `MikroTik` client with a shared connection pool
     #[must_use]
@@ -110,10 +123,10 @@ impl MikroTikClient {
             timeout(GROUP_FIREWALL_TIMEOUT, self.collect_group_firewall()),
         );
 
-        let system_ok = g1.as_ref().map(Result::is_ok).unwrap_or(false);
-        let conntrack_ok = g2.as_ref().map(Result::is_ok).unwrap_or(false);
-        let vpn_ok = g3.as_ref().map(Result::is_ok).unwrap_or(false);
-        let firewall_ok = g4.as_ref().map(Result::is_ok).unwrap_or(false);
+        let system_ok = timeout_group_ok(&g1);
+        let conntrack_ok = timeout_group_ok(&g2);
+        let vpn_ok = timeout_group_ok(&g3);
+        let firewall_ok = timeout_group_ok(&g4);
 
         if system_ok && conntrack_ok && vpn_ok && firewall_ok {
             tracing::debug!(
@@ -121,15 +134,12 @@ impl MikroTikClient {
                 self.config.name
             );
         } else {
-            let failed_groups: Vec<&str> = [
-                (!system_ok).then_some("system/interfaces"),
-                (!conntrack_ok).then_some("connection tracking"),
-                (!vpn_ok).then_some("VPN/certificates"),
-                (!firewall_ok).then_some("firewall"),
-            ]
-            .iter()
-            .filter_map(|&x| x)
-            .collect();
+            let failed_groups = failed_group_names(&[
+                ("system/interfaces", system_ok),
+                ("connection tracking", conntrack_ok),
+                ("VPN/certificates", vpn_ok),
+                ("firewall", firewall_ok),
+            ]);
 
             if !failed_groups.is_empty() {
                 tracing::warn!(
