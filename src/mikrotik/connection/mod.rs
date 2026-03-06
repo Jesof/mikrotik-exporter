@@ -221,3 +221,36 @@ fn redact_routeros_word(word: &str) -> String {
     }
     word.to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_redact_routeros_word_redacts_secrets() {
+        assert_eq!(
+            redact_routeros_word("=password=supersecret"),
+            "=password=<redacted>"
+        );
+        assert_eq!(
+            redact_routeros_word("=response=abcd1234"),
+            "=response=<redacted>"
+        );
+        assert_eq!(redact_routeros_word("=name=admin"), "=name=admin");
+    }
+
+    #[test]
+    fn test_with_command_context_contains_command_and_phase() {
+        let error = AppError::RouterOs("timeout".to_string());
+        let contextual = with_command_context("/system/resource/print", "response read", &error);
+
+        match contextual {
+            AppError::RouterOs(message) => {
+                assert!(message.contains("/system/resource/print"));
+                assert!(message.contains("response read"));
+                assert!(message.contains("timeout"));
+            }
+            _ => panic!("expected RouterOs error"),
+        }
+    }
+}
