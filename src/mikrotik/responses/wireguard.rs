@@ -12,6 +12,8 @@ use crate::mikrotik::types::WireGuardPeerStats;
 use std::collections::HashMap;
 use std::time::SystemTime;
 
+use super::common::parse_u64_field;
+
 /// Parse `WireGuard` peer information from `RouterOS` API response
 pub(crate) fn parse_wireguard_peers(
     sentences: &[HashMap<String, String>],
@@ -27,15 +29,9 @@ pub(crate) fn parse_wireguard_peers(
         }
 
         if let (Some(id), Some(interface)) = (sentence.get(".id"), sentence.get("interface")) {
-            let rx_bytes = sentence
-                .get("rx")
-                .and_then(|v| v.parse::<u64>().ok())
-                .unwrap_or(0);
+            let rx_bytes = parse_u64_field(sentence, "rx", "wireguard peers");
 
-            let tx_bytes = sentence
-                .get("tx")
-                .and_then(|v| v.parse::<u64>().ok())
-                .unwrap_or(0);
+            let tx_bytes = parse_u64_field(sentence, "tx", "wireguard peers");
 
             let latest_handshake =
                 get_field_value(sentence, &["last-handshake", "latest-handshake"])

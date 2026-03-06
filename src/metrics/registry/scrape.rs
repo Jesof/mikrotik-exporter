@@ -6,7 +6,8 @@
 use crate::metrics::labels::RouterLabels;
 use crate::prelude::{AppError, Result};
 use prometheus_client::encoding::text::encode;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use tokio::time::Instant;
 
 use super::MetricsRegistry;
 
@@ -144,5 +145,12 @@ impl MetricsRegistry {
     #[must_use]
     pub fn get_scrape_error_count(&self, labels: &RouterLabels) -> u64 {
         self.scrape_errors.get_or_create(labels).get()
+    }
+
+    #[must_use]
+    pub fn get_last_scrape_success_age(&self, router: &str) -> Option<Duration> {
+        self.last_scrape_success
+            .get(router)
+            .map(|instant| instant.elapsed())
     }
 }

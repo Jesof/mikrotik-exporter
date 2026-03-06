@@ -22,6 +22,14 @@ const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 /// Read operation timeout (30 seconds)
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Maximum `RouterOS` word length accepted from the peer.
+const MAX_ROUTEROS_WORD_LENGTH: usize = 1024 * 1024;
+
+const _: () = {
+    assert!(MAX_ROUTEROS_WORD_LENGTH >= 64 * 1024);
+    assert!(MAX_ROUTEROS_WORD_LENGTH <= 16 * 1024 * 1024);
+};
+
 /// Low-level `RouterOS` API connection
 pub(super) struct RouterOsConnection {
     stream: TcpStream,
@@ -182,6 +190,11 @@ impl RouterOsConnection {
         })?;
         if len == 0 {
             return Ok(String::new());
+        }
+        if len > MAX_ROUTEROS_WORD_LENGTH {
+            return Err(AppError::RouterOs(format!(
+                "RouterOS word body too large: {len} bytes exceeds limit of {MAX_ROUTEROS_WORD_LENGTH}"
+            )));
         }
         let mut buf = vec![0u8; len];
         self.stream.read_exact(&mut buf).await.map_err(|error| {

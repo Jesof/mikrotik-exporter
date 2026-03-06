@@ -7,10 +7,21 @@ use crate::prelude::Result;
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 
-// RouterOS protocol length encoding - intentional truncation is part of the wire format
+const MAX_ENCODEABLE_LENGTH: usize = 0x7_FFFF_FFFF;
+
 #[allow(clippy::cast_possible_truncation)]
 #[must_use]
+/// Encode a `RouterOS` word length.
+///
+/// # Panics
+///
+/// Panics if `len` exceeds the maximum five-byte `RouterOS` length encoding.
 pub fn encode_length(len: usize) -> Vec<u8> {
+    assert!(
+        len <= MAX_ENCODEABLE_LENGTH,
+        "RouterOS word length {len} exceeds max encodable value {MAX_ENCODEABLE_LENGTH}"
+    );
+
     if len < 0x80 {
         vec![len as u8]
     } else if len < 0x4000 {
@@ -99,17 +110,15 @@ mod tests {
 
     #[test]
     fn test_encode_length_extremely_large() {
-        // Let's verify the actual encoding for this value
-        // 0x10_0000_0000 = 68719476736
-        // According to the encoding logic:
-        // First byte: 0xF0 | ((68719476736 >> 32) & 0x07) = 0xF0 | (16 & 0x07) = 0xF0 | 0 = 0xF0
-        // Second byte: (68719476736 >> 24) & 0xFF = 0
-        // Third byte: (68719476736 >> 16) & 0xFF = 0
-        // Fourth byte: (68719476736 >> 8) & 0xFF = 0
-        // Fifth byte: 68719476736 & 0xFF = 0
         assert_eq!(
-            encode_length(0x10_0000_0000),
-            vec![0xF0, 0x00, 0x00, 0x00, 0x00]
+            encode_length(MAX_ENCODEABLE_LENGTH),
+            vec![0xF7, 0xFF, 0xFF, 0xFF, 0xFF]
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "exceeds max encodable value")]
+    fn test_encode_length_panics_above_max() {
+        let _ = encode_length(MAX_ENCODEABLE_LENGTH + 1);
     }
 }

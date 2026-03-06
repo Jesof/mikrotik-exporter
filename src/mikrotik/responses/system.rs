@@ -6,6 +6,8 @@
 use crate::mikrotik::types::SystemResource;
 use std::collections::HashMap;
 
+use super::common::parse_u64_field;
+
 pub(crate) fn parse_system(sentences: &[HashMap<String, String>]) -> SystemResource {
     let first_opt = sentences.iter().find(|s| s.contains_key("version"));
     let empty = HashMap::new();
@@ -15,18 +17,9 @@ pub(crate) fn parse_system(sentences: &[HashMap<String, String>]) -> SystemResou
             .get("uptime")
             .cloned()
             .unwrap_or_else(|| "0s".to_string()),
-        cpu_load: first
-            .get("cpu-load")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0),
-        free_memory: first
-            .get("free-memory")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0),
-        total_memory: first
-            .get("total-memory")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0),
+        cpu_load: parse_u64_field(first, "cpu-load", "system resources"),
+        free_memory: parse_u64_field(first, "free-memory", "system resources"),
+        total_memory: parse_u64_field(first, "total-memory", "system resources"),
         version: first
             .get("version")
             .cloned()

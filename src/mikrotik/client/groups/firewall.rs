@@ -13,7 +13,7 @@ use super::common::parse_count_only;
 pub(crate) async fn collect_group_firewall(
     client: &MikroTikClient,
 ) -> Result<super::super::FirewallGroupData> {
-    const FIREWALL_PROPLIST: &str = ".proplist=.id,chain,action,bytes,packets,disabled";
+    const FIREWALL_PROPLIST: &str = ".proplist=.id,chain,action,bytes,packets,disabled,comment";
     const FIREWALL_SECTIONS: [(&str, &str, &str); 8] = [
         ("/ip/firewall/filter/print", "ipv4", "filter"),
         ("/ip/firewall/nat/print", "ipv4", "nat"),

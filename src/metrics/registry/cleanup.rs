@@ -9,7 +9,8 @@ use crate::metrics::labels::{
     WireGuardPeerLabels,
 };
 use std::collections::HashSet;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use tokio::time::Instant;
 
 use super::MetricsRegistry;
 

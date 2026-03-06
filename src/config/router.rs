@@ -81,34 +81,48 @@ impl RouterConfig {
     }
 
     fn validate_address(&self) -> Result<(), String> {
-        if !self.address.contains(':') {
+        let Some((host, port_str)) = self.address.rsplit_once(':') else {
             return Err(format!(
                 "Invalid address format '{}': expected 'host:port'",
                 self.address
             ));
-        }
+        };
 
-        if let Some(port_str) = self.address.split(':').next_back() {
-            match port_str.parse::<u16>() {
-                Ok(0) => {
-                    return Err(format!(
-                        "Invalid port number in address '{}': port cannot be 0",
-                        self.address
-                    ));
-                }
-                Err(_) => {
-                    return Err(format!(
-                        "Invalid port number in address '{}': expected numeric value 1-65535",
-                        self.address
-                    ));
-                }
-                _ => {}
-            }
-        } else {
+        if host.is_empty() {
             return Err(format!(
-                "Invalid address format '{}': missing port number",
+                "Invalid address format '{}': host cannot be empty",
                 self.address
             ));
+        }
+
+        if host.starts_with('[') {
+            if !host.ends_with(']') || host.len() <= 2 {
+                return Err(format!(
+                    "Invalid IPv6 address format '{}': expected '[addr]:port'",
+                    self.address
+                ));
+            }
+        } else if host.contains(':') {
+            return Err(format!(
+                "Invalid IPv6 address format '{}': wrap IPv6 hosts in brackets",
+                self.address
+            ));
+        }
+
+        match port_str.parse::<u16>() {
+            Ok(0) => {
+                return Err(format!(
+                    "Invalid port number in address '{}': port cannot be 0",
+                    self.address
+                ));
+            }
+            Err(_) => {
+                return Err(format!(
+                    "Invalid port number in address '{}': expected numeric value 1-65535",
+                    self.address
+                ));
+            }
+            _ => {}
         }
 
         if self.address.len() > 253 {

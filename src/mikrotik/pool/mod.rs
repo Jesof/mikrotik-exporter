@@ -24,17 +24,16 @@
 //! 2. Usage: each connection is wrapped in `PooledConnectionGuard`
 //!    - Guard provides mutable access via `get_mut()`
 //!    - RAII return happens automatically on drop
-//! 3. Return: guard drop returns usable connections via channel
-//!    - Avoids blocking in `Drop`
+//! 3. Return: guard drop returns usable connections back to the pool
+//!    - Fast path uses a non-blocking `try_lock()`
+//!    - Fallback path spawns an async reinsertion task when needed
 //!    - Updates active connection counter atomically
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::time::Duration;
-use tokio::sync::{Mutex, mpsc};
-
-use super::connection::RouterOsConnection;
+use tokio::sync::Mutex;
 
 mod guard;
 mod ops;
@@ -51,7 +50,6 @@ pub struct ConnectionPool {
     connection_states: Arc<Mutex<HashMap<String, ConnectionState>>>,
     active_connections: Arc<AtomicUsize>,
     max_idle_time: Duration,
-    return_tx: mpsc::UnboundedSender<(String, RouterOsConnection)>,
 }
 
 impl Default for ConnectionPool {
@@ -63,37 +61,15 @@ impl Default for ConnectionPool {
 impl ConnectionPool {
     #[must_use]
     pub fn new() -> Self {
-        let (return_tx, return_rx) = mpsc::unbounded_channel();
         let connections = Arc::new(Mutex::new(HashMap::new()));
         let connection_states = Arc::new(Mutex::new(HashMap::new()));
         let active_connections = Arc::new(AtomicUsize::new(0));
-
-        // Try to spawn background task for connection returns.
-        if tokio::runtime::Handle::try_current().is_ok() {
-            let connections_clone = connections.clone();
-            tokio::spawn(async move {
-                let mut rx = return_rx;
-                while let Some((key, conn)) = rx.recv().await {
-                    let mut pool = connections_clone.lock().await;
-                    tracing::trace!("Connection returned to pool via channel: {}", key);
-                    pool.insert(
-                        key,
-                        PooledConnection {
-                            connection: conn,
-                            last_used: tokio::time::Instant::now(),
-                        },
-                    );
-                }
-                tracing::debug!("Connection return channel closed");
-            });
-        }
 
         Self {
             connections,
             connection_states,
             active_connections,
             max_idle_time: timeouts::POOL_IDLE_TIMEOUT,
-            return_tx,
         }
     }
 }

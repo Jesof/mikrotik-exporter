@@ -202,6 +202,48 @@ mod test {
     }
 
     #[test]
+    fn test_router_config_validate_empty_host() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: ":8728".to_string(),
+            username: "admin".to_string(),
+            password: "password".to_string().into(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("host cannot be empty"));
+    }
+
+    #[test]
+    fn test_router_config_validate_unbracketed_ipv6_rejected() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: "2001:db8::1:8728".to_string(),
+            username: "admin".to_string(),
+            password: "password".to_string().into(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("wrap IPv6 hosts in brackets"));
+    }
+
+    #[test]
+    fn test_router_config_validate_malformed_bracketed_ipv6_rejected() {
+        let config = RouterConfig {
+            name: "test-router".to_string(),
+            address: "[::1:8728".to_string(),
+            username: "admin".to_string(),
+            password: "password".to_string().into(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("expected '[addr]:port'"));
+    }
+
+    #[test]
     fn test_router_config_validate_invalid_port_non_numeric() {
         let config = RouterConfig {
             name: "test-router".to_string(),
@@ -356,6 +398,22 @@ mod test {
         assert_eq!(config.routers.len(), 1);
         assert_eq!(config.routers[0].name, "edge");
         assert_eq!(config.routers[0].address, "10.0.0.1:8728");
+    }
+
+    #[test]
+    fn test_from_env_invalid_routers_config_falls_back_to_legacy() {
+        let _lock = env_lock();
+        let _guards = [
+            EnvVarGuard::set("ROUTERS_CONFIG", "not-json"),
+            EnvVarGuard::set("ROUTEROS_ADDRESS", "192.168.88.1:8728"),
+            EnvVarGuard::set("ROUTEROS_USERNAME", "admin"),
+            EnvVarGuard::set("ROUTEROS_PASSWORD", "secret"),
+        ];
+
+        let config = Config::from_env();
+        assert_eq!(config.routers.len(), 1);
+        assert_eq!(config.routers[0].name, "default");
+        assert_eq!(config.routers[0].address, "192.168.88.1:8728");
     }
 
     #[test]

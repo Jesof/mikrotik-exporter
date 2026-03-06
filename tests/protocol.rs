@@ -29,7 +29,7 @@ fn test_encode_length_boundary_values() {
     assert_eq!(encode_length(0x0020_0000).len(), 4);
     assert_eq!(encode_length(0x0FFF_FFFF).len(), 4);
 
-    // 5-byte: 0x1000_0000+
+    // 5-byte: 0x1000_0000..=0x7_FFFF_FFFF
     assert_eq!(encode_length(0x1000_0000).len(), 5);
     assert_eq!(encode_length(0xFFFF_FFFF).len(), 5);
 }
@@ -125,4 +125,10 @@ fn test_encode_decode_roundtrip() {
             "Roundtrip failed for {value:#X}: encoded as {encoded:?}, decoded as {decoded:#X}"
         );
     }
+}
+
+#[test]
+#[should_panic(expected = "exceeds max encodable value")]
+fn test_encode_length_panics_for_unencodable_value() {
+    let _ = encode_length(0x8_0000_0000);
 }

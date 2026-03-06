@@ -8,6 +8,7 @@ use mikrotik_exporter::{
     RouterConfig, RouterLabels, RouterMetrics, SystemResource, create_router,
 };
 use std::sync::Arc;
+use std::time::Duration;
 use tower::ServiceExt;
 
 fn make_state(routers: Vec<RouterConfig>) -> Arc<AppState> {
@@ -268,7 +269,7 @@ async fn metrics_correctly_calculates_interface_counters() {
 // --- /health endpoint ---
 
 #[tokio::test]
-async fn health_returns_200_for_empty_config() {
+async fn health_returns_degraded_for_empty_config() {
     let state = make_state(vec![]);
     let app = create_router(state);
 
@@ -277,7 +278,7 @@ async fn health_returns_200_for_empty_config() {
         .await
         .unwrap();
 
-    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
     let body = String::from_utf8(
         resp.into_body()
             .collect()
@@ -289,7 +290,7 @@ async fn health_returns_200_for_empty_config() {
     .unwrap();
 
     let health: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(health["status"], "healthy");
+    assert_eq!(health["status"], "degraded");
     assert!(health["routers"].as_array().unwrap().is_empty());
 }
 
@@ -359,6 +360,53 @@ async fn health_returns_healthy_after_successful_scrape() {
             .as_bool()
             .unwrap()
     );
+}
+
+#[tokio::test(start_paused = true)]
+async fn health_returns_degraded_when_last_success_is_stale() {
+    let config = Config {
+        server_addr: "127.0.0.1:9090".to_string(),
+        routers: vec![test_router("r1")],
+        collection_interval_secs: 1,
+        gap_reset_threshold_secs: 1,
+        startup_connectivity_test: false,
+        startup_connectivity_timeout_secs: 10,
+        strict_startup_mode: false,
+    };
+    let metrics = MetricsRegistry::new();
+    let pool = Arc::new(ConnectionPool::new());
+    let state = Arc::new(AppState {
+        config,
+        metrics,
+        pool,
+    });
+
+    let label = RouterLabels {
+        router: "r1".to_string(),
+    };
+    state.metrics.record_scrape_success(&label);
+    tokio::time::advance(Duration::from_secs(4)).await;
+
+    let app = create_router(state);
+    let resp = app
+        .oneshot(Request::get("/health").body(String::new()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = String::from_utf8(
+        resp.into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .to_vec(),
+    )
+    .unwrap();
+
+    let health: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(health["status"], "degraded");
+    assert_eq!(health["routers"][0]["status"], "degraded");
 }
 
 #[tokio::test]

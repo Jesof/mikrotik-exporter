@@ -7,13 +7,16 @@ use super::{RouterConfig, defaults, env_vars};
 
 pub(crate) fn load_router_configs() -> Vec<RouterConfig> {
     if let Ok(config_json) = std::env::var(env_vars::ROUTERS_CONFIG) {
-        return serde_json::from_str(&config_json).unwrap_or_else(|error| {
-            tracing::warn!(
-                "Failed to parse ROUTERS_CONFIG: {}. Using empty list.",
-                error
-            );
-            Vec::new()
-        });
+        return match serde_json::from_str(&config_json) {
+            Ok(routers) => routers,
+            Err(error) => {
+                tracing::error!(
+                    "Failed to parse ROUTERS_CONFIG: {}. Falling back to legacy router configuration.",
+                    error
+                );
+                load_legacy_router_config().into_iter().collect()
+            }
+        };
     }
 
     load_legacy_router_config().into_iter().collect()

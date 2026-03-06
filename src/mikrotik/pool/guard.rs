@@ -36,9 +36,32 @@ impl Drop for PooledConnectionGuard {
         if let Some(conn) = self.connection.take() {
             if self.broken {
                 tracing::debug!("Dropping broken connection: {}", self.key);
-            } else if let Err(error) = self.pool.return_tx.send((self.key.clone(), conn)) {
-                tracing::debug!(
-                    "Failed to return connection (pool shutting down): {} ({error})",
+            } else if let Ok(mut pool) = self.pool.connections.try_lock() {
+                tracing::trace!("Connection returned to pool: {}", self.key);
+                pool.insert(
+                    self.key.clone(),
+                    super::types::PooledConnection {
+                        connection: conn,
+                        last_used: tokio::time::Instant::now(),
+                    },
+                );
+            } else if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                let connections = self.pool.connections.clone();
+                let key = self.key.clone();
+                handle.spawn(async move {
+                    let mut pool = connections.lock().await;
+                    tracing::trace!("Connection returned to pool asynchronously: {}", key);
+                    pool.insert(
+                        key,
+                        super::types::PooledConnection {
+                            connection: conn,
+                            last_used: tokio::time::Instant::now(),
+                        },
+                    );
+                });
+            } else {
+                tracing::warn!(
+                    "Dropping reusable connection outside Tokio runtime while pool lock is contended: {}",
                     self.key
                 );
             }

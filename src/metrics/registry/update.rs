@@ -11,7 +11,7 @@ use crate::metrics::labels::{
 use crate::metrics::parsers::parse_uptime_to_seconds;
 use crate::mikrotik::{InterfaceStats, RouterMetrics, WireGuardPeerStats};
 use std::collections::{HashMap, HashSet};
-use std::time::Instant;
+use tokio::time::Instant;
 
 use super::{InterfaceSnapshot, MetricsRegistry};
 
