@@ -65,3 +65,6 @@ Desktop.ini
 # Cargo
 **/*.rs.bk
 *.pdb
+
+# Scripts
+scripts/
