@@ -9,7 +9,7 @@ use std::collections::HashMap;
 pub(crate) fn parse_interfaces(sentences: &[HashMap<String, String>]) -> Vec<InterfaceStats> {
     let mut out = Vec::new();
     for s in sentences {
-        if let (Some(id), Some(name), Some(_type)) = (s.get(".id"), s.get("name"), s.get("type")) {
+        if let (Some(id), Some(name)) = (s.get(".id"), s.get("name")) {
             out.push(InterfaceStats {
                 id: id.clone(),
                 name: name.clone(),
@@ -90,10 +90,16 @@ mod tests {
     #[test]
     fn test_parse_interfaces_no_type() {
         let mut iface = HashMap::new();
+        iface.insert(".id".to_string(), "*1".to_string());
         iface.insert("name".to_string(), "ether1".to_string());
 
         let result = parse_interfaces(&[iface]);
-        assert_eq!(result.len(), 0);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id, "*1");
+        assert_eq!(result[0].name, "ether1");
+        assert_eq!(result[0].rx_bytes, 0);
+        assert_eq!(result[0].tx_bytes, 0);
+        assert!(!result[0].running);
     }
 
     #[test]

@@ -338,6 +338,130 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_recovery_after_scrape_error_restores_system_and_interface_metrics() {
+        let registry = MetricsRegistry::new();
+
+        let iface_before = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, false);
+        let system_before = SystemResource {
+            uptime: "1d".to_string(),
+            cpu_load: 10,
+            free_memory: 512 * 1024 * 1024,
+            total_memory: 1024 * 1024 * 1024,
+            version: "7.10".to_string(),
+            board_name: "RB750Gr3".to_string(),
+        };
+        let metrics_before = make_router_metrics("router1", vec![iface_before], system_before);
+        registry.update_metrics(&metrics_before);
+
+        let router_label = RouterLabels {
+            router: "router1".to_string(),
+        };
+        let start = std::time::Instant::now();
+        assert!(
+            registry
+                .record_scrape_success_and_check_gap(
+                    &router_label,
+                    start,
+                    std::time::Duration::from_secs(30)
+                )
+                .is_none()
+        );
+
+        let iface_labels = InterfaceLabels {
+            router: "router1".to_string(),
+            id: "*1".to_string(),
+        };
+        assert_eq!(
+            registry
+                .interface_running
+                .get_or_create(&iface_labels)
+                .get(),
+            0
+        );
+        assert_eq!(
+            registry.system_cpu_load.get_or_create(&router_label).get(),
+            10
+        );
+        assert_eq!(
+            registry
+                .interface_rx_bytes
+                .get_or_create(&iface_labels)
+                .get(),
+            1000
+        );
+
+        registry.record_scrape_error(&router_label);
+
+        let iface_after = make_interface("*1", "ether1", "WAN", 1500, 2600, 15, 26, 0, 0, true);
+        let system_after = SystemResource {
+            uptime: "1d1h".to_string(),
+            cpu_load: 55,
+            free_memory: 256 * 1024 * 1024,
+            total_memory: 1024 * 1024 * 1024,
+            version: "7.10".to_string(),
+            board_name: "RB750Gr3".to_string(),
+        };
+        let metrics_after = make_router_metrics("router1", vec![iface_after], system_after);
+
+        let recovered_at = start + std::time::Duration::from_secs(31);
+        assert!(
+            registry
+                .record_scrape_success_and_check_gap(
+                    &router_label,
+                    recovered_at,
+                    std::time::Duration::from_secs(30),
+                )
+                .is_some(),
+            "recovery after error should trigger baseline mode"
+        );
+        registry.update_metrics_baseline(&metrics_after);
+
+        assert_eq!(
+            registry
+                .interface_running
+                .get_or_create(&iface_labels)
+                .get(),
+            1
+        );
+        assert_eq!(
+            registry.system_cpu_load.get_or_create(&router_label).get(),
+            55
+        );
+        assert_eq!(
+            registry
+                .interface_rx_bytes
+                .get_or_create(&iface_labels)
+                .get(),
+            1000,
+            "baseline update must not increment counters"
+        );
+
+        let iface_next = make_interface("*1", "ether1", "WAN", 1700, 2800, 17, 28, 0, 0, true);
+        let system_next = SystemResource {
+            uptime: "1d2h".to_string(),
+            cpu_load: 60,
+            free_memory: 220 * 1024 * 1024,
+            total_memory: 1024 * 1024 * 1024,
+            version: "7.10".to_string(),
+            board_name: "RB750Gr3".to_string(),
+        };
+        let metrics_next = make_router_metrics("router1", vec![iface_next], system_next);
+        registry.update_metrics(&metrics_next);
+
+        assert_eq!(
+            registry
+                .interface_rx_bytes
+                .get_or_create(&iface_labels)
+                .get(),
+            1200
+        );
+        assert_eq!(
+            registry.system_cpu_load.get_or_create(&router_label).get(),
+            60
+        );
+    }
+
+    #[tokio::test]
     async fn test_update_metrics_counter_reset() {
         let registry = MetricsRegistry::new();
 
