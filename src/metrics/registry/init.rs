@@ -269,6 +269,7 @@ impl MetricsRegistry {
             certificate_last_seen: Arc::new(DashMap::new()),
             interface_info_last_seen: Arc::new(DashMap::new()),
             last_scrape_success: Arc::new(DashMap::new()),
+            consecutive_scrape_errors: Arc::new(DashMap::new()),
         }
     }
 }

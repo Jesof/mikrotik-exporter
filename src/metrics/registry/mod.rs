@@ -98,6 +98,7 @@ pub struct MetricsRegistry {
     certificate_last_seen: Arc<DashMap<CertificateLabels, Instant>>,
     interface_info_last_seen: Arc<DashMap<InterfaceInfoLabels, Instant>>,
     last_scrape_success: Arc<DashMap<String, Instant>>,
+    consecutive_scrape_errors: Arc<DashMap<String, u32>>,
 }
 
 impl Default for MetricsRegistry {

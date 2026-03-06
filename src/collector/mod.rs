@@ -12,7 +12,6 @@
 //!
 //! - **Main Collection Loop**: Manages the periodic collection schedule and spawns per-router tasks
 //! - **Router Task** (`router_task`): Handles metrics collection for a single router
-//! - **Cache** (`cache`): Caches immutable system information to reduce API calls
 //! - **Cleanup** (`cleanup`): Periodic cleanup of stale connections and metrics
 //!
 //! ## Collection Flow
@@ -38,7 +37,6 @@
 //! The collection loop listens for shutdown signals via `watch::channel` and
 //! gracefully stops collection, waiting for the cleanup task to complete.
 
-mod cache;
 mod cleanup;
 mod router_task;
 
@@ -52,7 +50,6 @@ use crate::config::Config;
 use crate::metrics::{MetricsRegistry, RouterLabels};
 use crate::mikrotik::ConnectionPool;
 
-use self::cache::SystemInfoCache;
 use self::router_task::spawn_router_collection;
 
 const CLEANUP_EVERY_N_CYCLES: u64 = 20;
@@ -73,9 +70,6 @@ pub fn start_collection_loop(
 ) -> JoinHandle<()> {
     let interval = config.collection_interval_secs;
     tracing::info!("Starting background collection loop every {}s", interval);
-
-    // Create system info cache for immutable metrics
-    let system_cache = SystemInfoCache::new();
 
     // Start cleanup task for expired connections (joined inside collection loop on shutdown)
     let cleanup_handle = cleanup::start_pool_cleanup_task(pool.clone(), shutdown_rx.clone());
@@ -133,7 +127,6 @@ pub fn start_collection_loop(
                     router.clone(),
                     pool.clone(),
                     metrics.clone(),
-                    system_cache.clone(),
                     gap_reset_threshold,
                 );
                 tasks.push(task);
@@ -156,7 +149,6 @@ pub fn start_collection_loop(
             if collection_cycle % CLEANUP_EVERY_N_CYCLES == 0 {
                 metrics.cleanup_expired_dynamic_labels(STALE_LABEL_TTL);
                 metrics.cleanup_stale_routers(&active_routers);
-                system_cache.cleanup_stale(&active_routers).await;
                 pool.cleanup_states(&active_pool_keys).await;
                 tracing::debug!("Cleanup cycle {} completed", collection_cycle,);
             }

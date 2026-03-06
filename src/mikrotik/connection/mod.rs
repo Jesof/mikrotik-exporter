@@ -3,6 +3,7 @@
 
 //! Low-level `RouterOS` API connection handling
 
+use crate::prelude::{AppError, Result};
 mod auth;
 mod protocol;
 
@@ -27,11 +28,16 @@ pub(super) struct RouterOsConnection {
 }
 
 impl RouterOsConnection {
-    pub(super) async fn connect(
-        addr: &str,
-    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub(super) async fn connect(addr: &str) -> Result<Self> {
         tracing::trace!("Attempting TCP connection to: {}", addr);
-        let stream = timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await??;
+        let stream = timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr))
+            .await
+            .map_err(|_| {
+                AppError::RouterOs(format!(
+                    "TCP connection timeout to {addr} after {}s",
+                    CONNECTION_TIMEOUT.as_secs()
+                ))
+            })??;
         tracing::trace!("TCP connection established to: {}", addr);
         Ok(Self { stream })
     }
@@ -40,7 +46,7 @@ impl RouterOsConnection {
         &mut self,
         path: &str,
         args: &[&str],
-    ) -> Result<Vec<HashMap<String, String>>, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<Vec<HashMap<String, String>>> {
         let mut words: Vec<String> = Vec::with_capacity(1 + args.len());
         words.push(path.to_string());
         for a in args {
@@ -49,18 +55,12 @@ impl RouterOsConnection {
         self.raw_command(words).await
     }
 
-    async fn raw_command(
-        &mut self,
-        words: Vec<String>,
-    ) -> Result<Vec<HashMap<String, String>>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn raw_command(&mut self, words: Vec<String>) -> Result<Vec<HashMap<String, String>>> {
         self.send_words(&words).await?;
         self.read_sentences().await
     }
 
-    async fn send_words(
-        &mut self,
-        words: &[String],
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn send_words(&mut self, words: &[String]) -> Result<()> {
         for w in words {
             self.write_word(w).await?;
         }
@@ -69,19 +69,14 @@ impl RouterOsConnection {
         Ok(())
     }
 
-    async fn write_word(
-        &mut self,
-        word: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn write_word(&mut self, word: &str) -> Result<()> {
         let bytes = word.as_bytes();
         self.stream.write_all(&encode_length(bytes.len())).await?;
         self.stream.write_all(bytes).await?;
         Ok(())
     }
 
-    async fn read_sentences(
-        &mut self,
-    ) -> Result<Vec<HashMap<String, String>>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn read_sentences(&mut self) -> Result<Vec<HashMap<String, String>>> {
         // Wrap the entire read operation in a timeout to prevent hanging on slow/dead connections
         timeout(READ_TIMEOUT, async {
             let mut sentences: Vec<HashMap<String, String>> = Vec::new();
@@ -122,7 +117,7 @@ impl RouterOsConnection {
                         .get("message")
                         .cloned()
                         .unwrap_or_else(|| "trap".to_string());
-                    return Err(format!("RouterOS trap: {msg}").into());
+                    return Err(AppError::RouterOs(format!("RouterOS trap: {msg}")));
                 }
                 if word == "!re" {
                     if let Some(s) = current.take() {
@@ -142,10 +137,15 @@ impl RouterOsConnection {
             Ok(sentences)
         })
         .await
-        .map_err(|_| "Read timeout: RouterOS did not respond within 30 seconds")?
+        .map_err(|_| {
+            AppError::RouterOs(format!(
+                "Read timeout: RouterOS did not respond within {} seconds",
+                READ_TIMEOUT.as_secs()
+            ))
+        })?
     }
 
-    async fn read_word(&mut self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn read_word(&mut self) -> Result<String> {
         let len = read_length(&mut self.stream).await?;
         if len == 0 {
             return Ok(String::new());

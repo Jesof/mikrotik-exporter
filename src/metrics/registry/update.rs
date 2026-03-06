@@ -306,7 +306,7 @@ impl MetricsRegistry {
                     (Some(candidate_ts), Some(existing_ts)) => {
                         if candidate_ts == existing_ts {
                             candidate.rx_bytes.saturating_add(candidate.tx_bytes)
-                                > existing.rx_bytes.saturating_add(existing.rx_bytes)
+                                > existing.rx_bytes.saturating_add(existing.tx_bytes)
                         } else {
                             candidate_ts > existing_ts
                         }
@@ -315,7 +315,7 @@ impl MetricsRegistry {
                     (None, Some(_)) => false,
                     (None, None) => {
                         candidate.rx_bytes.saturating_add(candidate.tx_bytes)
-                            > existing.rx_bytes.saturating_add(existing.rx_bytes)
+                            > existing.rx_bytes.saturating_add(existing.tx_bytes)
                     }
                 };
             for wg_peer in &metrics.wireguard_peers {

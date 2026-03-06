@@ -3,15 +3,17 @@
 
 //! `RouterOS` authentication
 
+use crate::prelude::{AppError, Result};
 use md5::compute as md5_compute;
 
 use super::RouterOsConnection;
 
-fn build_legacy_response(
-    password: &str,
-    challenge_hex: &str,
-) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let challenge = hex::decode(challenge_hex)?;
+fn build_legacy_response(password: &str, challenge_hex: &str) -> Result<String> {
+    let challenge = hex::decode(challenge_hex).map_err(|error| {
+        AppError::RouterOs(format!(
+            "Invalid RouterOS challenge hex '{challenge_hex}': {error}"
+        ))
+    })?;
 
     let mut data = Vec::with_capacity(1 + password.len() + challenge.len());
     data.push(0u8);
@@ -24,11 +26,7 @@ fn build_legacy_response(
 }
 
 impl RouterOsConnection {
-    pub(crate) async fn login(
-        &mut self,
-        username: &str,
-        password: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub(crate) async fn login(&mut self, username: &str, password: &str) -> Result<()> {
         tracing::trace!("Attempting login for user: {}", username);
         // Try new login method first (RouterOS 6.43+)
         let login_result = self
@@ -50,7 +48,7 @@ impl RouterOsConnection {
                     if let Some(msg) = s.get("message") {
                         if msg.contains("failure") || msg.contains("invalid") {
                             tracing::trace!("Login failed with message: {}", msg);
-                            return Err(format!("Login failed: {msg}").into());
+                            return Err(AppError::RouterOs(format!("Login failed: {msg}")));
                         }
                         tracing::debug!("Login message: {}", msg);
                     }
@@ -72,7 +70,8 @@ impl RouterOsConnection {
                 challenge_hex = Some(ret.clone());
             }
         }
-        let challenge_hex = challenge_hex.ok_or("No challenge 'ret' received")?;
+        let challenge_hex = challenge_hex
+            .ok_or_else(|| AppError::RouterOs("No challenge 'ret' received".to_string()))?;
         tracing::trace!("Challenge received, length: {}", challenge_hex.len());
         let response = build_legacy_response(password, &challenge_hex)?;
 

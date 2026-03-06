@@ -45,13 +45,10 @@ use crate::mikrotik::{ConnectionPool, MikroTikClient};
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::cache::SystemInfoCache;
-
 pub(super) fn spawn_router_collection(
     router: RouterConfig,
     pool: Arc<ConnectionPool>,
     metrics: MetricsRegistry,
-    system_cache: SystemInfoCache,
     gap_reset_threshold: Duration,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -84,13 +81,6 @@ pub(super) fn spawn_router_collection(
                     metrics.update_metrics(&m);
                 }
                 metrics.record_scrape_duration(&router_label, duration);
-
-                // Cache system info if it's the first time
-                if system_cache.get(&router_name).await.is_none() {
-                    system_cache
-                        .set(router_name.clone(), m.system.clone())
-                        .await;
-                }
 
                 // Update connection error count
                 if let Some((errors, _)) = pool

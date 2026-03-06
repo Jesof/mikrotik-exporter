@@ -4,6 +4,7 @@
 //! High-level `MikroTik` client
 
 use crate::config::RouterConfig;
+use crate::prelude::{AppError, Result};
 use secrecy::ExposeSecret;
 use std::sync::Arc;
 
@@ -43,9 +44,7 @@ impl MikroTikClient {
     ///
     /// Returns an error if connection, authentication, or data retrieval fails.
     /// On error, metrics are not updated, preserving the last successful values.
-    pub(crate) async fn collect_metrics(
-        &self,
-    ) -> Result<RouterMetrics, Box<dyn std::error::Error + Send + Sync>> {
+    pub(crate) async fn collect_metrics(&self) -> Result<RouterMetrics> {
         use tokio::time::{Duration, timeout};
 
         const COLLECTION_TIMEOUT: Duration = Duration::from_secs(60);
@@ -65,14 +64,12 @@ impl MikroTikClient {
                     COLLECTION_TIMEOUT.as_secs()
                 );
                 tracing::error!("{}", err);
-                Err(err.into())
+                Err(AppError::RouterOs(err))
             }
         }
     }
 
-    async fn collect_parallel(
-        &self,
-    ) -> Result<RouterMetrics, Box<dyn std::error::Error + Send + Sync>> {
+    async fn collect_parallel(&self) -> Result<RouterMetrics> {
         use tokio::time::{Duration, timeout};
 
         const GROUP_SYSTEM_TIMEOUT: Duration = Duration::from_secs(20);
@@ -118,11 +115,10 @@ impl MikroTikClient {
 
             // If system group failed, it's a critical error
             if !system_ok {
-                return Err(format!(
+                return Err(AppError::RouterOs(format!(
                     "Router '{}' critical collection failure - system/interfaces group failed",
                     self.config.name
-                )
-                .into());
+                )));
             }
         }
 
@@ -183,8 +179,7 @@ impl MikroTikClient {
 
     async fn collect_group_system_interfaces(
         &self,
-    ) -> Result<(SystemResource, Vec<InterfaceStats>), Box<dyn std::error::Error + Send + Sync>>
-    {
+    ) -> Result<(SystemResource, Vec<InterfaceStats>)> {
         let mut guard = self
             .pool
             .get_connection(
@@ -229,10 +224,7 @@ impl MikroTikClient {
         Ok((system, interfaces))
     }
 
-    async fn collect_group_conntrack(
-        &self,
-    ) -> Result<(Vec<ConnectionTrackingStats>, bool), Box<dyn std::error::Error + Send + Sync>>
-    {
+    async fn collect_group_conntrack(&self) -> Result<(Vec<ConnectionTrackingStats>, bool)> {
         let mut guard = self
             .pool
             .get_connection(
@@ -272,11 +264,10 @@ impl MikroTikClient {
         drop(guard);
 
         if !success {
-            return Err(format!(
+            return Err(AppError::RouterOs(format!(
                 "Router '{}' conntrack collection failed for both IPv4 and IPv6",
                 self.config.name
-            )
-            .into());
+            )));
         }
 
         let mut conntrack_v4 =
@@ -291,16 +282,13 @@ impl MikroTikClient {
 
     async fn collect_group_vpn_certs(
         &self,
-    ) -> Result<
-        (
-            Vec<WireGuardPeerStats>,
-            Vec<CertificateStats>,
-            bool,
-            bool,
-            bool,
-        ),
-        Box<dyn std::error::Error + Send + Sync>,
-    > {
+    ) -> Result<(
+        Vec<WireGuardPeerStats>,
+        Vec<CertificateStats>,
+        bool,
+        bool,
+        bool,
+    )> {
         let mut guard = self
             .pool
             .get_connection(
@@ -332,11 +320,10 @@ impl MikroTikClient {
         drop(guard);
 
         if !success {
-            return Err(format!(
+            return Err(AppError::RouterOs(format!(
                 "Router '{}' VPN/certificate collection failed",
                 self.config.name
-            )
-            .into());
+            )));
         }
 
         let wireguard_peers = parse_wireguard_peers(&wireguard_peers_result.unwrap_or_default());
@@ -353,9 +340,7 @@ impl MikroTikClient {
         ))
     }
 
-    async fn collect_group_firewall(
-        &self,
-    ) -> Result<(Vec<FirewallRuleStats>, bool), Box<dyn std::error::Error + Send + Sync>> {
+    async fn collect_group_firewall(&self) -> Result<(Vec<FirewallRuleStats>, bool)> {
         let mut guard = self
             .pool
             .get_connection(
@@ -456,7 +441,10 @@ impl MikroTikClient {
         drop(guard);
 
         if !success {
-            return Err(format!("Router '{}' firewall collection failed", self.config.name).into());
+            return Err(AppError::RouterOs(format!(
+                "Router '{}' firewall collection failed",
+                self.config.name
+            )));
         }
 
         let mut firewall_rules = Vec::new();
@@ -529,9 +517,7 @@ impl MikroTikClient {
     /// This method is used internally by the configuration validation system
     /// to test router connectivity during application startup when the
     /// `STARTUP_CONNECTIVITY_TEST` configuration option is enabled.
-    pub(crate) async fn test_connection(
-        &self,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub(crate) async fn test_connection(&self) -> Result<()> {
         use tokio::time::{Duration, timeout};
 
         const TEST_CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
@@ -544,11 +530,11 @@ impl MikroTikClient {
                 self.config.name
             );
             tracing::error!("{}", err);
-            Err(err.into())
+            Err(AppError::RouterOs(err))
         }
     }
 
-    async fn test_connection_real(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn test_connection_real(&self) -> Result<()> {
         let mut guard = self
             .pool
             .get_connection(
