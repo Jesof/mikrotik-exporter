@@ -363,15 +363,16 @@ impl Config {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> mikrotik_exporter::Result<()> {
     /// # use mikrotik_exporter::Config;
+    /// # use mikrotik_exporter::AppError;
     /// let config = Config::from_env();
     /// if config.startup_connectivity_test {
     ///     let failed = config.test_router_connectivity(config.startup_connectivity_timeout_secs).await;
     ///     if !failed.is_empty() {
     ///         eprintln!("Failed to connect to routers: {:?}", failed);
     ///         if config.strict_startup_mode {
-    ///             std::process::exit(1);
+    ///             return Err(AppError::Config("Startup connectivity check failed".to_string()));
     ///         }
     ///     }
     /// }

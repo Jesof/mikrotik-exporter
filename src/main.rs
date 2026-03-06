@@ -12,7 +12,8 @@
 //! - Runs HTTP server for Prometheus
 
 use mikrotik_exporter::{
-    AppState, Config, ConnectionPool, MetricsRegistry, Result, create_router, start_collection_loop,
+    AppError, AppState, Config, ConnectionPool, MetricsRegistry, Result, create_router,
+    start_collection_loop,
 };
 
 use std::net::SocketAddr;
@@ -41,40 +42,7 @@ async fn main() -> Result<()> {
         tracing::info!("  - Router '{}' at {}", router.name, router.address);
     }
 
-    // Perform startup connectivity testing if enabled
-    if config.startup_connectivity_test && !config.routers.is_empty() {
-        tracing::info!(
-            "Performing startup connectivity tests (timeout: {}s{})",
-            config.startup_connectivity_timeout_secs,
-            if config.strict_startup_mode {
-                ", strict mode enabled"
-            } else {
-                ""
-            }
-        );
-
-        let failed_routers = config
-            .test_router_connectivity(config.startup_connectivity_timeout_secs)
-            .await;
-
-        if failed_routers.is_empty() {
-            tracing::info!("All router connectivity tests passed");
-        } else {
-            tracing::warn!(
-                "Connectivity test failed for {} router(s): {:?}",
-                failed_routers.len(),
-                failed_routers
-            );
-
-            if config.strict_startup_mode {
-                tracing::error!(
-                    "Exiting due to strict startup mode - {} router(s) are unreachable",
-                    failed_routers.len()
-                );
-                std::process::exit(1);
-            }
-        }
-    }
+    run_startup_connectivity_tests(&config).await?;
 
     // Create metrics registry
     let metrics = MetricsRegistry::new();
@@ -181,4 +149,45 @@ fn setup_tracing() {
         .with(filter)
         .with(tracing_subscriber::fmt::layer())
         .init();
+}
+
+async fn run_startup_connectivity_tests(config: &Config) -> Result<()> {
+    if !config.startup_connectivity_test || config.routers.is_empty() {
+        return Ok(());
+    }
+
+    tracing::info!(
+        "Performing startup connectivity tests (timeout: {}s{})",
+        config.startup_connectivity_timeout_secs,
+        if config.strict_startup_mode {
+            ", strict mode enabled"
+        } else {
+            ""
+        }
+    );
+
+    let failed_routers = config
+        .test_router_connectivity(config.startup_connectivity_timeout_secs)
+        .await;
+
+    if failed_routers.is_empty() {
+        tracing::info!("All router connectivity tests passed");
+        return Ok(());
+    }
+
+    tracing::warn!(
+        "Connectivity test failed for {} router(s): {:?}",
+        failed_routers.len(),
+        failed_routers
+    );
+
+    if config.strict_startup_mode {
+        return Err(AppError::Config(format!(
+            "Strict startup mode: {} router(s) unreachable: {:?}",
+            failed_routers.len(),
+            failed_routers
+        )));
+    }
+
+    Ok(())
 }
