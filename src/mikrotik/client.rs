@@ -8,7 +8,7 @@ use crate::prelude::{AppError, Result};
 use secrecy::ExposeSecret;
 use std::sync::Arc;
 
-use super::pool::ConnectionPool;
+use super::pool::{ConnectionPool, PooledConnectionGuard};
 use super::responses::{
     parse_certificates, parse_connection_tracking, parse_firewall_rules, parse_interfaces,
     parse_system, parse_wireguard_peers,
@@ -221,16 +221,8 @@ impl MikroTikClient {
             .await;
 
         let success = system_result.is_ok() && interfaces_result.is_ok();
-        if success {
-            self.pool
-                .record_success(&self.config.address, &self.config.username, Some("system"))
-                .await;
-        } else {
-            guard.mark_broken();
-            self.pool
-                .record_error(&self.config.address, &self.config.username, Some("system"))
-                .await;
-        }
+        self.record_group_result(&mut guard, "system", success)
+            .await;
 
         drop(guard);
 
@@ -241,6 +233,11 @@ impl MikroTikClient {
     }
 
     async fn collect_group_conntrack(&self) -> Result<ConntrackGroupData> {
+        const CONNTRACK_COMMANDS: [(&str, &str); 2] = [
+            ("/ip/firewall/connection/print", "ipv4"),
+            ("/ipv6/firewall/connection/print", "ipv6"),
+        ];
+
         let mut guard = self
             .pool
             .get_connection(
@@ -252,30 +249,14 @@ impl MikroTikClient {
             .await?;
 
         let conn = guard.get_mut();
-        let conntrack_v4_result = conn.command("/ip/firewall/connection/print", &[]).await;
-        let conntrack_v6_result = conn.command("/ipv6/firewall/connection/print", &[]).await;
-        let conntrack_v4_ok = conntrack_v4_result.is_ok();
-        let conntrack_v6_ok = conntrack_v6_result.is_ok();
-
-        let success = conntrack_v4_ok || conntrack_v6_ok;
-        if success {
-            self.pool
-                .record_success(
-                    &self.config.address,
-                    &self.config.username,
-                    Some("conntrack"),
-                )
-                .await;
-        } else {
-            guard.mark_broken();
-            self.pool
-                .record_error(
-                    &self.config.address,
-                    &self.config.username,
-                    Some("conntrack"),
-                )
-                .await;
+        let mut conntrack_results = Vec::with_capacity(CONNTRACK_COMMANDS.len());
+        for (path, ip_version) in CONNTRACK_COMMANDS {
+            conntrack_results.push((ip_version, conn.command(path, &[]).await));
         }
+
+        let success = conntrack_results.iter().any(|(_, result)| result.is_ok());
+        self.record_group_result(&mut guard, "conntrack", success)
+            .await;
 
         drop(guard);
 
@@ -286,16 +267,19 @@ impl MikroTikClient {
             )));
         }
 
-        let mut conntrack_v4 =
-            parse_connection_tracking(&conntrack_v4_result.unwrap_or_default(), "ipv4");
-        let conntrack_v6 =
-            parse_connection_tracking(&conntrack_v6_result.unwrap_or_default(), "ipv6");
-
-        conntrack_v4.extend(conntrack_v6);
+        let mut entries = Vec::new();
+        let mut complete_ok = true;
+        for (ip_version, result) in conntrack_results {
+            complete_ok &= result.is_ok();
+            entries.extend(parse_connection_tracking(
+                &result.unwrap_or_default(),
+                ip_version,
+            ));
+        }
 
         Ok(ConntrackGroupData {
-            entries: conntrack_v4,
-            complete_ok: conntrack_v4_ok && conntrack_v6_ok,
+            entries,
+            complete_ok,
         })
     }
 
@@ -317,16 +301,7 @@ impl MikroTikClient {
         let certificates_ok = certificates_result.is_ok();
 
         let success = wireguard_ok || certificates_ok;
-        if success {
-            self.pool
-                .record_success(&self.config.address, &self.config.username, Some("vpn"))
-                .await;
-        } else {
-            guard.mark_broken();
-            self.pool
-                .record_error(&self.config.address, &self.config.username, Some("vpn"))
-                .await;
-        }
+        self.record_group_result(&mut guard, "vpn", success).await;
 
         drop(guard);
 
@@ -380,24 +355,8 @@ impl MikroTikClient {
         }
 
         let success = section_results.iter().any(|(_, _, result)| result.is_ok());
-        if success {
-            self.pool
-                .record_success(
-                    &self.config.address,
-                    &self.config.username,
-                    Some("firewall"),
-                )
-                .await;
-        } else {
-            guard.mark_broken();
-            self.pool
-                .record_error(
-                    &self.config.address,
-                    &self.config.username,
-                    Some("firewall"),
-                )
-                .await;
-        }
+        self.record_group_result(&mut guard, "firewall", success)
+            .await;
 
         drop(guard);
 
@@ -423,6 +382,24 @@ impl MikroTikClient {
             rules: firewall_rules,
             complete_ok,
         })
+    }
+
+    async fn record_group_result(
+        &self,
+        guard: &mut PooledConnectionGuard,
+        group: &'static str,
+        success: bool,
+    ) {
+        if success {
+            self.pool
+                .record_success(&self.config.address, &self.config.username, Some(group))
+                .await;
+        } else {
+            guard.mark_broken();
+            self.pool
+                .record_error(&self.config.address, &self.config.username, Some(group))
+                .await;
+        }
     }
 
     /// Test connectivity to the router
