@@ -86,6 +86,8 @@ async fn metrics_contains_registered_metric_names() {
     assert!(body.contains("mikrotik_connection_pool_size"));
     assert!(body.contains("mikrotik_connection_pool_active"));
     assert!(body.contains("mikrotik_collection_cycle_duration_milliseconds"));
+    assert!(body.contains("mikrotik_conntrack_active_series"));
+    assert!(body.contains("mikrotik_conntrack_update_duration_milliseconds"));
 }
 
 #[tokio::test]

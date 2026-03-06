@@ -101,6 +101,11 @@ STARTUP_CONNECTIVITY_TEST=true STRICT_STARTUP_MODE=true ./mikrotik-exporter
 | `/metrics` | Prometheus metrics                           | 200                          |
 | `/health`  | Health check with router connectivity test   | 200 (OK) / 503 (unavailable) |
 
+Health status policy:
+
+- `healthy`: router has successful scrapes and is below consecutive error threshold.
+- `degraded`: router has scrape errors, too many consecutive connection errors, or has not yet had a successful scrape.
+
 ## Deployment
 
 - [Kubernetes](DEPLOYMENT.md#kubernetes)
@@ -204,6 +209,13 @@ MIT - see [LICENSE](LICENSE)
 | --------------------------------------| ------ | ----------------------------------------- |
 | `mikrotik_connection_tracking_count`  | gauge  | Connection count by src/protocol/ip       |
 
+### Connection Tracking Observability (Labels: router)
+
+| Metric                                            | Type  | Description                                       |
+| ------------------------------------------------- | ----- | ------------------------------------------------- |
+| `mikrotik_conntrack_active_series`                | gauge | Active conntrack series for the router            |
+| `mikrotik_conntrack_update_duration_milliseconds` | gauge | Last conntrack update duration in milliseconds    |
+
 ### WireGuard Peers (Labels: router, id)
 
 | Metric                                     | Type   | Description                                   |
@@ -251,10 +263,11 @@ src/
 ├── lib.rs                  # Public library
 ├── main.rs                 # Entry point
 ├── prelude.rs              # Re-exports
+├── startup/                # Startup connectivity policy
 ├── api/                    # HTTP handlers
-│   └── handlers/           # Health and metrics endpoints
+│   ├── health.rs           # Health domain policy
+│   └── handlers/           # HTTP endpoint handlers
 ├── collector/              # Background metrics collection
-│   ├── cache.rs            # System info cache
 │   ├── router_task.rs      # Per-router collection task
 │   └── cleanup.rs          # Periodic cleanup task
 ├── config/                 # Configuration loading
