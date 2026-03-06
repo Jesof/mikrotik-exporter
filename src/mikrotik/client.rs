@@ -240,6 +240,10 @@ impl MikroTikClient {
                 self.config.name
             );
             guard.mark_broken();
+            // Record as error to trigger backoff
+            self.pool
+                .record_error(&self.config.address, &self.config.username, Some("system"))
+                .await;
         }
 
         self.record_group_result(&mut guard, "system", success)
