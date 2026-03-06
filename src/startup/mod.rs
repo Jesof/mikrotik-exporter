@@ -79,14 +79,18 @@ pub async fn run_startup_connectivity_tests(config: &Config) -> Result<()> {
 
 fn enforce_startup_connectivity_policy(failed_routers: &[String], strict_mode: bool) -> Result<()> {
     if strict_mode {
-        return Err(AppError::Config(format!(
-            "Strict startup mode: {} router(s) unreachable: {:?}",
-            failed_routers.len(),
-            failed_routers
-        )));
+        return Err(AppError::Config(format_strict_mode_error(failed_routers)));
     }
 
     Ok(())
+}
+
+fn format_strict_mode_error(failed_routers: &[String]) -> String {
+    format!(
+        "Strict startup mode: {} router(s) unreachable: {:?}",
+        failed_routers.len(),
+        failed_routers
+    )
 }
 
 #[cfg(test)]
@@ -105,6 +109,16 @@ mod tests {
         let failed = vec!["router-a".to_string(), "router-b".to_string()];
         let result = enforce_startup_connectivity_policy(&failed, true);
         assert!(matches!(result, Err(AppError::Config(_))));
+    }
+
+    #[test]
+    fn test_format_strict_mode_error_contains_router_list() {
+        let failed = vec!["router-a".to_string(), "router-b".to_string()];
+        let message = format_strict_mode_error(&failed);
+        assert_eq!(
+            message,
+            "Strict startup mode: 2 router(s) unreachable: [\"router-a\", \"router-b\"]"
+        );
     }
 
     #[test]
