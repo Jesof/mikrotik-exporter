@@ -8,6 +8,17 @@ use md5::compute as md5_compute;
 
 use super::RouterOsConnection;
 
+fn is_auth_failure_message(message: &str) -> bool {
+    let lowercase = message.to_ascii_lowercase();
+    lowercase.contains("failure") || lowercase.contains("invalid")
+}
+
+fn extract_challenge(sentences: &[std::collections::HashMap<String, String>]) -> Option<String> {
+    sentences
+        .iter()
+        .find_map(|sentence| sentence.get("ret").cloned())
+}
+
 fn build_legacy_response(password: &str, challenge_hex: &str) -> Result<String> {
     let challenge = hex::decode(challenge_hex).map_err(|error| {
         AppError::RouterOs(format!(
@@ -43,12 +54,13 @@ impl RouterOsConnection {
                     "New login method response received, {} sentences",
                     sentences.len()
                 );
-                // Check for error messages
-                for s in &sentences {
-                    if let Some(msg) = s.get("message") {
-                        if msg.contains("failure") || msg.contains("invalid") {
+                for sentence in &sentences {
+                    if let Some(msg) = sentence.get("message") {
+                        if is_auth_failure_message(msg) {
                             tracing::trace!("Login failed with message: {}", msg);
-                            return Err(AppError::RouterOs(format!("Login failed: {msg}")));
+                            return Err(AppError::RouterOs(format!(
+                                "Login failed (new auth method): {msg}"
+                            )));
                         }
                         tracing::debug!("Login message: {}", msg);
                     }
@@ -56,22 +68,22 @@ impl RouterOsConnection {
                 tracing::debug!("Login successful (new method)");
                 return Ok(());
             }
-            Err(e) => {
-                tracing::debug!("New login method failed, trying legacy method: {}", e);
+            Err(error) => {
+                tracing::debug!("New login method failed, trying legacy method: {}", error);
             }
         }
 
-        // Fallback to legacy challenge-response method (pre-6.43)
         tracing::trace!("Requesting challenge for legacy login");
-        let sentences = self.raw_command(vec!["/login".to_string()]).await?;
-        let mut challenge_hex = None;
-        for s in sentences {
-            if let Some(ret) = s.get("ret") {
-                challenge_hex = Some(ret.clone());
-            }
-        }
-        let challenge_hex = challenge_hex
-            .ok_or_else(|| AppError::RouterOs("No challenge 'ret' received".to_string()))?;
+        let challenge_sentences =
+            self.raw_command(vec!["/login".to_string()])
+                .await
+                .map_err(|error| {
+                    AppError::RouterOs(format!("Legacy login challenge request failed: {error}"))
+                })?;
+
+        let challenge_hex = extract_challenge(&challenge_sentences).ok_or_else(|| {
+            AppError::RouterOs("Legacy login failed: no challenge 'ret' received".to_string())
+        })?;
         tracing::trace!("Challenge received, length: {}", challenge_hex.len());
         let response = build_legacy_response(password, &challenge_hex)?;
 
@@ -81,11 +93,14 @@ impl RouterOsConnection {
                 format!("=name={}", username),
                 format!("=response={}", response),
             ])
-            .await?;
-        // If no !trap assume success
-        for s in &login_sentences {
-            if s.contains_key("message") {
-                tracing::warn!("Login message: {:?}", s.get("message"));
+            .await
+            .map_err(|error| {
+                AppError::RouterOs(format!("Legacy login response submission failed: {error}"))
+            })?;
+
+        for sentence in &login_sentences {
+            if let Some(message) = sentence.get("message") {
+                tracing::warn!("Login message: {}", message);
             }
         }
         tracing::debug!("Login successful (legacy method)");
