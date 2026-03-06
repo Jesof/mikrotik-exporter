@@ -936,4 +936,23 @@ mod tests {
             "system_info should stay 1 when version/board unchanged"
         );
     }
+
+    #[tokio::test]
+    async fn test_cleanup_stale_routers_idempotent() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+        let metrics = make_router_metrics("router-to-clean", vec![iface], system);
+        registry.update_metrics(&metrics);
+
+        let empty_active = std::collections::HashSet::new();
+        registry.cleanup_stale_routers(&empty_active);
+        registry.cleanup_stale_routers(&empty_active);
+
+        let encoded = registry.encode_metrics().await.expect("Failed to encode");
+        assert!(
+            !encoded.contains("router-to-clean"),
+            "cleanup should remove stale router metrics and be idempotent"
+        );
+    }
 }
