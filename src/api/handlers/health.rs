@@ -7,6 +7,8 @@ use std::sync::Arc;
 
 use crate::api::AppState;
 
+const HEALTHY_MAX_CONSECUTIVE_ERRORS: u32 = 3;
+
 /// Health check endpoint response structure
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct HealthResponse {
@@ -22,6 +24,37 @@ pub(crate) struct RouterHealth {
     pub(crate) status: String,
     pub(crate) consecutive_errors: u32,
     pub(crate) has_successful_scrape: bool,
+}
+
+#[derive(Clone, Copy)]
+enum RouterStatus {
+    Healthy,
+    Degraded,
+    Unknown,
+}
+
+impl RouterStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            RouterStatus::Healthy => "healthy",
+            RouterStatus::Degraded => "degraded",
+            RouterStatus::Unknown => "unknown",
+        }
+    }
+}
+
+fn classify_router_status(
+    success_count: u64,
+    error_count: u64,
+    consecutive_errors: u32,
+) -> RouterStatus {
+    if success_count > 0 && consecutive_errors < HEALTHY_MAX_CONSECUTIVE_ERRORS {
+        RouterStatus::Healthy
+    } else if error_count > 0 || consecutive_errors >= HEALTHY_MAX_CONSECUTIVE_ERRORS {
+        RouterStatus::Degraded
+    } else {
+        RouterStatus::Unknown
+    }
 }
 
 /// GET /health
@@ -54,18 +87,14 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> impl IntoRespon
         };
 
         // Determine router status
-        let status = if success_count > 0 && consecutive_errors < 3 {
-            "healthy"
-        } else if error_count > 0 || consecutive_errors >= 3 {
+        let status = classify_router_status(success_count, error_count, consecutive_errors);
+        if matches!(status, RouterStatus::Degraded) {
             all_healthy = false;
-            "degraded"
-        } else {
-            "unknown"
-        };
+        }
 
         routers_health.push(RouterHealth {
             name: router.name.clone(),
-            status: status.to_string(),
+            status: status.as_str().to_string(),
             consecutive_errors,
             has_successful_scrape: success_count > 0,
         });
@@ -126,5 +155,25 @@ mod tests {
             response.status() == StatusCode::OK
                 || response.status() == StatusCode::SERVICE_UNAVAILABLE
         );
+    }
+
+    #[test]
+    fn test_classify_router_status() {
+        assert!(matches!(
+            classify_router_status(1, 0, 0),
+            RouterStatus::Healthy
+        ));
+        assert!(matches!(
+            classify_router_status(0, 1, 0),
+            RouterStatus::Degraded
+        ));
+        assert!(matches!(
+            classify_router_status(0, 0, HEALTHY_MAX_CONSECUTIVE_ERRORS),
+            RouterStatus::Degraded
+        ));
+        assert!(matches!(
+            classify_router_status(0, 0, 0),
+            RouterStatus::Unknown
+        ));
     }
 }
