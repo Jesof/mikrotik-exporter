@@ -262,15 +262,30 @@ impl MikroTikClient {
         }
         if interfaces_count == 0 && interfaces_result.is_ok() {
             tracing::warn!(
-                "Router '{}' /interface/print returned empty response (0 sentences) - THIS IS THE BUG",
+                "Router '{}' /interface/print returned empty response (0 sentences) - forcing reconnect",
                 self.config.name
             );
+            // This is the RB5009 bug - RouterOS returns !done without data
+            // Mark connection as broken to force reconnect on next attempt
+            guard.mark_broken();
+            // Also force close ALL connections for this router to ensure clean state
+            self.pool
+                .force_close_router_connections(&self.config.address)
+                .await;
         }
 
         self.record_group_result(&mut guard, "system", success)
             .await;
 
         drop(guard);
+
+        // If interfaces returned empty response, treat as error to trigger reconnect
+        if interfaces_count == 0 && interfaces_result.is_ok() {
+            return Err(AppError::RouterOs(format!(
+                "Router '{}' /interface/print returned empty response - connection may be stale",
+                self.config.name
+            )));
+        }
 
         let system = system_result.map_err(|e| {
             tracing::warn!("Router '{}' system parse failed: {}", self.config.name, e);
