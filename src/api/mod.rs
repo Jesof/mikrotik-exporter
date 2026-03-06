@@ -10,6 +10,7 @@
 //! - `GET /metrics` — Prometheus metrics
 
 mod handlers;
+pub(crate) mod health;
 
 use axum::{Router, routing::get};
 use std::sync::Arc;
