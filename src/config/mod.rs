@@ -26,6 +26,12 @@ mod env_vars {
     pub const ROUTERS_CONFIG: &str = "ROUTERS_CONFIG";
     pub const COLLECTION_INTERVAL_SECONDS: &str = "COLLECTION_INTERVAL_SECONDS";
     pub const GAP_RESET_THRESHOLD_SECONDS: &str = "GAP_RESET_THRESHOLD_SECONDS";
+    pub const STARTUP_CONNECTIVITY_TEST: &str = "STARTUP_CONNECTIVITY_TEST";
+    pub const STARTUP_CONNECTIVITY_TIMEOUT_SECS: &str = "STARTUP_CONNECTIVITY_TIMEOUT_SECS";
+    pub const STRICT_STARTUP_MODE: &str = "STRICT_STARTUP_MODE";
+    pub const ROUTEROS_ADDRESS: &str = "ROUTEROS_ADDRESS";
+    pub const ROUTEROS_USERNAME: &str = "ROUTEROS_USERNAME";
+    pub const ROUTEROS_PASSWORD: &str = "ROUTEROS_PASSWORD";
 }
 
 /// Configuration for a single `MikroTik` router
@@ -77,17 +83,23 @@ impl RouterConfig {
     /// assert!(config.validate().is_ok());
     /// ```
     pub fn validate(&self) -> Result<(), String> {
-        // Validate name is not empty
+        self.validate_name()?;
+        self.validate_address()?;
+        self.validate_username()?;
+        self.warn_on_weak_password();
+
+        Ok(())
+    }
+
+    fn validate_name(&self) -> Result<(), String> {
         if self.name.trim().is_empty() {
             return Err("Router name cannot be empty".to_string());
         }
 
-        // Validate name doesn't contain invalid characters for Prometheus labels
-        // Prometheus labels must match [a-zA-Z_][a-zA-Z0-9_]*
         if !self
             .name
             .chars()
-            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+            .all(|ch| ch.is_alphanumeric() || ch == '_' || ch == '-')
         {
             return Err(format!(
                 "Router name '{}' contains invalid characters. Only alphanumeric, underscore, and hyphen are allowed",
@@ -95,7 +107,10 @@ impl RouterConfig {
             ));
         }
 
-        // Validate address format (must contain port)
+        Ok(())
+    }
+
+    fn validate_address(&self) -> Result<(), String> {
         if !self.address.contains(':') {
             return Err(format!(
                 "Invalid address format '{}': expected 'host:port'",
@@ -103,7 +118,6 @@ impl RouterConfig {
             ));
         }
 
-        // Validate port number is valid (1-65535)
         if let Some(port_str) = self.address.split(':').next_back() {
             match port_str.parse::<u16>() {
                 Ok(0) => {
@@ -127,7 +141,6 @@ impl RouterConfig {
             ));
         }
 
-        // Validate address is not too long (practical limit for DNS names)
         if self.address.len() > 253 {
             return Err(format!(
                 "Address '{}' is too long: maximum length is 253 characters",
@@ -135,7 +148,10 @@ impl RouterConfig {
             ));
         }
 
-        // Validate username is not empty
+        Ok(())
+    }
+
+    fn validate_username(&self) -> Result<(), String> {
         if self.username.trim().is_empty() {
             return Err(format!(
                 "Username cannot be empty for router '{}'",
@@ -143,7 +159,6 @@ impl RouterConfig {
             ));
         }
 
-        // Validate username length (RouterOS limit is 64 characters)
         if self.username.len() > 64 {
             return Err(format!(
                 "Username for router '{}' is too long: maximum length is 64 characters",
@@ -151,7 +166,10 @@ impl RouterConfig {
             ));
         }
 
-        // Warn about weak password (optional security check)
+        Ok(())
+    }
+
+    fn warn_on_weak_password(&self) {
         let password_len = self.password.expose_secret().len();
         if password_len > 0 && password_len < 8 {
             tracing::warn!(
@@ -160,8 +178,6 @@ impl RouterConfig {
                 password_len
             );
         }
-
-        Ok(())
     }
 }
 
@@ -240,79 +256,16 @@ impl Config {
     /// println!("Loaded configuration for {} router(s)", config.routers.len());
     /// ```
     pub fn from_env() -> Self {
-        let server_addr = std::env::var(env_vars::SERVER_ADDR)
-            .unwrap_or_else(|_| defaults::SERVER_ADDR.to_string());
-
-        // Load routers configuration from JSON
-        let routers = if let Ok(config_json) = std::env::var(env_vars::ROUTERS_CONFIG) {
-            serde_json::from_str(&config_json).unwrap_or_else(|e| {
-                tracing::warn!("Failed to parse ROUTERS_CONFIG: {}. Using empty list.", e);
-                vec![]
-            })
-        } else {
-            // Fallback: use legacy environment variables for single router
-            let address = std::env::var("ROUTEROS_ADDRESS").ok();
-            let username = std::env::var("ROUTEROS_USERNAME")
-                .unwrap_or_else(|_| defaults::ROUTEROS_USERNAME.to_string());
-            let password = std::env::var("ROUTEROS_PASSWORD")
-                .unwrap_or_else(|_| defaults::ROUTEROS_PASSWORD.to_string());
-            let password_secret = SecretString::new(password.into_boxed_str());
-
-            if let Some(addr) = address {
-                vec![RouterConfig {
-                    name: "default".to_string(),
-                    address: addr,
-                    username,
-                    password: password_secret,
-                }]
-            } else {
-                tracing::warn!(
-                    "No router configuration found. Service will start but /metrics will be empty."
-                );
-                vec![]
-            }
-        };
-
-        let collection_interval_secs = std::env::var(env_vars::COLLECTION_INTERVAL_SECONDS)
-            .ok()
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(defaults::COLLECTION_INTERVAL_SECS);
-
-        let gap_reset_threshold_secs = std::env::var(env_vars::GAP_RESET_THRESHOLD_SECONDS)
-            .ok()
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(defaults::GAP_RESET_THRESHOLD_SECS);
-
-        // Validate and filter router configurations
-        let routers: Vec<RouterConfig> = routers
-            .into_iter()
-            .filter(|router| match router.validate() {
-                Ok(()) => true,
-                Err(e) => {
-                    tracing::error!("Invalid router '{}': {}", router.name, e);
-                    tracing::warn!("Skipping invalid router: {}", router.name);
-                    false
-                }
-            })
-            .collect();
-
-        // Check for duplicate router names
-        let mut seen_names = std::collections::HashSet::new();
-        let routers: Vec<RouterConfig> = routers
-            .into_iter()
-            .filter(|router| {
-                if seen_names.contains(&router.name) {
-                    tracing::error!(
-                        "Duplicate router name '{}' found. Router names must be unique.",
-                        router.name
-                    );
-                    false
-                } else {
-                    seen_names.insert(router.name.clone());
-                    true
-                }
-            })
-            .collect();
+        let server_addr = string_env_or_default(env_vars::SERVER_ADDR, defaults::SERVER_ADDR);
+        let collection_interval_secs = parse_env_or_default(
+            env_vars::COLLECTION_INTERVAL_SECONDS,
+            defaults::COLLECTION_INTERVAL_SECS,
+        );
+        let gap_reset_threshold_secs = parse_env_or_default(
+            env_vars::GAP_RESET_THRESHOLD_SECONDS,
+            defaults::GAP_RESET_THRESHOLD_SECS,
+        );
+        let routers = validate_and_deduplicate_routers(load_router_configs());
 
         if routers.is_empty() {
             tracing::warn!(
@@ -320,21 +273,11 @@ impl Config {
             );
         }
 
-        // Load startup connectivity test configuration
-        let startup_connectivity_test = std::env::var("STARTUP_CONNECTIVITY_TEST")
-            .ok()
-            .and_then(|v| v.parse::<bool>().ok())
-            .unwrap_or(false);
-
-        let startup_connectivity_timeout_secs = std::env::var("STARTUP_CONNECTIVITY_TIMEOUT_SECS")
-            .ok()
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(10);
-
-        let strict_startup_mode = std::env::var("STRICT_STARTUP_MODE")
-            .ok()
-            .and_then(|v| v.parse::<bool>().ok())
-            .unwrap_or(false);
+        let startup_connectivity_test =
+            parse_env_or_default(env_vars::STARTUP_CONNECTIVITY_TEST, false);
+        let startup_connectivity_timeout_secs =
+            parse_env_or_default(env_vars::STARTUP_CONNECTIVITY_TIMEOUT_SECS, 10);
+        let strict_startup_mode = parse_env_or_default(env_vars::STRICT_STARTUP_MODE, false);
 
         Config {
             server_addr,
@@ -382,4 +325,84 @@ impl Config {
     pub async fn test_router_connectivity(&self, timeout_secs: u64) -> Vec<String> {
         crate::startup::test_router_connectivity(self, timeout_secs).await
     }
+}
+
+fn load_router_configs() -> Vec<RouterConfig> {
+    if let Ok(config_json) = std::env::var(env_vars::ROUTERS_CONFIG) {
+        return serde_json::from_str(&config_json).unwrap_or_else(|error| {
+            tracing::warn!(
+                "Failed to parse ROUTERS_CONFIG: {}. Using empty list.",
+                error
+            );
+            Vec::new()
+        });
+    }
+
+    load_legacy_router_config().into_iter().collect()
+}
+
+fn load_legacy_router_config() -> Option<RouterConfig> {
+    let address = std::env::var(env_vars::ROUTEROS_ADDRESS).ok();
+    let username = string_env_or_default(env_vars::ROUTEROS_USERNAME, defaults::ROUTEROS_USERNAME);
+    let password = string_env_or_default(env_vars::ROUTEROS_PASSWORD, defaults::ROUTEROS_PASSWORD);
+    let password_secret = SecretString::new(password.into_boxed_str());
+
+    if let Some(addr) = address {
+        Some(RouterConfig {
+            name: "default".to_string(),
+            address: addr,
+            username,
+            password: password_secret,
+        })
+    } else {
+        tracing::warn!(
+            "No router configuration found. Service will start but /metrics will be empty."
+        );
+        None
+    }
+}
+
+fn validate_and_deduplicate_routers(routers: Vec<RouterConfig>) -> Vec<RouterConfig> {
+    let validated: Vec<RouterConfig> = routers
+        .into_iter()
+        .filter(|router| match router.validate() {
+            Ok(()) => true,
+            Err(error) => {
+                tracing::error!("Invalid router '{}': {}", router.name, error);
+                tracing::warn!("Skipping invalid router: {}", router.name);
+                false
+            }
+        })
+        .collect();
+
+    let mut seen_names = std::collections::HashSet::new();
+    validated
+        .into_iter()
+        .filter(|router| {
+            if seen_names.contains(&router.name) {
+                tracing::error!(
+                    "Duplicate router name '{}' found. Router names must be unique.",
+                    router.name
+                );
+                false
+            } else {
+                seen_names.insert(router.name.clone());
+                true
+            }
+        })
+        .collect()
+}
+
+fn parse_env_or_default<T>(key: &str, default: T) -> T
+where
+    T: std::str::FromStr,
+{
+    std::env::var(key)
+        .ok()
+        .and_then(|value| value.parse::<T>().ok())
+        .unwrap_or(default)
+}
+
+fn string_env_or_default(key: &str, default: &str) -> String {
+    std::env::var(key).unwrap_or_else(|_| default.to_string())
 }
