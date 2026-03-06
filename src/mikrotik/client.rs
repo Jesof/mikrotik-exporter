@@ -28,6 +28,32 @@ pub(crate) struct MikroTikClient {
     pool: Arc<ConnectionPool>,
 }
 
+#[derive(Default)]
+struct SystemInterfacesGroupData {
+    system: SystemResource,
+    interfaces: Vec<InterfaceStats>,
+}
+
+#[derive(Default)]
+struct ConntrackGroupData {
+    entries: Vec<ConnectionTrackingStats>,
+    complete_ok: bool,
+}
+
+#[derive(Default)]
+struct VpnCertGroupData {
+    wireguard_peers: Vec<WireGuardPeerStats>,
+    certificate_stats: Vec<CertificateStats>,
+    wireguard_ok: bool,
+    certificates_ok: bool,
+}
+
+#[derive(Default)]
+struct FirewallGroupData {
+    rules: Vec<FirewallRuleStats>,
+    complete_ok: bool,
+}
+
 impl MikroTikClient {
     /// Creates a new `MikroTik` client with a shared connection pool
     #[must_use]
@@ -122,18 +148,10 @@ impl MikroTikClient {
             }
         }
 
-        let (system, interfaces) = g1.ok().and_then(Result::ok).unwrap_or_default();
-
-        let (connection_tracking, conntrack_complete_ok) =
-            g2.ok().and_then(Result::ok).unwrap_or((Vec::new(), false));
-
-        let (wireguard_peers, certificate_stats, wireguard_ok, certificates_ok, _) = g3
-            .ok()
-            .and_then(Result::ok)
-            .unwrap_or((Vec::new(), Vec::new(), false, false, false));
-
-        let (firewall_rules, firewall_complete_ok) =
-            g4.ok().and_then(Result::ok).unwrap_or((Vec::new(), false));
+        let system_group = g1.ok().and_then(Result::ok).unwrap_or_default();
+        let conntrack_group = g2.ok().and_then(Result::ok).unwrap_or_default();
+        let vpn_group = g3.ok().and_then(Result::ok).unwrap_or_default();
+        let firewall_group = g4.ok().and_then(Result::ok).unwrap_or_default();
 
         Ok(RouterMetrics {
             router_name: self.config.name.clone(),
@@ -145,41 +163,39 @@ impl MikroTikClient {
                 },
                 conntrack: if !conntrack_ok {
                     FetchState::Failed
-                } else if conntrack_complete_ok {
+                } else if conntrack_group.complete_ok {
                     FetchState::Complete
                 } else {
                     FetchState::Partial
                 },
-                wireguard: if wireguard_ok {
+                wireguard: if vpn_group.wireguard_ok {
                     FetchState::Complete
                 } else {
                     FetchState::Failed
                 },
-                certificates: if certificates_ok {
+                certificates: if vpn_group.certificates_ok {
                     FetchState::Complete
                 } else {
                     FetchState::Failed
                 },
                 firewall: if !firewall_ok {
                     FetchState::Failed
-                } else if firewall_complete_ok {
+                } else if firewall_group.complete_ok {
                     FetchState::Complete
                 } else {
                     FetchState::Partial
                 },
             }),
-            interfaces,
-            system,
-            connection_tracking,
-            wireguard_peers,
-            certificate_stats,
-            firewall_rules,
+            interfaces: system_group.interfaces,
+            system: system_group.system,
+            connection_tracking: conntrack_group.entries,
+            wireguard_peers: vpn_group.wireguard_peers,
+            certificate_stats: vpn_group.certificate_stats,
+            firewall_rules: firewall_group.rules,
         })
     }
 
-    async fn collect_group_system_interfaces(
-        &self,
-    ) -> Result<(SystemResource, Vec<InterfaceStats>)> {
+    async fn collect_group_system_interfaces(&self) -> Result<SystemInterfacesGroupData> {
         let mut guard = self
             .pool
             .get_connection(
@@ -218,13 +234,13 @@ impl MikroTikClient {
 
         drop(guard);
 
-        let system = parse_system(&system_result?);
-        let interfaces = parse_interfaces(&interfaces_result?);
-
-        Ok((system, interfaces))
+        Ok(SystemInterfacesGroupData {
+            system: parse_system(&system_result?),
+            interfaces: parse_interfaces(&interfaces_result?),
+        })
     }
 
-    async fn collect_group_conntrack(&self) -> Result<(Vec<ConnectionTrackingStats>, bool)> {
+    async fn collect_group_conntrack(&self) -> Result<ConntrackGroupData> {
         let mut guard = self
             .pool
             .get_connection(
@@ -277,18 +293,13 @@ impl MikroTikClient {
 
         conntrack_v4.extend(conntrack_v6);
 
-        Ok((conntrack_v4, conntrack_v4_ok && conntrack_v6_ok))
+        Ok(ConntrackGroupData {
+            entries: conntrack_v4,
+            complete_ok: conntrack_v4_ok && conntrack_v6_ok,
+        })
     }
 
-    async fn collect_group_vpn_certs(
-        &self,
-    ) -> Result<(
-        Vec<WireGuardPeerStats>,
-        Vec<CertificateStats>,
-        bool,
-        bool,
-        bool,
-    )> {
+    async fn collect_group_vpn_certs(&self) -> Result<VpnCertGroupData> {
         let mut guard = self
             .pool
             .get_connection(
@@ -326,21 +337,15 @@ impl MikroTikClient {
             )));
         }
 
-        let wireguard_peers = parse_wireguard_peers(&wireguard_peers_result.unwrap_or_default());
-        let certificate_stats = parse_certificates(&certificates_result.unwrap_or_default());
-
-        let complete_ok = wireguard_ok && certificates_ok;
-
-        Ok((
-            wireguard_peers,
-            certificate_stats,
+        Ok(VpnCertGroupData {
+            wireguard_peers: parse_wireguard_peers(&wireguard_peers_result.unwrap_or_default()),
+            certificate_stats: parse_certificates(&certificates_result.unwrap_or_default()),
             wireguard_ok,
             certificates_ok,
-            complete_ok,
-        ))
+        })
     }
 
-    async fn collect_group_firewall(&self) -> Result<(Vec<FirewallRuleStats>, bool)> {
+    async fn collect_group_firewall(&self) -> Result<FirewallGroupData> {
         let mut guard = self
             .pool
             .get_connection(
@@ -500,7 +505,10 @@ impl MikroTikClient {
             && firewall_mangle_v6_ok
             && firewall_raw_v6_ok;
 
-        Ok((firewall_rules, complete_ok))
+        Ok(FirewallGroupData {
+            rules: firewall_rules,
+            complete_ok,
+        })
     }
 
     /// Test connectivity to the router
