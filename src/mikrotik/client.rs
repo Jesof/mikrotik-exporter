@@ -231,6 +231,7 @@ impl MikroTikClient {
             .await;
 
         let success = system_result.is_ok() && interfaces_result.is_ok();
+        let system_count = system_result.as_ref().map(Vec::len).unwrap_or(0);
         let interfaces_count = interfaces_result.as_ref().map(Vec::len).unwrap_or(0);
 
         if !success {
@@ -251,6 +252,21 @@ impl MikroTikClient {
                 );
             }
         }
+
+        // Log if RouterOS returned empty responses (this is the RB5009 bug)
+        if system_count == 0 && system_result.is_ok() {
+            tracing::warn!(
+                "Router '{}' /system/resource/print returned empty response (0 sentences)",
+                self.config.name
+            );
+        }
+        if interfaces_count == 0 && interfaces_result.is_ok() {
+            tracing::warn!(
+                "Router '{}' /interface/print returned empty response (0 sentences) - THIS IS THE BUG",
+                self.config.name
+            );
+        }
+
         self.record_group_result(&mut guard, "system", success)
             .await;
 
@@ -271,14 +287,6 @@ impl MikroTikClient {
 
         let system = parse_system(&system);
         let interfaces = parse_interfaces(&interfaces);
-
-        if interfaces.is_empty() && success {
-            tracing::warn!(
-                "Router '{}' /interface/print returned 0 interfaces (raw response had {} sentences)",
-                self.config.name,
-                interfaces_count
-            );
-        }
 
         Ok(SystemInterfacesGroupData { system, interfaces })
     }
