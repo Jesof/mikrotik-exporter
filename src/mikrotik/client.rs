@@ -240,9 +240,6 @@ impl MikroTikClient {
                 self.config.name
             );
             guard.mark_broken();
-            self.pool
-                .force_close_router_connections(&self.config.address)
-                .await;
         }
 
         self.record_group_result(&mut guard, "system", success)

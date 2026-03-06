@@ -491,30 +491,6 @@ impl ConnectionPool {
             tracing::debug!("Removed {} stale connection state entries", removed);
         }
     }
-
-    /// Force close all connections for a specific router address
-    /// This is used when `RouterOS` returns empty responses repeatedly
-    pub async fn force_close_router_connections(&self, addr: &str) {
-        let mut pool = self.connections.lock().await;
-        let keys_to_remove: Vec<String> = pool
-            .keys()
-            .filter(|key| key.starts_with(addr))
-            .cloned()
-            .collect();
-
-        let removed = keys_to_remove.len();
-        for key in keys_to_remove {
-            pool.remove(&key);
-        }
-
-        if removed > 0 {
-            tracing::info!(
-                "Force closed {} connections for router {} due to empty responses",
-                removed,
-                addr
-            );
-        }
-    }
 }
 
 #[cfg(test)]
