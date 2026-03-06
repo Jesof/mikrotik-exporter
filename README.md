@@ -62,6 +62,8 @@ ROUTEROS_PASSWORD=                          # Legacy: password (default: empty)
 
 If `ROUTERS_CONFIG` is not set, legacy configuration
 `ROUTEROS_ADDRESS/ROUTEROS_USERNAME/ROUTEROS_PASSWORD` is used with router name `default`.
+If `ROUTERS_CONFIG` is present but cannot be parsed, the exporter logs an error and also
+falls back to the legacy single-router variables.
 
 ### Router Connectivity Check at Startup
 
@@ -103,8 +105,14 @@ STARTUP_CONNECTIVITY_TEST=true STRICT_STARTUP_MODE=true ./mikrotik-exporter
 
 Health status policy:
 
-- `healthy`: router has successful scrapes and is below consecutive error threshold.
-- `degraded`: router has scrape errors, too many consecutive connection errors, or has not yet had a successful scrape.
+- `healthy`: router has recent successful scrapes and is below the consecutive error threshold.
+- `degraded`: router has stale scrapes, scrape errors, too many consecutive connection errors, or has not yet had a successful scrape.
+- empty router configuration also returns `degraded` with HTTP `503` so deployments fail loudly.
+
+Observability notes:
+
+- invalid numeric fields returned by `RouterOS` are ignored as `0` and logged at `debug` level.
+- use `RUST_LOG=debug` when troubleshooting unexpected zero values in exported metrics.
 
 ## Deployment
 
