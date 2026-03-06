@@ -179,6 +179,18 @@ impl MetricsRegistry {
             "Number of tracked connections per source address and protocol",
             connection_tracking_count.clone(),
         );
+        let conntrack_active_series = Family::<RouterLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_conntrack_active_series",
+            "Number of active conntrack label series per router",
+            conntrack_active_series.clone(),
+        );
+        let conntrack_update_duration_milliseconds = Family::<RouterLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_conntrack_update_duration_milliseconds",
+            "Duration of conntrack metrics update in milliseconds",
+            conntrack_update_duration_milliseconds.clone(),
+        );
 
         // WireGuard metrics
 
@@ -244,6 +256,8 @@ impl MetricsRegistry {
             connection_pool_size,
             connection_pool_active,
             connection_tracking_count,
+            conntrack_active_series,
+            conntrack_update_duration_milliseconds,
             wireguard_peer_rx_bytes,
             wireguard_peer_tx_bytes,
             wireguard_peer_latest_handshake,
@@ -269,6 +283,7 @@ impl MetricsRegistry {
             certificate_last_seen: Arc::new(DashMap::new()),
             interface_info_last_seen: Arc::new(DashMap::new()),
             last_scrape_success: Arc::new(DashMap::new()),
+            consecutive_scrape_errors: Arc::new(DashMap::new()),
         }
     }
 }

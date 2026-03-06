@@ -33,9 +33,9 @@
 //! ## Backoff Strategy
 //!
 //! Implements exponential backoff for failed connections:
-//! - **0-2 errors**: No backoff, immediate retry
-//! - **3-9 errors**: 2^n seconds delay (max 256 seconds)
-//! - **10+ errors**: 1-hour cooldown period
+//! - **0-1 errors**: No backoff, immediate retry
+//! - **2-4 errors**: 2^n seconds delay (capped at 64 seconds)
+//! - **5+ errors**: 120-second cooldown period
 //!
 //! ## Thread Safety
 //!
@@ -49,6 +49,7 @@
 //! - Background task processes returned connections asynchronously
 //! - Active connection tracking prevents pool starvation
 
+use crate::prelude::{AppError, Result};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -79,10 +80,10 @@ mod backoff {
     pub const LONG_BACKOFF_ERROR_THRESHOLD: u32 = 5; // Reduced from 10
 
     /// Long backoff duration after many consecutive errors (2 minutes)
-    pub const LONG_BACKOFF_DURATION: Duration = Duration::from_secs(120); // Reduced from 600
+    pub const LONG_BACKOFF_DURATION: Duration = Duration::from_secs(120);
 
     /// Maximum exponent for exponential backoff (2^6 = 64 seconds)
-    pub const MAX_BACKOFF_EXPONENT: u32 = 6; // Reduced from 8
+    pub const MAX_BACKOFF_EXPONENT: u32 = 6;
 }
 
 /// Connection pool for reusing `RouterOS` connections
@@ -203,7 +204,7 @@ impl ConnectionState {
             return false;
         }
 
-        // After 10 consecutive errors, require 1 hour wait
+        // After many consecutive errors, require a cooldown wait
         if self.consecutive_errors >= backoff::LONG_BACKOFF_ERROR_THRESHOLD {
             if let Some(last_err) = self.last_error_time {
                 return last_err.elapsed() < backoff::LONG_BACKOFF_DURATION;
@@ -280,7 +281,7 @@ impl ConnectionPool {
         username: &str,
         password: &str,
         group: Option<&str>,
-    ) -> Result<PooledConnectionGuard, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<PooledConnectionGuard> {
         let key = match group {
             Some(g) => format!("{addr}:{username}:{g}"),
             None => format!("{addr}:{username}"),
@@ -303,11 +304,10 @@ impl ConnectionPool {
                     state.consecutive_errors,
                     delay
                 );
-                return Err(format!(
+                return Err(AppError::RouterOs(format!(
                     "Connection to {} temporarily disabled due to {} consecutive errors. Will retry in {:?}",
                     addr, state.consecutive_errors, delay
-                )
-                .into());
+                )));
             }
         }
 

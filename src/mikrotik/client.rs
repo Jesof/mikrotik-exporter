@@ -4,10 +4,11 @@
 //! High-level `MikroTik` client
 
 use crate::config::RouterConfig;
+use crate::prelude::{AppError, Result};
 use secrecy::ExposeSecret;
 use std::sync::Arc;
 
-use super::pool::ConnectionPool;
+use super::pool::{ConnectionPool, PooledConnectionGuard};
 use super::responses::{
     parse_certificates, parse_connection_tracking, parse_firewall_rules, parse_interfaces,
     parse_system, parse_wireguard_peers,
@@ -27,6 +28,45 @@ pub(crate) struct MikroTikClient {
     pool: Arc<ConnectionPool>,
 }
 
+#[derive(Default)]
+struct SystemInterfacesGroupData {
+    system: SystemResource,
+    interfaces: Vec<InterfaceStats>,
+}
+
+#[derive(Default)]
+struct ConntrackGroupData {
+    entries: Vec<ConnectionTrackingStats>,
+    complete_ok: bool,
+}
+
+#[derive(Default)]
+struct VpnCertGroupData {
+    wireguard_peers: Vec<WireGuardPeerStats>,
+    certificate_stats: Vec<CertificateStats>,
+    wireguard_ok: bool,
+    certificates_ok: bool,
+}
+
+#[derive(Default)]
+struct FirewallGroupData {
+    rules: Vec<FirewallRuleStats>,
+    complete_ok: bool,
+}
+
+fn timeout_group_ok<T>(
+    group: &std::result::Result<Result<T>, tokio::time::error::Elapsed>,
+) -> bool {
+    group.as_ref().map(Result::is_ok).unwrap_or(false)
+}
+
+fn failed_group_names(groups: &[(&'static str, bool)]) -> Vec<&'static str> {
+    groups
+        .iter()
+        .filter_map(|(name, ok)| (!*ok).then_some(*name))
+        .collect()
+}
+
 impl MikroTikClient {
     /// Creates a new `MikroTik` client with a shared connection pool
     #[must_use]
@@ -43,9 +83,7 @@ impl MikroTikClient {
     ///
     /// Returns an error if connection, authentication, or data retrieval fails.
     /// On error, metrics are not updated, preserving the last successful values.
-    pub(crate) async fn collect_metrics(
-        &self,
-    ) -> Result<RouterMetrics, Box<dyn std::error::Error + Send + Sync>> {
+    pub(crate) async fn collect_metrics(&self) -> Result<RouterMetrics> {
         use tokio::time::{Duration, timeout};
 
         const COLLECTION_TIMEOUT: Duration = Duration::from_secs(60);
@@ -65,14 +103,12 @@ impl MikroTikClient {
                     COLLECTION_TIMEOUT.as_secs()
                 );
                 tracing::error!("{}", err);
-                Err(err.into())
+                Err(AppError::RouterOs(err))
             }
         }
     }
 
-    async fn collect_parallel(
-        &self,
-    ) -> Result<RouterMetrics, Box<dyn std::error::Error + Send + Sync>> {
+    async fn collect_parallel(&self) -> Result<RouterMetrics> {
         use tokio::time::{Duration, timeout};
 
         const GROUP_SYSTEM_TIMEOUT: Duration = Duration::from_secs(20);
@@ -87,10 +123,10 @@ impl MikroTikClient {
             timeout(GROUP_FIREWALL_TIMEOUT, self.collect_group_firewall()),
         );
 
-        let system_ok = g1.as_ref().map(Result::is_ok).unwrap_or(false);
-        let conntrack_ok = g2.as_ref().map(Result::is_ok).unwrap_or(false);
-        let vpn_ok = g3.as_ref().map(Result::is_ok).unwrap_or(false);
-        let firewall_ok = g4.as_ref().map(Result::is_ok).unwrap_or(false);
+        let system_ok = timeout_group_ok(&g1);
+        let conntrack_ok = timeout_group_ok(&g2);
+        let vpn_ok = timeout_group_ok(&g3);
+        let firewall_ok = timeout_group_ok(&g4);
 
         if system_ok && conntrack_ok && vpn_ok && firewall_ok {
             tracing::debug!(
@@ -98,15 +134,12 @@ impl MikroTikClient {
                 self.config.name
             );
         } else {
-            let failed_groups: Vec<&str> = [
-                (!system_ok).then_some("system/interfaces"),
-                (!conntrack_ok).then_some("connection tracking"),
-                (!vpn_ok).then_some("VPN/certificates"),
-                (!firewall_ok).then_some("firewall"),
-            ]
-            .iter()
-            .filter_map(|&x| x)
-            .collect();
+            let failed_groups = failed_group_names(&[
+                ("system/interfaces", system_ok),
+                ("connection tracking", conntrack_ok),
+                ("VPN/certificates", vpn_ok),
+                ("firewall", firewall_ok),
+            ]);
 
             if !failed_groups.is_empty() {
                 tracing::warn!(
@@ -118,26 +151,17 @@ impl MikroTikClient {
 
             // If system group failed, it's a critical error
             if !system_ok {
-                return Err(format!(
+                return Err(AppError::RouterOs(format!(
                     "Router '{}' critical collection failure - system/interfaces group failed",
                     self.config.name
-                )
-                .into());
+                )));
             }
         }
 
-        let (system, interfaces) = g1.ok().and_then(Result::ok).unwrap_or_default();
-
-        let (connection_tracking, conntrack_complete_ok) =
-            g2.ok().and_then(Result::ok).unwrap_or((Vec::new(), false));
-
-        let (wireguard_peers, certificate_stats, wireguard_ok, certificates_ok, _) = g3
-            .ok()
-            .and_then(Result::ok)
-            .unwrap_or((Vec::new(), Vec::new(), false, false, false));
-
-        let (firewall_rules, firewall_complete_ok) =
-            g4.ok().and_then(Result::ok).unwrap_or((Vec::new(), false));
+        let system_group = g1.ok().and_then(Result::ok).unwrap_or_default();
+        let conntrack_group = g2.ok().and_then(Result::ok).unwrap_or_default();
+        let vpn_group = g3.ok().and_then(Result::ok).unwrap_or_default();
+        let firewall_group = g4.ok().and_then(Result::ok).unwrap_or_default();
 
         Ok(RouterMetrics {
             router_name: self.config.name.clone(),
@@ -149,42 +173,39 @@ impl MikroTikClient {
                 },
                 conntrack: if !conntrack_ok {
                     FetchState::Failed
-                } else if conntrack_complete_ok {
+                } else if conntrack_group.complete_ok {
                     FetchState::Complete
                 } else {
                     FetchState::Partial
                 },
-                wireguard: if wireguard_ok {
+                wireguard: if vpn_group.wireguard_ok {
                     FetchState::Complete
                 } else {
                     FetchState::Failed
                 },
-                certificates: if certificates_ok {
+                certificates: if vpn_group.certificates_ok {
                     FetchState::Complete
                 } else {
                     FetchState::Failed
                 },
                 firewall: if !firewall_ok {
                     FetchState::Failed
-                } else if firewall_complete_ok {
+                } else if firewall_group.complete_ok {
                     FetchState::Complete
                 } else {
                     FetchState::Partial
                 },
             }),
-            interfaces,
-            system,
-            connection_tracking,
-            wireguard_peers,
-            certificate_stats,
-            firewall_rules,
+            interfaces: system_group.interfaces,
+            system: system_group.system,
+            connection_tracking: conntrack_group.entries,
+            wireguard_peers: vpn_group.wireguard_peers,
+            certificate_stats: vpn_group.certificate_stats,
+            firewall_rules: firewall_group.rules,
         })
     }
 
-    async fn collect_group_system_interfaces(
-        &self,
-    ) -> Result<(SystemResource, Vec<InterfaceStats>), Box<dyn std::error::Error + Send + Sync>>
-    {
+    async fn collect_group_system_interfaces(&self) -> Result<SystemInterfacesGroupData> {
         let mut guard = self
             .pool
             .get_connection(
@@ -210,29 +231,23 @@ impl MikroTikClient {
             .await;
 
         let success = system_result.is_ok() && interfaces_result.is_ok();
-        if success {
-            self.pool
-                .record_success(&self.config.address, &self.config.username, Some("system"))
-                .await;
-        } else {
-            guard.mark_broken();
-            self.pool
-                .record_error(&self.config.address, &self.config.username, Some("system"))
-                .await;
-        }
+        self.record_group_result(&mut guard, "system", success)
+            .await;
 
         drop(guard);
 
-        let system = parse_system(&system_result?);
-        let interfaces = parse_interfaces(&interfaces_result?);
-
-        Ok((system, interfaces))
+        Ok(SystemInterfacesGroupData {
+            system: parse_system(&system_result?),
+            interfaces: parse_interfaces(&interfaces_result?),
+        })
     }
 
-    async fn collect_group_conntrack(
-        &self,
-    ) -> Result<(Vec<ConnectionTrackingStats>, bool), Box<dyn std::error::Error + Send + Sync>>
-    {
+    async fn collect_group_conntrack(&self) -> Result<ConntrackGroupData> {
+        const CONNTRACK_COMMANDS: [(&str, &str); 2] = [
+            ("/ip/firewall/connection/print", "ipv4"),
+            ("/ipv6/firewall/connection/print", "ipv6"),
+        ];
+
         let mut guard = self
             .pool
             .get_connection(
@@ -244,63 +259,41 @@ impl MikroTikClient {
             .await?;
 
         let conn = guard.get_mut();
-        let conntrack_v4_result = conn.command("/ip/firewall/connection/print", &[]).await;
-        let conntrack_v6_result = conn.command("/ipv6/firewall/connection/print", &[]).await;
-        let conntrack_v4_ok = conntrack_v4_result.is_ok();
-        let conntrack_v6_ok = conntrack_v6_result.is_ok();
-
-        let success = conntrack_v4_ok || conntrack_v6_ok;
-        if success {
-            self.pool
-                .record_success(
-                    &self.config.address,
-                    &self.config.username,
-                    Some("conntrack"),
-                )
-                .await;
-        } else {
-            guard.mark_broken();
-            self.pool
-                .record_error(
-                    &self.config.address,
-                    &self.config.username,
-                    Some("conntrack"),
-                )
-                .await;
+        let mut conntrack_results = Vec::with_capacity(CONNTRACK_COMMANDS.len());
+        for (path, ip_version) in CONNTRACK_COMMANDS {
+            conntrack_results.push((ip_version, conn.command(path, &[]).await));
         }
+
+        let success = conntrack_results.iter().any(|(_, result)| result.is_ok());
+        self.record_group_result(&mut guard, "conntrack", success)
+            .await;
 
         drop(guard);
 
         if !success {
-            return Err(format!(
+            return Err(AppError::RouterOs(format!(
                 "Router '{}' conntrack collection failed for both IPv4 and IPv6",
                 self.config.name
-            )
-            .into());
+            )));
         }
 
-        let mut conntrack_v4 =
-            parse_connection_tracking(&conntrack_v4_result.unwrap_or_default(), "ipv4");
-        let conntrack_v6 =
-            parse_connection_tracking(&conntrack_v6_result.unwrap_or_default(), "ipv6");
+        let mut entries = Vec::new();
+        let mut complete_ok = true;
+        for (ip_version, result) in conntrack_results {
+            complete_ok &= result.is_ok();
+            entries.extend(parse_connection_tracking(
+                &result.unwrap_or_default(),
+                ip_version,
+            ));
+        }
 
-        conntrack_v4.extend(conntrack_v6);
-
-        Ok((conntrack_v4, conntrack_v4_ok && conntrack_v6_ok))
+        Ok(ConntrackGroupData {
+            entries,
+            complete_ok,
+        })
     }
 
-    async fn collect_group_vpn_certs(
-        &self,
-    ) -> Result<
-        (
-            Vec<WireGuardPeerStats>,
-            Vec<CertificateStats>,
-            bool,
-            bool,
-            bool,
-        ),
-        Box<dyn std::error::Error + Send + Sync>,
-    > {
+    async fn collect_group_vpn_certs(&self) -> Result<VpnCertGroupData> {
         let mut guard = self
             .pool
             .get_connection(
@@ -318,44 +311,38 @@ impl MikroTikClient {
         let certificates_ok = certificates_result.is_ok();
 
         let success = wireguard_ok || certificates_ok;
-        if success {
-            self.pool
-                .record_success(&self.config.address, &self.config.username, Some("vpn"))
-                .await;
-        } else {
-            guard.mark_broken();
-            self.pool
-                .record_error(&self.config.address, &self.config.username, Some("vpn"))
-                .await;
-        }
+        self.record_group_result(&mut guard, "vpn", success).await;
 
         drop(guard);
 
         if !success {
-            return Err(format!(
+            return Err(AppError::RouterOs(format!(
                 "Router '{}' VPN/certificate collection failed",
                 self.config.name
-            )
-            .into());
+            )));
         }
 
-        let wireguard_peers = parse_wireguard_peers(&wireguard_peers_result.unwrap_or_default());
-        let certificate_stats = parse_certificates(&certificates_result.unwrap_or_default());
-
-        let complete_ok = wireguard_ok && certificates_ok;
-
-        Ok((
-            wireguard_peers,
-            certificate_stats,
+        Ok(VpnCertGroupData {
+            wireguard_peers: parse_wireguard_peers(&wireguard_peers_result.unwrap_or_default()),
+            certificate_stats: parse_certificates(&certificates_result.unwrap_or_default()),
             wireguard_ok,
             certificates_ok,
-            complete_ok,
-        ))
+        })
     }
 
-    async fn collect_group_firewall(
-        &self,
-    ) -> Result<(Vec<FirewallRuleStats>, bool), Box<dyn std::error::Error + Send + Sync>> {
+    async fn collect_group_firewall(&self) -> Result<FirewallGroupData> {
+        const FIREWALL_PROPLIST: &str = ".proplist=.id,chain,action,bytes,packets,disabled";
+        const FIREWALL_SECTIONS: [(&str, &str, &str); 8] = [
+            ("/ip/firewall/filter/print", "ipv4", "filter"),
+            ("/ip/firewall/nat/print", "ipv4", "nat"),
+            ("/ip/firewall/mangle/print", "ipv4", "mangle"),
+            ("/ip/firewall/raw/print", "ipv4", "raw"),
+            ("/ipv6/firewall/filter/print", "ipv6", "filter"),
+            ("/ipv6/firewall/nat/print", "ipv6", "nat"),
+            ("/ipv6/firewall/mangle/print", "ipv6", "mangle"),
+            ("/ipv6/firewall/raw/print", "ipv6", "raw"),
+        ];
+
         let mut guard = self
             .pool
             .get_connection(
@@ -368,151 +355,61 @@ impl MikroTikClient {
 
         let conn = guard.get_mut();
 
-        let firewall_filter_v4_result = conn
-            .command(
-                "/ip/firewall/filter/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-        let firewall_nat_v4_result = conn
-            .command(
-                "/ip/firewall/nat/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-        let firewall_mangle_v4_result = conn
-            .command(
-                "/ip/firewall/mangle/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-        let firewall_raw_v4_result = conn
-            .command(
-                "/ip/firewall/raw/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-        let firewall_filter_v6_result = conn
-            .command(
-                "/ipv6/firewall/filter/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-        let firewall_nat_v6_result = conn
-            .command(
-                "/ipv6/firewall/nat/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-        let firewall_mangle_v6_result = conn
-            .command(
-                "/ipv6/firewall/mangle/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-        let firewall_raw_v6_result = conn
-            .command(
-                "/ipv6/firewall/raw/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-
-        let firewall_filter_v4_ok = firewall_filter_v4_result.is_ok();
-        let firewall_nat_v4_ok = firewall_nat_v4_result.is_ok();
-        let firewall_mangle_v4_ok = firewall_mangle_v4_result.is_ok();
-        let firewall_raw_v4_ok = firewall_raw_v4_result.is_ok();
-        let firewall_filter_v6_ok = firewall_filter_v6_result.is_ok();
-        let firewall_nat_v6_ok = firewall_nat_v6_result.is_ok();
-        let firewall_mangle_v6_ok = firewall_mangle_v6_result.is_ok();
-        let firewall_raw_v6_ok = firewall_raw_v6_result.is_ok();
-
-        let success = firewall_filter_v4_ok
-            || firewall_nat_v4_ok
-            || firewall_mangle_v4_ok
-            || firewall_raw_v4_ok
-            || firewall_filter_v6_ok
-            || firewall_nat_v6_ok
-            || firewall_mangle_v6_ok
-            || firewall_raw_v6_ok;
-        if success {
-            self.pool
-                .record_success(
-                    &self.config.address,
-                    &self.config.username,
-                    Some("firewall"),
-                )
-                .await;
-        } else {
-            guard.mark_broken();
-            self.pool
-                .record_error(
-                    &self.config.address,
-                    &self.config.username,
-                    Some("firewall"),
-                )
-                .await;
+        let mut section_results = Vec::with_capacity(FIREWALL_SECTIONS.len());
+        for (path, ip_version, section) in FIREWALL_SECTIONS {
+            section_results.push((
+                ip_version,
+                section,
+                conn.command(path, &[FIREWALL_PROPLIST]).await,
+            ));
         }
+
+        let success = section_results.iter().any(|(_, _, result)| result.is_ok());
+        self.record_group_result(&mut guard, "firewall", success)
+            .await;
 
         drop(guard);
 
         if !success {
-            return Err(format!("Router '{}' firewall collection failed", self.config.name).into());
+            return Err(AppError::RouterOs(format!(
+                "Router '{}' firewall collection failed",
+                self.config.name
+            )));
         }
 
         let mut firewall_rules = Vec::new();
+        let mut complete_ok = true;
+        for (ip_version, section, result) in section_results {
+            complete_ok &= result.is_ok();
+            firewall_rules.extend(parse_firewall_rules(
+                &result.unwrap_or_default(),
+                ip_version,
+                section,
+            ));
+        }
 
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_filter_v4_result.unwrap_or_default(),
-            "ipv4",
-            "filter",
-        ));
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_nat_v4_result.unwrap_or_default(),
-            "ipv4",
-            "nat",
-        ));
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_mangle_v4_result.unwrap_or_default(),
-            "ipv4",
-            "mangle",
-        ));
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_raw_v4_result.unwrap_or_default(),
-            "ipv4",
-            "raw",
-        ));
+        Ok(FirewallGroupData {
+            rules: firewall_rules,
+            complete_ok,
+        })
+    }
 
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_filter_v6_result.unwrap_or_default(),
-            "ipv6",
-            "filter",
-        ));
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_nat_v6_result.unwrap_or_default(),
-            "ipv6",
-            "nat",
-        ));
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_mangle_v6_result.unwrap_or_default(),
-            "ipv6",
-            "mangle",
-        ));
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_raw_v6_result.unwrap_or_default(),
-            "ipv6",
-            "raw",
-        ));
-
-        let complete_ok = firewall_filter_v4_ok
-            && firewall_nat_v4_ok
-            && firewall_mangle_v4_ok
-            && firewall_raw_v4_ok
-            && firewall_filter_v6_ok
-            && firewall_nat_v6_ok
-            && firewall_mangle_v6_ok
-            && firewall_raw_v6_ok;
-
-        Ok((firewall_rules, complete_ok))
+    async fn record_group_result(
+        &self,
+        guard: &mut PooledConnectionGuard,
+        group: &'static str,
+        success: bool,
+    ) {
+        if success {
+            self.pool
+                .record_success(&self.config.address, &self.config.username, Some(group))
+                .await;
+        } else {
+            guard.mark_broken();
+            self.pool
+                .record_error(&self.config.address, &self.config.username, Some(group))
+                .await;
+        }
     }
 
     /// Test connectivity to the router
@@ -529,9 +426,7 @@ impl MikroTikClient {
     /// This method is used internally by the configuration validation system
     /// to test router connectivity during application startup when the
     /// `STARTUP_CONNECTIVITY_TEST` configuration option is enabled.
-    pub(crate) async fn test_connection(
-        &self,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub(crate) async fn test_connection(&self) -> Result<()> {
         use tokio::time::{Duration, timeout};
 
         const TEST_CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
@@ -544,11 +439,11 @@ impl MikroTikClient {
                 self.config.name
             );
             tracing::error!("{}", err);
-            Err(err.into())
+            Err(AppError::RouterOs(err))
         }
     }
 
-    async fn test_connection_real(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn test_connection_real(&self) -> Result<()> {
         let mut guard = self
             .pool
             .get_connection(
@@ -583,6 +478,20 @@ impl MikroTikClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_failed_group_names_returns_only_failed_groups() {
+        let groups = [
+            ("system/interfaces", true),
+            ("connection tracking", false),
+            ("VPN/certificates", true),
+            ("firewall", false),
+        ];
+
+        let failed = failed_group_names(&groups);
+
+        assert_eq!(failed, vec!["connection tracking", "firewall"]);
+    }
 
     #[test]
     fn test_mikrotik_client_creation() {

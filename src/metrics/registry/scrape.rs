@@ -4,6 +4,7 @@
 //! Scrape and registry-level bookkeeping helpers
 
 use crate::metrics::labels::RouterLabels;
+use crate::prelude::{AppError, Result};
 use prometheus_client::encoding::text::encode;
 use std::time::{Duration, Instant};
 
@@ -14,10 +15,11 @@ impl MetricsRegistry {
     ///
     /// # Errors
     /// Returns an error if Prometheus encoding fails.
-    pub async fn encode_metrics(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn encode_metrics(&self) -> Result<String> {
         let registry = self.registry.lock().await;
         let mut buffer = String::new();
-        encode(&mut buffer, &registry)?;
+        encode(&mut buffer, &registry)
+            .map_err(|error| AppError::Metrics(format!("OpenMetrics encode error: {error}")))?;
         Ok(buffer)
     }
 
@@ -34,6 +36,8 @@ impl MetricsRegistry {
             .set(now as i64);
         self.last_scrape_success
             .insert(labels.router.clone(), Instant::now());
+        self.consecutive_scrape_errors
+            .insert(labels.router.clone(), 0);
     }
 
     /// Record scrape success and return gap duration if it exceeds threshold.
@@ -58,18 +62,18 @@ impl MetricsRegistry {
             .last_scrape_success
             .get(&labels.router)
             .map(|r| *r.value());
+        let had_errors = self
+            .consecutive_scrape_errors
+            .get(&labels.router)
+            .is_some_and(|errors| *errors.value() > 0);
+
         self.last_scrape_success.insert(labels.router.clone(), now);
+        self.consecutive_scrape_errors
+            .insert(labels.router.clone(), 0);
 
         match previous {
             Some(previous_time) => {
                 let gap = now.duration_since(previous_time);
-                // Also check if we had many consecutive errors previously
-                let had_errors = if let Some((errors, _)) = self.get_connection_errors(labels) {
-                    errors > 0
-                } else {
-                    false
-                };
-
                 if gap > reset_threshold || had_errors {
                     Some(gap)
                 } else {
@@ -82,6 +86,10 @@ impl MetricsRegistry {
 
     pub fn record_scrape_error(&self, labels: &RouterLabels) {
         self.scrape_errors.get_or_create(labels).inc();
+        self.consecutive_scrape_errors
+            .entry(labels.router.clone())
+            .and_modify(|errors| *errors = errors.saturating_add(1))
+            .or_insert(1);
     }
 
     /// Initialize metrics for a router to zero
@@ -136,13 +144,5 @@ impl MetricsRegistry {
     #[must_use]
     pub fn get_scrape_error_count(&self, labels: &RouterLabels) -> u64 {
         self.scrape_errors.get_or_create(labels).get()
-    }
-
-    /// Get connection errors for a router
-    #[must_use]
-    pub fn get_connection_errors(&self, _labels: &RouterLabels) -> Option<(u32, bool)> {
-        // We need access to the connection pool to get this information
-        // For now, we'll return None and implement this properly later
-        None
     }
 }

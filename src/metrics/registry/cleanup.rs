@@ -245,6 +245,7 @@ impl MetricsRegistry {
             if active_routers.contains(router) {
                 true
             } else {
+                stale_routers.insert(router.clone());
                 for label in set.iter() {
                     self.connection_tracking_count.remove(label);
                     self.conntrack_last_seen.remove(label);
@@ -333,7 +334,11 @@ impl MetricsRegistry {
             self.scrape_last_success_timestamp_seconds
                 .remove(&router_labels);
             self.connection_consecutive_errors.remove(&router_labels);
+            self.conntrack_active_series.remove(&router_labels);
+            self.conntrack_update_duration_milliseconds
+                .remove(&router_labels);
             self.last_scrape_success.remove(router);
+            self.consecutive_scrape_errors.remove(router);
         }
     }
 }

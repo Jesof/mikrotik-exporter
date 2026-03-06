@@ -11,7 +11,7 @@
 //!   - Returns HTTP 200 when all routers are healthy
 //!   - Returns HTTP 503 when any router is degraded
 //!   - Provides detailed status for each router including:
-//!     - Current status (healthy/degraded/unknown)
+//!     - Current status (healthy/degraded)
 //!     - Consecutive connection errors
 //!     - Scrape success history
 //!

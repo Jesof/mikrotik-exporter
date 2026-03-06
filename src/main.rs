@@ -12,7 +12,8 @@
 //! - Runs HTTP server for Prometheus
 
 use mikrotik_exporter::{
-    AppState, Config, ConnectionPool, MetricsRegistry, Result, create_router, start_collection_loop,
+    AppState, Config, ConnectionPool, MetricsRegistry, Result, create_router,
+    run_startup_connectivity_tests, start_collection_loop,
 };
 
 use std::net::SocketAddr;
@@ -32,49 +33,9 @@ async fn main() -> Result<()> {
     // Initialize configuration before creating Tokio runtime
     let config = Config::from_env();
 
-    // Log configuration info
-    tracing::info!(
-        "Loaded configuration for {} router(s)",
-        config.routers.len()
-    );
-    for router in &config.routers {
-        tracing::info!("  - Router '{}' at {}", router.name, router.address);
-    }
+    log_loaded_config(&config);
 
-    // Perform startup connectivity testing if enabled
-    if config.startup_connectivity_test && !config.routers.is_empty() {
-        tracing::info!(
-            "Performing startup connectivity tests (timeout: {}s{})",
-            config.startup_connectivity_timeout_secs,
-            if config.strict_startup_mode {
-                ", strict mode enabled"
-            } else {
-                ""
-            }
-        );
-
-        let failed_routers = config
-            .test_router_connectivity(config.startup_connectivity_timeout_secs)
-            .await;
-
-        if failed_routers.is_empty() {
-            tracing::info!("All router connectivity tests passed");
-        } else {
-            tracing::warn!(
-                "Connectivity test failed for {} router(s): {:?}",
-                failed_routers.len(),
-                failed_routers
-            );
-
-            if config.strict_startup_mode {
-                tracing::error!(
-                    "Exiting due to strict startup mode - {} router(s) are unreachable",
-                    failed_routers.len()
-                );
-                std::process::exit(1);
-            }
-        }
-    }
+    run_startup_connectivity_tests(&config).await?;
 
     // Create metrics registry
     let metrics = MetricsRegistry::new();
@@ -92,60 +53,75 @@ async fn main() -> Result<()> {
     // Graceful shutdown channel
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
-    // Wait for shutdown signals (Ctrl+C or SIGTERM)
-    tokio::spawn({
-        let shutdown_tx = shutdown_tx.clone();
-        async move {
-            #[cfg(unix)]
-            {
-                use tokio::signal::unix::{SignalKind, signal};
-
-                let mut sigterm = match signal(SignalKind::terminate()) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        tracing::warn!("Failed to create SIGTERM handler: {}", e);
-                        // Fallback to just Ctrl+C
-                        if tokio::signal::ctrl_c().await.is_ok() {
-                            tracing::info!("Shutdown signal received (Ctrl+C)");
-                            let _ = shutdown_tx.send(true);
-                        }
-                        return;
-                    }
-                };
-
-                tokio::select! {
-                    _ = tokio::signal::ctrl_c() => {
-                        tracing::info!("Shutdown signal received (Ctrl+C)");
-                    }
-                    _ = sigterm.recv() => {
-                        tracing::info!("Shutdown signal received (SIGTERM)");
-                    }
-                }
-            }
-
-            #[cfg(not(unix))]
-            {
-                if tokio::signal::ctrl_c().await.is_ok() {
-                    tracing::info!("Shutdown signal received (Ctrl+C)");
-                }
-            }
-
-            let _ = shutdown_tx.send(true);
-        }
-    });
+    spawn_shutdown_signal_watcher(shutdown_tx.clone());
 
     // Start periodic background metrics collection
     start_collection_loop(shutdown_rx.clone(), Arc::new(config.clone()), metrics, pool);
 
-    // Create the router
     let app = create_router(state);
 
-    let addr: SocketAddr = config.server_addr.parse().map_err(|e| {
-        tracing::error!("Invalid server address '{}': {}", config.server_addr, e);
+    run_http_server(app, &config.server_addr, shutdown_rx).await
+}
+
+fn log_loaded_config(config: &Config) {
+    tracing::info!(
+        "Loaded configuration for {} router(s)",
+        config.routers.len()
+    );
+    for router in &config.routers {
+        tracing::info!("  - Router '{}' at {}", router.name, router.address);
+    }
+}
+
+fn spawn_shutdown_signal_watcher(shutdown_tx: watch::Sender<bool>) {
+    tokio::spawn(async move {
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{SignalKind, signal};
+
+            let mut sigterm = match signal(SignalKind::terminate()) {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::warn!("Failed to create SIGTERM handler: {}", e);
+                    if tokio::signal::ctrl_c().await.is_ok() {
+                        tracing::info!("Shutdown signal received (Ctrl+C)");
+                        let _ = shutdown_tx.send(true);
+                    }
+                    return;
+                }
+            };
+
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {
+                    tracing::info!("Shutdown signal received (Ctrl+C)");
+                }
+                _ = sigterm.recv() => {
+                    tracing::info!("Shutdown signal received (SIGTERM)");
+                }
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                tracing::info!("Shutdown signal received (Ctrl+C)");
+            }
+        }
+
+        let _ = shutdown_tx.send(true);
+    });
+}
+
+async fn run_http_server(
+    app: axum::Router,
+    server_addr: &str,
+    shutdown_rx: watch::Receiver<bool>,
+) -> Result<()> {
+    let addr: SocketAddr = server_addr.parse().map_err(|e| {
+        tracing::error!("Invalid server address '{}': {}", server_addr, e);
         e
     })?;
 
-    // Setup address for listening
     let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
         tracing::error!("Failed to bind address: {}", e);
         e
@@ -156,7 +132,6 @@ async fn main() -> Result<()> {
     tracing::info!("  - GET /health  - Health check");
     tracing::info!("  - GET /metrics - Prometheus metrics");
 
-    // Start server with graceful shutdown
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {
             let _ = shutdown_rx.clone().changed().await;

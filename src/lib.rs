@@ -98,6 +98,7 @@ mod error;
 mod metrics;
 mod mikrotik;
 pub mod prelude;
+mod startup;
 
 // Re-export commonly used types
 /// Application configuration
@@ -111,6 +112,9 @@ pub use api::{AppState, create_router};
 
 /// Metrics collection loop
 pub use collector::start_collection_loop;
+
+/// Startup connectivity policy and checks
+pub use startup::run_startup_connectivity_tests;
 
 /// Metrics registry and labels
 pub use metrics::{MetricsRegistry, RouterLabels};

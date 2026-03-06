@@ -66,6 +66,8 @@ pub struct MetricsRegistry {
     connection_pool_active: Gauge,
     // connection tracking metrics
     connection_tracking_count: Family<ConntrackLabels, Gauge>,
+    conntrack_active_series: Family<RouterLabels, Gauge>,
+    conntrack_update_duration_milliseconds: Family<RouterLabels, Gauge>,
     // WireGuard metrics
     wireguard_peer_rx_bytes: Family<WireGuardPeerLabels, Gauge>,
     wireguard_peer_tx_bytes: Family<WireGuardPeerLabels, Gauge>,
@@ -98,6 +100,7 @@ pub struct MetricsRegistry {
     certificate_last_seen: Arc<DashMap<CertificateLabels, Instant>>,
     interface_info_last_seen: Arc<DashMap<InterfaceInfoLabels, Instant>>,
     last_scrape_success: Arc<DashMap<String, Instant>>,
+    consecutive_scrape_errors: Arc<DashMap<String, u32>>,
 }
 
 impl Default for MetricsRegistry {
@@ -331,6 +334,130 @@ mod tests {
         assert_eq!(
             registry.interface_tx_bytes.get_or_create(&labels).get(),
             600
+        );
+    }
+
+    #[tokio::test]
+    async fn test_recovery_after_scrape_error_restores_system_and_interface_metrics() {
+        let registry = MetricsRegistry::new();
+
+        let iface_before = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, false);
+        let system_before = SystemResource {
+            uptime: "1d".to_string(),
+            cpu_load: 10,
+            free_memory: 512 * 1024 * 1024,
+            total_memory: 1024 * 1024 * 1024,
+            version: "7.10".to_string(),
+            board_name: "RB750Gr3".to_string(),
+        };
+        let metrics_before = make_router_metrics("router1", vec![iface_before], system_before);
+        registry.update_metrics(&metrics_before);
+
+        let router_label = RouterLabels {
+            router: "router1".to_string(),
+        };
+        let start = std::time::Instant::now();
+        assert!(
+            registry
+                .record_scrape_success_and_check_gap(
+                    &router_label,
+                    start,
+                    std::time::Duration::from_secs(30)
+                )
+                .is_none()
+        );
+
+        let iface_labels = InterfaceLabels {
+            router: "router1".to_string(),
+            id: "*1".to_string(),
+        };
+        assert_eq!(
+            registry
+                .interface_running
+                .get_or_create(&iface_labels)
+                .get(),
+            0
+        );
+        assert_eq!(
+            registry.system_cpu_load.get_or_create(&router_label).get(),
+            10
+        );
+        assert_eq!(
+            registry
+                .interface_rx_bytes
+                .get_or_create(&iface_labels)
+                .get(),
+            1000
+        );
+
+        registry.record_scrape_error(&router_label);
+
+        let iface_after = make_interface("*1", "ether1", "WAN", 1500, 2600, 15, 26, 0, 0, true);
+        let system_after = SystemResource {
+            uptime: "1d1h".to_string(),
+            cpu_load: 55,
+            free_memory: 256 * 1024 * 1024,
+            total_memory: 1024 * 1024 * 1024,
+            version: "7.10".to_string(),
+            board_name: "RB750Gr3".to_string(),
+        };
+        let metrics_after = make_router_metrics("router1", vec![iface_after], system_after);
+
+        let recovered_at = start + std::time::Duration::from_secs(31);
+        assert!(
+            registry
+                .record_scrape_success_and_check_gap(
+                    &router_label,
+                    recovered_at,
+                    std::time::Duration::from_secs(30),
+                )
+                .is_some(),
+            "recovery after error should trigger baseline mode"
+        );
+        registry.update_metrics_baseline(&metrics_after);
+
+        assert_eq!(
+            registry
+                .interface_running
+                .get_or_create(&iface_labels)
+                .get(),
+            1
+        );
+        assert_eq!(
+            registry.system_cpu_load.get_or_create(&router_label).get(),
+            55
+        );
+        assert_eq!(
+            registry
+                .interface_rx_bytes
+                .get_or_create(&iface_labels)
+                .get(),
+            1000,
+            "baseline update must not increment counters"
+        );
+
+        let iface_next = make_interface("*1", "ether1", "WAN", 1700, 2800, 17, 28, 0, 0, true);
+        let system_next = SystemResource {
+            uptime: "1d2h".to_string(),
+            cpu_load: 60,
+            free_memory: 220 * 1024 * 1024,
+            total_memory: 1024 * 1024 * 1024,
+            version: "7.10".to_string(),
+            board_name: "RB750Gr3".to_string(),
+        };
+        let metrics_next = make_router_metrics("router1", vec![iface_next], system_next);
+        registry.update_metrics(&metrics_next);
+
+        assert_eq!(
+            registry
+                .interface_rx_bytes
+                .get_or_create(&iface_labels)
+                .get(),
+            1200
+        );
+        assert_eq!(
+            registry.system_cpu_load.get_or_create(&router_label).get(),
+            60
         );
     }
 
@@ -700,6 +827,76 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_conntrack_observability_metrics_updated() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        let mut metrics = make_router_metrics("router1", vec![iface], system);
+        metrics.connection_tracking = vec![
+            make_conntrack("192.168.1.1", "tcp", 100, "ipv4"),
+            make_conntrack("192.168.1.1", "udp", 50, "ipv4"),
+        ];
+        registry.update_metrics(&metrics);
+
+        let router_labels = RouterLabels {
+            router: "router1".to_string(),
+        };
+
+        assert_eq!(
+            registry
+                .conntrack_active_series
+                .get_or_create(&router_labels)
+                .get(),
+            2
+        );
+        assert!(
+            registry
+                .conntrack_update_duration_milliseconds
+                .get_or_create(&router_labels)
+                .get()
+                >= 0
+        );
+    }
+
+    #[tokio::test]
+    async fn test_conntrack_observability_for_ten_routers() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        for router_index in 0..10 {
+            let router_name = format!("router-{router_index}");
+            let mut metrics =
+                make_router_metrics(&router_name, vec![iface.clone()], system.clone());
+            metrics.connection_tracking = vec![
+                make_conntrack("192.168.1.1", "tcp", 100, "ipv4"),
+                make_conntrack("192.168.1.1", "udp", 50, "ipv4"),
+                make_conntrack("2001:db8::1", "tcp", 20, "ipv6"),
+            ];
+            registry.update_metrics(&metrics);
+
+            let router_labels = RouterLabels {
+                router: router_name,
+            };
+            assert_eq!(
+                registry
+                    .conntrack_active_series
+                    .get_or_create(&router_labels)
+                    .get(),
+                3
+            );
+            assert!(
+                registry
+                    .conntrack_update_duration_milliseconds
+                    .get_or_create(&router_labels)
+                    .get()
+                    >= 0
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn test_conntrack_partial_snapshot_preserves_previous_series() {
         let registry = MetricsRegistry::new();
         let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
@@ -811,6 +1008,61 @@ mod tests {
                 .get(),
             30,
             "Certificate metric should not be removed when certificate fetch failed"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_wireguard_dedup_prefers_larger_traffic_on_equal_handshake() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        let mut metrics = make_router_metrics("router1", vec![iface], system);
+        metrics.wireguard_peers = vec![
+            WireGuardPeerStats {
+                id: "*wg1".to_string(),
+                interface: "wg1".to_string(),
+                name: "peer1".to_string(),
+                comment: String::new(),
+                allowed_address: "10.0.0.2/32".to_string(),
+                endpoint: Some("1.1.1.1:51820".to_string()),
+                rx_bytes: 100,
+                tx_bytes: 200,
+                latest_handshake: Some(5000),
+            },
+            WireGuardPeerStats {
+                id: "*wg1".to_string(),
+                interface: "wg1".to_string(),
+                name: "peer1".to_string(),
+                comment: String::new(),
+                allowed_address: "10.0.0.2/32".to_string(),
+                endpoint: Some("1.1.1.1:51820".to_string()),
+                rx_bytes: 400,
+                tx_bytes: 700,
+                latest_handshake: Some(5000),
+            },
+        ];
+
+        registry.update_metrics(&metrics);
+
+        let labels = WireGuardPeerLabels {
+            router: "router1".to_string(),
+            id: "*wg1".to_string(),
+        };
+
+        assert_eq!(
+            registry
+                .wireguard_peer_rx_bytes
+                .get_or_create(&labels)
+                .get(),
+            400
+        );
+        assert_eq!(
+            registry
+                .wireguard_peer_tx_bytes
+                .get_or_create(&labels)
+                .get(),
+            700
         );
     }
 
@@ -933,6 +1185,25 @@ mod tests {
             registry.system_info.get_or_create(&labels).get(),
             1,
             "system_info should stay 1 when version/board unchanged"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_stale_routers_idempotent() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+        let metrics = make_router_metrics("router-to-clean", vec![iface], system);
+        registry.update_metrics(&metrics);
+
+        let empty_active = std::collections::HashSet::new();
+        registry.cleanup_stale_routers(&empty_active);
+        registry.cleanup_stale_routers(&empty_active);
+
+        let encoded = registry.encode_metrics().await.expect("Failed to encode");
+        assert!(
+            !encoded.contains("router-to-clean"),
+            "cleanup should remove stale router metrics and be idempotent"
         );
     }
 }

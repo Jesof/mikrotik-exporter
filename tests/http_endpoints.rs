@@ -86,6 +86,8 @@ async fn metrics_contains_registered_metric_names() {
     assert!(body.contains("mikrotik_connection_pool_size"));
     assert!(body.contains("mikrotik_connection_pool_active"));
     assert!(body.contains("mikrotik_collection_cycle_duration_milliseconds"));
+    assert!(body.contains("mikrotik_conntrack_active_series"));
+    assert!(body.contains("mikrotik_conntrack_update_duration_milliseconds"));
 }
 
 #[tokio::test]
@@ -292,7 +294,7 @@ async fn health_returns_200_for_empty_config() {
 }
 
 #[tokio::test]
-async fn health_returns_unknown_before_first_scrape() {
+async fn health_returns_degraded_before_first_scrape() {
     let state = make_state(vec![test_router("r1")]);
     let app = create_router(state);
 
@@ -301,8 +303,8 @@ async fn health_returns_unknown_before_first_scrape() {
         .await
         .unwrap();
 
-    // No scrapes yet → router status "unknown", overall "healthy" (unknown != degraded)
-    assert_eq!(resp.status(), StatusCode::OK);
+    // No scrapes yet -> router status degraded, overall degraded.
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
     let body = String::from_utf8(
         resp.into_body()
             .collect()
@@ -314,7 +316,8 @@ async fn health_returns_unknown_before_first_scrape() {
     .unwrap();
 
     let health: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(health["routers"][0]["status"], "unknown");
+    assert_eq!(health["status"], "degraded");
+    assert_eq!(health["routers"][0]["status"], "degraded");
     assert!(
         !health["routers"][0]["has_successful_scrape"]
             .as_bool()

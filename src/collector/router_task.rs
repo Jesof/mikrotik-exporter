@@ -15,8 +15,7 @@
 //! 3. **Active Interface Tracking**: Records which interfaces are currently active
 //! 4. **Metrics Update**: Updates the shared `MetricsRegistry` with new values
 //! 5. **Scrape Recording**: Records success/failure and duration for monitoring
-//! 6. **System Info Caching**: Caches immutable system information (version, board)
-//! 7. **Error Tracking**: Updates connection error count for health monitoring
+//! 6. **Error Tracking**: Updates connection error count for health monitoring
 //!
 //! ## Concurrency Model
 //!
@@ -45,13 +44,10 @@ use crate::mikrotik::{ConnectionPool, MikroTikClient};
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::cache::SystemInfoCache;
-
 pub(super) fn spawn_router_collection(
     router: RouterConfig,
     pool: Arc<ConnectionPool>,
     metrics: MetricsRegistry,
-    system_cache: SystemInfoCache,
     gap_reset_threshold: Duration,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -84,21 +80,8 @@ pub(super) fn spawn_router_collection(
                     metrics.update_metrics(&m);
                 }
                 metrics.record_scrape_duration(&router_label, duration);
-
-                // Cache system info if it's the first time
-                if system_cache.get(&router_name).await.is_none() {
-                    system_cache
-                        .set(router_name.clone(), m.system.clone())
-                        .await;
-                }
-
-                // Update connection error count
-                if let Some((errors, _)) = pool
-                    .get_connection_state(&router.address, &router.username, None)
-                    .await
-                {
-                    metrics.update_connection_errors(&router_label, errors);
-                }
+                update_connection_error_metric(&metrics, pool.as_ref(), &router, &router_label)
+                    .await;
 
                 tracing::debug!(
                     "Collected metrics for router {} in {:.3}s",
@@ -118,14 +101,8 @@ pub(super) fn spawn_router_collection(
                 let duration = start.elapsed().as_secs_f64();
                 metrics.record_scrape_error(&router_label);
                 metrics.record_scrape_duration(&router_label, duration);
-
-                // Update connection error count
-                if let Some((errors, _)) = pool
-                    .get_connection_state(&router.address, &router.username, None)
-                    .await
-                {
-                    metrics.update_connection_errors(&router_label, errors);
-                }
+                update_connection_error_metric(&metrics, pool.as_ref(), &router, &router_label)
+                    .await;
 
                 tracing::warn!(
                     "Failed to collect metrics for {} in {:.3}s: {}",
@@ -137,4 +114,18 @@ pub(super) fn spawn_router_collection(
             }
         }
     })
+}
+
+async fn update_connection_error_metric(
+    metrics: &MetricsRegistry,
+    pool: &ConnectionPool,
+    router: &RouterConfig,
+    router_label: &RouterLabels,
+) {
+    if let Some((errors, _)) = pool
+        .get_connection_state(&router.address, &router.username, None)
+        .await
+    {
+        metrics.update_connection_errors(router_label, errors);
+    }
 }

@@ -3,6 +3,7 @@
 
 //! `RouterOS` wire protocol helpers
 
+use crate::prelude::Result;
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 
@@ -38,9 +39,7 @@ pub fn encode_length(len: usize) -> Vec<u8> {
     }
 }
 
-pub(super) async fn read_length(
-    stream: &mut TcpStream,
-) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+pub(super) async fn read_length(stream: &mut TcpStream) -> Result<usize> {
     let first = stream.read_u8().await?;
     let len = if first & 0x80 == 0 {
         first as usize
