@@ -28,7 +28,6 @@ pub(crate) struct RouterHealth {
 enum RouterStatus {
     Healthy,
     Degraded,
-    Unknown,
 }
 
 impl RouterStatus {
@@ -36,22 +35,19 @@ impl RouterStatus {
         match self {
             RouterStatus::Healthy => "healthy",
             RouterStatus::Degraded => "degraded",
-            RouterStatus::Unknown => "unknown",
         }
     }
 }
 
 fn classify_router_status(
     success_count: u64,
-    error_count: u64,
+    _error_count: u64,
     consecutive_errors: u32,
 ) -> RouterStatus {
     if success_count > 0 && consecutive_errors < HEALTHY_MAX_CONSECUTIVE_ERRORS {
         RouterStatus::Healthy
-    } else if error_count > 0 || consecutive_errors >= HEALTHY_MAX_CONSECUTIVE_ERRORS {
-        RouterStatus::Degraded
     } else {
-        RouterStatus::Unknown
+        RouterStatus::Degraded
     }
 }
 
@@ -127,7 +123,7 @@ mod tests {
         ));
         assert!(matches!(
             classify_router_status(0, 0, 0),
-            RouterStatus::Unknown
+            RouterStatus::Degraded
         ));
     }
 }

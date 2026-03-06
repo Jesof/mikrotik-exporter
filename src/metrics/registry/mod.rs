@@ -66,6 +66,8 @@ pub struct MetricsRegistry {
     connection_pool_active: Gauge,
     // connection tracking metrics
     connection_tracking_count: Family<ConntrackLabels, Gauge>,
+    conntrack_active_series: Family<RouterLabels, Gauge>,
+    conntrack_update_duration_milliseconds: Family<RouterLabels, Gauge>,
     // WireGuard metrics
     wireguard_peer_rx_bytes: Family<WireGuardPeerLabels, Gauge>,
     wireguard_peer_tx_bytes: Family<WireGuardPeerLabels, Gauge>,
@@ -697,6 +699,39 @@ mod tests {
                 .get_or_create(&labels2_icmp)
                 .get(),
             10
+        );
+    }
+
+    #[tokio::test]
+    async fn test_conntrack_observability_metrics_updated() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        let mut metrics = make_router_metrics("router1", vec![iface], system);
+        metrics.connection_tracking = vec![
+            make_conntrack("192.168.1.1", "tcp", 100, "ipv4"),
+            make_conntrack("192.168.1.1", "udp", 50, "ipv4"),
+        ];
+        registry.update_metrics(&metrics);
+
+        let router_labels = RouterLabels {
+            router: "router1".to_string(),
+        };
+
+        assert_eq!(
+            registry
+                .conntrack_active_series
+                .get_or_create(&router_labels)
+                .get(),
+            2
+        );
+        assert!(
+            registry
+                .conntrack_update_duration_milliseconds
+                .get_or_create(&router_labels)
+                .get()
+                >= 0
         );
     }
 

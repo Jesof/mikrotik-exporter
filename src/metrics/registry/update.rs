@@ -242,11 +242,19 @@ impl MetricsRegistry {
     }
 
     fn update_conntrack_metrics(&self, metrics: &RouterMetrics, now: Instant) {
+        let started_at = Instant::now();
+        let router_labels = RouterLabels {
+            router: metrics.router_name.clone(),
+        };
+
         if !metrics.collection_status.conntrack_ok() {
             tracing::debug!(
                 "Skipping conntrack metric update for router {} due to partial collection",
                 metrics.router_name
             );
+            self.conntrack_update_duration_milliseconds
+                .get_or_create(&router_labels)
+                .set(0);
             return;
         }
 
@@ -271,6 +279,7 @@ impl MetricsRegistry {
             .entry(metrics.router_name.clone())
             .or_default();
         let prev_labels = prev_map_entry.value_mut();
+        let active_series_count = current_conntrack.len();
         if metrics.collection_status.conntrack_complete_ok() {
             for stale in prev_labels.difference(&current_conntrack) {
                 self.connection_tracking_count.get_or_create(stale).set(0);
@@ -282,6 +291,16 @@ impl MetricsRegistry {
                 metrics.router_name
             );
         }
+
+        #[allow(clippy::cast_possible_wrap)]
+        self.conntrack_active_series
+            .get_or_create(&router_labels)
+            .set(active_series_count as i64);
+
+        #[allow(clippy::cast_precision_loss)]
+        self.conntrack_update_duration_milliseconds
+            .get_or_create(&router_labels)
+            .set(i64::try_from(started_at.elapsed().as_millis()).unwrap_or(i64::MAX));
     }
 
     fn update_wireguard_metrics(&self, metrics: &RouterMetrics, now: Instant) {
