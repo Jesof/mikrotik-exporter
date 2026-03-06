@@ -231,6 +231,8 @@ impl MikroTikClient {
             .await;
 
         let success = system_result.is_ok() && interfaces_result.is_ok();
+        let interfaces_count = interfaces_result.as_ref().map(Vec::len).unwrap_or(0);
+
         if !success {
             tracing::warn!(
                 "Router '{}' system group failed - system_ok: {}, interfaces_ok: {}",
@@ -238,16 +240,47 @@ impl MikroTikClient {
                 system_result.is_ok(),
                 interfaces_result.is_ok()
             );
+            if let Err(ref e) = system_result {
+                tracing::debug!("Router '{}' system command error: {}", self.config.name, e);
+            }
+            if let Err(ref e) = interfaces_result {
+                tracing::debug!(
+                    "Router '{}' interfaces command error: {}",
+                    self.config.name,
+                    e
+                );
+            }
         }
         self.record_group_result(&mut guard, "system", success)
             .await;
 
         drop(guard);
 
-        Ok(SystemInterfacesGroupData {
-            system: parse_system(&system_result?),
-            interfaces: parse_interfaces(&interfaces_result?),
-        })
+        let system = system_result.map_err(|e| {
+            tracing::warn!("Router '{}' system parse failed: {}", self.config.name, e);
+            e
+        })?;
+        let interfaces = interfaces_result.map_err(|e| {
+            tracing::warn!(
+                "Router '{}' interfaces parse failed: {}",
+                self.config.name,
+                e
+            );
+            e
+        })?;
+
+        let system = parse_system(&system);
+        let interfaces = parse_interfaces(&interfaces);
+
+        if interfaces.is_empty() && success {
+            tracing::warn!(
+                "Router '{}' /interface/print returned 0 interfaces (raw response had {} sentences)",
+                self.config.name,
+                interfaces_count
+            );
+        }
+
+        Ok(SystemInterfacesGroupData { system, interfaces })
     }
 
     async fn collect_group_conntrack(&self) -> Result<ConntrackGroupData> {

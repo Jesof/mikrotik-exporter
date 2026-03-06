@@ -119,6 +119,11 @@ impl RouterOsConnection {
                     if let Some(s) = current.take() {
                         sentences.push(s);
                     }
+                    if sentences.is_empty() {
+                        tracing::warn!(
+                            "RouterOS returned empty response (no data sentences, only !done)"
+                        );
+                    }
                     tracing::trace!("Command complete, {} sentences received", sentences.len());
                     break;
                 }
