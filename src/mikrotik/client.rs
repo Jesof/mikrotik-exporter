@@ -6,6 +6,7 @@
 use crate::config::RouterConfig;
 use crate::prelude::{AppError, Result};
 use secrecy::ExposeSecret;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::pool::{ConnectionPool, PooledConnectionGuard};
@@ -65,6 +66,25 @@ fn failed_group_names(groups: &[(&'static str, bool)]) -> Vec<&'static str> {
         .iter()
         .filter_map(|(name, ok)| (!*ok).then_some(*name))
         .collect()
+}
+
+fn inconsistent_snapshot_error<T>(
+    group: &std::result::Result<Result<T>, tokio::time::error::Elapsed>,
+) -> Option<&str> {
+    if let Ok(Err(AppError::RouterOs(message))) = group
+        && message.contains("inconsistent snapshot")
+    {
+        return Some(message.as_str());
+    }
+    None
+}
+
+fn parse_count_only(sentences: &[HashMap<String, String>]) -> Option<u64> {
+    sentences.iter().find_map(|sentence| {
+        sentence
+            .get("ret")
+            .and_then(|value| value.parse::<u64>().ok())
+    })
 }
 
 impl MikroTikClient {
@@ -156,6 +176,21 @@ impl MikroTikClient {
                     self.config.name
                 )));
             }
+
+            if let Some(inconsistent) = [
+                inconsistent_snapshot_error(&g2),
+                inconsistent_snapshot_error(&g3),
+                inconsistent_snapshot_error(&g4),
+            ]
+            .into_iter()
+            .flatten()
+            .next()
+            {
+                return Err(AppError::RouterOs(format!(
+                    "Router '{}' {}",
+                    self.config.name, inconsistent
+                )));
+            }
         }
 
         let system_group = g1.ok().and_then(Result::ok).unwrap_or_default();
@@ -230,20 +265,18 @@ impl MikroTikClient {
             )
             .await;
 
-        let success = system_result.is_ok() && interfaces_result.is_ok();
         let interfaces_count = interfaces_result.as_ref().map(Vec::len).unwrap_or(0);
+        let empty_interfaces_anomaly = interfaces_count == 0 && interfaces_result.is_ok();
+        let success =
+            system_result.is_ok() && interfaces_result.is_ok() && !empty_interfaces_anomaly;
 
         // Handle empty responses - RouterOS may return !done without data after reconnect
-        if interfaces_count == 0 && interfaces_result.is_ok() {
+        if empty_interfaces_anomaly {
             tracing::warn!(
                 "Router '{}' /interface/print returned empty response, forcing reconnect",
                 self.config.name
             );
             guard.mark_broken();
-            // Record as error to trigger backoff
-            self.pool
-                .record_error(&self.config.address, &self.config.username, Some("system"))
-                .await;
         }
 
         self.record_group_result(&mut guard, "system", success)
@@ -251,11 +284,10 @@ impl MikroTikClient {
 
         drop(guard);
 
-        if interfaces_count == 0 && interfaces_result.is_ok() {
-            return Err(AppError::RouterOs(format!(
-                "Router '{}' returned empty interface list",
-                self.config.name
-            )));
+        if empty_interfaces_anomaly {
+            return Err(AppError::RouterOs(
+                "inconsistent snapshot: /interface/print returned empty response".to_string(),
+            ));
         }
 
         let system = system_result?;
@@ -332,13 +364,30 @@ impl MikroTikClient {
         let conn = guard.get_mut();
         let wireguard_peers_result = conn.command("/interface/wireguard/peers/print", &[]).await;
         let certificates_result = conn.command("/certificate/print", &[".detail"]).await;
+
+        let wireguard_count = if matches!(&wireguard_peers_result, Ok(rows) if rows.is_empty()) {
+            conn.command("/interface/wireguard/peers/print", &["=count-only="])
+                .await
+                .ok()
+                .and_then(|rows| parse_count_only(&rows))
+        } else {
+            None
+        };
+
+        let wireguard_inconsistent = matches!(wireguard_count, Some(value) if value > 0);
         let wireguard_ok = wireguard_peers_result.is_ok();
         let certificates_ok = certificates_result.is_ok();
 
-        let success = wireguard_ok || certificates_ok;
+        let success = (wireguard_ok || certificates_ok) && !wireguard_inconsistent;
         self.record_group_result(&mut guard, "vpn", success).await;
 
         drop(guard);
+
+        if wireguard_inconsistent {
+            return Err(AppError::RouterOs(
+                "inconsistent snapshot: wireguard peers count mismatch".to_string(),
+            ));
+        }
 
         if !success {
             return Err(AppError::RouterOs(format!(
@@ -381,19 +430,39 @@ impl MikroTikClient {
         let conn = guard.get_mut();
 
         let mut section_results = Vec::with_capacity(FIREWALL_SECTIONS.len());
+        let mut inconsistent_sections = Vec::new();
         for (path, ip_version, section) in FIREWALL_SECTIONS {
-            section_results.push((
-                ip_version,
-                section,
-                conn.command(path, &[FIREWALL_PROPLIST]).await,
-            ));
+            let section_result = conn.command(path, &[FIREWALL_PROPLIST]).await;
+
+            if matches!(&section_result, Ok(rows) if rows.is_empty()) {
+                let count = conn
+                    .command(path, &["=count-only="])
+                    .await
+                    .ok()
+                    .and_then(|rows| parse_count_only(&rows))
+                    .unwrap_or(0);
+                if count > 0 {
+                    inconsistent_sections.push(format!("{ip_version}/{section}"));
+                }
+            }
+
+            section_results.push((ip_version, section, section_result));
         }
 
-        let success = section_results.iter().any(|(_, _, result)| result.is_ok());
+        let has_inconsistent_snapshot = !inconsistent_sections.is_empty();
+        let success = section_results.iter().any(|(_, _, result)| result.is_ok())
+            && !has_inconsistent_snapshot;
         self.record_group_result(&mut guard, "firewall", success)
             .await;
 
         drop(guard);
+
+        if has_inconsistent_snapshot {
+            return Err(AppError::RouterOs(format!(
+                "inconsistent snapshot: firewall count mismatch in sections {}",
+                inconsistent_sections.join(",")
+            )));
+        }
 
         if !success {
             return Err(AppError::RouterOs(format!(

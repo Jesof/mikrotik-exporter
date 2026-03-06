@@ -77,10 +77,10 @@ mod backoff {
     pub const MIN_ERRORS_FOR_BACKOFF: u32 = 2; // Reduced from 3
 
     /// Error threshold for long backoff period
-    pub const LONG_BACKOFF_ERROR_THRESHOLD: u32 = 5; // Reduced from 10
+    pub const LONG_BACKOFF_ERROR_THRESHOLD: u32 = 6;
 
-    /// Long backoff duration after many consecutive errors (2 minutes)
-    pub const LONG_BACKOFF_DURATION: Duration = Duration::from_secs(120);
+    /// Long backoff duration after many consecutive errors
+    pub const LONG_BACKOFF_DURATION: Duration = Duration::from_secs(45);
 
     /// Maximum exponent for exponential backoff (2^6 = 64 seconds)
     pub const MAX_BACKOFF_EXPONENT: u32 = 6;
@@ -198,23 +198,30 @@ impl ConnectionState {
         Duration::from_secs(base_delay.min(max_secs))
     }
 
+    fn retry_delay(&self) -> Duration {
+        if self.consecutive_errors >= backoff::LONG_BACKOFF_ERROR_THRESHOLD {
+            backoff::LONG_BACKOFF_DURATION
+        } else {
+            self.backoff_delay()
+        }
+    }
+
+    fn remaining_retry_delay(&self) -> Duration {
+        if let Some(last_error) = self.last_error_time {
+            self.retry_delay().saturating_sub(last_error.elapsed())
+        } else {
+            self.retry_delay()
+        }
+    }
+
     fn should_skip_attempt(&self) -> bool {
         // Skip if we've had many consecutive errors and not enough time has passed
         if self.consecutive_errors < backoff::MIN_ERRORS_FOR_BACKOFF {
             return false;
         }
 
-        // After many consecutive errors, require a cooldown wait
-        if self.consecutive_errors >= backoff::LONG_BACKOFF_ERROR_THRESHOLD {
-            if let Some(last_err) = self.last_error_time {
-                return last_err.elapsed() < backoff::LONG_BACKOFF_DURATION;
-            }
-            return true;
-        }
-
-        // For moderate errors, use exponential backoff
         if let Some(last_error) = self.last_error_time {
-            last_error.elapsed() < self.backoff_delay()
+            last_error.elapsed() < self.retry_delay()
         } else {
             false
         }
@@ -297,7 +304,7 @@ impl ConnectionPool {
                 .or_insert_with(ConnectionState::new);
 
             if state.should_skip_attempt() {
-                let delay = state.backoff_delay();
+                let delay = state.remaining_retry_delay();
                 tracing::info!(
                     "Router {} in backoff mode ({} consecutive errors, next retry in {:?})",
                     addr,
