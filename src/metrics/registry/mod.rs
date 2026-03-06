@@ -816,6 +816,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_wireguard_dedup_prefers_larger_traffic_on_equal_handshake() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        let mut metrics = make_router_metrics("router1", vec![iface], system);
+        metrics.wireguard_peers = vec![
+            WireGuardPeerStats {
+                id: "*wg1".to_string(),
+                interface: "wg1".to_string(),
+                name: "peer1".to_string(),
+                comment: String::new(),
+                allowed_address: "10.0.0.2/32".to_string(),
+                endpoint: Some("1.1.1.1:51820".to_string()),
+                rx_bytes: 100,
+                tx_bytes: 200,
+                latest_handshake: Some(5000),
+            },
+            WireGuardPeerStats {
+                id: "*wg1".to_string(),
+                interface: "wg1".to_string(),
+                name: "peer1".to_string(),
+                comment: String::new(),
+                allowed_address: "10.0.0.2/32".to_string(),
+                endpoint: Some("1.1.1.1:51820".to_string()),
+                rx_bytes: 400,
+                tx_bytes: 700,
+                latest_handshake: Some(5000),
+            },
+        ];
+
+        registry.update_metrics(&metrics);
+
+        let labels = WireGuardPeerLabels {
+            router: "router1".to_string(),
+            id: "*wg1".to_string(),
+        };
+
+        assert_eq!(
+            registry
+                .wireguard_peer_rx_bytes
+                .get_or_create(&labels)
+                .get(),
+            400
+        );
+        assert_eq!(
+            registry
+                .wireguard_peer_tx_bytes
+                .get_or_create(&labels)
+                .get(),
+            700
+        );
+    }
+
+    #[tokio::test]
     async fn test_firewall_partial_snapshot_preserves_previous_rules() {
         let registry = MetricsRegistry::new();
         let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
