@@ -231,6 +231,14 @@ impl MikroTikClient {
             .await;
 
         let success = system_result.is_ok() && interfaces_result.is_ok();
+        if !success {
+            tracing::warn!(
+                "Router '{}' system group failed - system_ok: {}, interfaces_ok: {}",
+                self.config.name,
+                system_result.is_ok(),
+                interfaces_result.is_ok()
+            );
+        }
         self.record_group_result(&mut guard, "system", success)
             .await;
 

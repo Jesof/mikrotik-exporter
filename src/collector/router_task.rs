@@ -64,6 +64,21 @@ pub(super) fn spawn_router_collection(
                 let end = std::time::Instant::now();
                 let duration = end.duration_since(start).as_secs_f64();
 
+                // Sanity check: if router returned NO interfaces but we had them before,
+                // it might be a transient RouterOS API glitch after reconnect.
+                // We treat this as a "soft" error - we don't update metrics but we log it.
+                if m.interfaces.is_empty() {
+                    tracing::warn!(
+                        "Router {} returned no interfaces; treating as collection failure to prevent stale metrics",
+                        router_name
+                    );
+                    metrics.record_scrape_error(&router_label);
+                    metrics.record_scrape_duration(&router_label, duration);
+                    update_connection_error_metric(&metrics, pool.as_ref(), &router, &router_label)
+                        .await;
+                    return;
+                }
+
                 let gap = metrics.record_scrape_success_and_check_gap(
                     &router_label,
                     end,
