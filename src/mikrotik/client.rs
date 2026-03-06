@@ -480,6 +480,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_failed_group_names_returns_only_failed_groups() {
+        let groups = [
+            ("system/interfaces", true),
+            ("connection tracking", false),
+            ("VPN/certificates", true),
+            ("firewall", false),
+        ];
+
+        let failed = failed_group_names(&groups);
+
+        assert_eq!(failed, vec!["connection tracking", "firewall"]);
+    }
+
+    #[test]
     fn test_mikrotik_client_creation() {
         let config = RouterConfig {
             name: "test-router".to_string(),
