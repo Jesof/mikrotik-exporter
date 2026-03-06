@@ -346,6 +346,18 @@ impl MikroTikClient {
     }
 
     async fn collect_group_firewall(&self) -> Result<FirewallGroupData> {
+        const FIREWALL_PROPLIST: &str = ".proplist=.id,chain,action,bytes,packets,disabled";
+        const FIREWALL_SECTIONS: [(&str, &str, &str); 8] = [
+            ("/ip/firewall/filter/print", "ipv4", "filter"),
+            ("/ip/firewall/nat/print", "ipv4", "nat"),
+            ("/ip/firewall/mangle/print", "ipv4", "mangle"),
+            ("/ip/firewall/raw/print", "ipv4", "raw"),
+            ("/ipv6/firewall/filter/print", "ipv6", "filter"),
+            ("/ipv6/firewall/nat/print", "ipv6", "nat"),
+            ("/ipv6/firewall/mangle/print", "ipv6", "mangle"),
+            ("/ipv6/firewall/raw/print", "ipv6", "raw"),
+        ];
+
         let mut guard = self
             .pool
             .get_connection(
@@ -358,72 +370,16 @@ impl MikroTikClient {
 
         let conn = guard.get_mut();
 
-        let firewall_filter_v4_result = conn
-            .command(
-                "/ip/firewall/filter/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-        let firewall_nat_v4_result = conn
-            .command(
-                "/ip/firewall/nat/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-        let firewall_mangle_v4_result = conn
-            .command(
-                "/ip/firewall/mangle/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-        let firewall_raw_v4_result = conn
-            .command(
-                "/ip/firewall/raw/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-        let firewall_filter_v6_result = conn
-            .command(
-                "/ipv6/firewall/filter/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-        let firewall_nat_v6_result = conn
-            .command(
-                "/ipv6/firewall/nat/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-        let firewall_mangle_v6_result = conn
-            .command(
-                "/ipv6/firewall/mangle/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
-        let firewall_raw_v6_result = conn
-            .command(
-                "/ipv6/firewall/raw/print",
-                &[".proplist=.id,chain,action,bytes,packets,disabled"],
-            )
-            .await;
+        let mut section_results = Vec::with_capacity(FIREWALL_SECTIONS.len());
+        for (path, ip_version, section) in FIREWALL_SECTIONS {
+            section_results.push((
+                ip_version,
+                section,
+                conn.command(path, &[FIREWALL_PROPLIST]).await,
+            ));
+        }
 
-        let firewall_filter_v4_ok = firewall_filter_v4_result.is_ok();
-        let firewall_nat_v4_ok = firewall_nat_v4_result.is_ok();
-        let firewall_mangle_v4_ok = firewall_mangle_v4_result.is_ok();
-        let firewall_raw_v4_ok = firewall_raw_v4_result.is_ok();
-        let firewall_filter_v6_ok = firewall_filter_v6_result.is_ok();
-        let firewall_nat_v6_ok = firewall_nat_v6_result.is_ok();
-        let firewall_mangle_v6_ok = firewall_mangle_v6_result.is_ok();
-        let firewall_raw_v6_ok = firewall_raw_v6_result.is_ok();
-
-        let success = firewall_filter_v4_ok
-            || firewall_nat_v4_ok
-            || firewall_mangle_v4_ok
-            || firewall_raw_v4_ok
-            || firewall_filter_v6_ok
-            || firewall_nat_v6_ok
-            || firewall_mangle_v6_ok
-            || firewall_raw_v6_ok;
+        let success = section_results.iter().any(|(_, _, result)| result.is_ok());
         if success {
             self.pool
                 .record_success(
@@ -453,57 +409,15 @@ impl MikroTikClient {
         }
 
         let mut firewall_rules = Vec::new();
-
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_filter_v4_result.unwrap_or_default(),
-            "ipv4",
-            "filter",
-        ));
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_nat_v4_result.unwrap_or_default(),
-            "ipv4",
-            "nat",
-        ));
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_mangle_v4_result.unwrap_or_default(),
-            "ipv4",
-            "mangle",
-        ));
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_raw_v4_result.unwrap_or_default(),
-            "ipv4",
-            "raw",
-        ));
-
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_filter_v6_result.unwrap_or_default(),
-            "ipv6",
-            "filter",
-        ));
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_nat_v6_result.unwrap_or_default(),
-            "ipv6",
-            "nat",
-        ));
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_mangle_v6_result.unwrap_or_default(),
-            "ipv6",
-            "mangle",
-        ));
-        firewall_rules.extend(parse_firewall_rules(
-            &firewall_raw_v6_result.unwrap_or_default(),
-            "ipv6",
-            "raw",
-        ));
-
-        let complete_ok = firewall_filter_v4_ok
-            && firewall_nat_v4_ok
-            && firewall_mangle_v4_ok
-            && firewall_raw_v4_ok
-            && firewall_filter_v6_ok
-            && firewall_nat_v6_ok
-            && firewall_mangle_v6_ok
-            && firewall_raw_v6_ok;
+        let mut complete_ok = true;
+        for (ip_version, section, result) in section_results {
+            complete_ok &= result.is_ok();
+            firewall_rules.extend(parse_firewall_rules(
+                &result.unwrap_or_default(),
+                ip_version,
+                section,
+            ));
+        }
 
         Ok(FirewallGroupData {
             rules: firewall_rules,
