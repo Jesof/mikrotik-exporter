@@ -8,6 +8,7 @@
 //! tracking, `WireGuard`, and certificates.
 
 pub(crate) mod certificates;
+mod common;
 pub(crate) mod conntrack;
 pub(crate) mod firewall;
 pub(crate) mod interfaces;

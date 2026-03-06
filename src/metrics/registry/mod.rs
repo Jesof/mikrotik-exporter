@@ -20,8 +20,8 @@ use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Instant;
 use tokio::sync::Mutex;
+use tokio::time::Instant;
 
 #[derive(Clone, Copy)]
 struct InterfaceSnapshot {
@@ -361,7 +361,7 @@ mod tests {
             registry
                 .record_scrape_success_and_check_gap(
                     &router_label,
-                    start,
+                    start.into(),
                     std::time::Duration::from_secs(30)
                 )
                 .is_none()
@@ -408,7 +408,7 @@ mod tests {
             registry
                 .record_scrape_success_and_check_gap(
                     &router_label,
-                    recovered_at,
+                    recovered_at.into(),
                     std::time::Duration::from_secs(30),
                 )
                 .is_some(),

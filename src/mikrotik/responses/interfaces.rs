@@ -6,6 +6,8 @@
 use crate::mikrotik::types::InterfaceStats;
 use std::collections::HashMap;
 
+use super::common::parse_u64_field;
+
 pub(crate) fn parse_interfaces(sentences: &[HashMap<String, String>]) -> Vec<InterfaceStats> {
     let mut out = Vec::new();
     for s in sentences {
@@ -14,12 +16,12 @@ pub(crate) fn parse_interfaces(sentences: &[HashMap<String, String>]) -> Vec<Int
                 id: id.clone(),
                 name: name.clone(),
                 comment: s.get("comment").cloned().unwrap_or_default(),
-                rx_bytes: s.get("rx-byte").and_then(|v| v.parse().ok()).unwrap_or(0),
-                tx_bytes: s.get("tx-byte").and_then(|v| v.parse().ok()).unwrap_or(0),
-                rx_packets: s.get("rx-packet").and_then(|v| v.parse().ok()).unwrap_or(0),
-                tx_packets: s.get("tx-packet").and_then(|v| v.parse().ok()).unwrap_or(0),
-                rx_errors: s.get("rx-error").and_then(|v| v.parse().ok()).unwrap_or(0),
-                tx_errors: s.get("tx-error").and_then(|v| v.parse().ok()).unwrap_or(0),
+                rx_bytes: parse_u64_field(s, "rx-byte", "interface stats"),
+                tx_bytes: parse_u64_field(s, "tx-byte", "interface stats"),
+                rx_packets: parse_u64_field(s, "rx-packet", "interface stats"),
+                tx_packets: parse_u64_field(s, "tx-packet", "interface stats"),
+                rx_errors: parse_u64_field(s, "rx-error", "interface stats"),
+                tx_errors: parse_u64_field(s, "tx-error", "interface stats"),
                 running: s.get("running").is_some_and(|v| v == "true"),
             });
         }

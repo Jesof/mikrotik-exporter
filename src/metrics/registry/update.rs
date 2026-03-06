@@ -9,9 +9,9 @@ use crate::metrics::labels::{
     WireGuardPeerLabels,
 };
 use crate::metrics::parsers::parse_uptime_to_seconds;
-use crate::mikrotik::{RouterMetrics, WireGuardPeerStats};
+use crate::mikrotik::{InterfaceStats, RouterMetrics, WireGuardPeerStats};
 use std::collections::{HashMap, HashSet};
-use std::time::Instant;
+use tokio::time::Instant;
 
 use super::{InterfaceSnapshot, MetricsRegistry};
 
@@ -47,7 +47,6 @@ impl MetricsRegistry {
         self.update_metrics_with_mode(metrics, UpdateMode::BaselineOnly);
     }
 
-    #[allow(clippy::too_many_lines, clippy::similar_names)]
     fn update_metrics_with_mode(&self, metrics: &RouterMetrics, mode: UpdateMode) {
         let apply_counters = mode.apply_counters();
         let now = Instant::now();
@@ -57,6 +56,136 @@ impl MetricsRegistry {
         self.update_wireguard_metrics(metrics, now);
         self.update_certificate_metrics(metrics, now);
         self.update_firewall_metrics(metrics, now, apply_counters);
+    }
+
+    fn process_interface_counters(
+        &self,
+        iface: &InterfaceStats,
+        labels: &InterfaceLabels,
+        apply_counters: bool,
+    ) {
+        if apply_counters {
+            let is_first_collection = !self.prev_iface.contains_key(labels);
+
+            if is_first_collection {
+                self.interface_rx_bytes
+                    .get_or_create(labels)
+                    .inc_by(iface.rx_bytes);
+                self.interface_tx_bytes
+                    .get_or_create(labels)
+                    .inc_by(iface.tx_bytes);
+                self.interface_rx_packets
+                    .get_or_create(labels)
+                    .inc_by(iface.rx_packets);
+                self.interface_tx_packets
+                    .get_or_create(labels)
+                    .inc_by(iface.tx_packets);
+                self.interface_rx_errors
+                    .get_or_create(labels)
+                    .inc_by(iface.rx_errors);
+                self.interface_tx_errors
+                    .get_or_create(labels)
+                    .inc_by(iface.tx_errors);
+            } else if let Some(snapshot) = self.prev_iface.get(labels) {
+                let snapshot = *snapshot.value();
+                self.interface_rx_bytes
+                    .get_or_create(labels)
+                    .inc_by(counter_delta(iface.rx_bytes, snapshot.rx_bytes));
+                self.interface_tx_bytes
+                    .get_or_create(labels)
+                    .inc_by(counter_delta(iface.tx_bytes, snapshot.tx_bytes));
+                self.interface_rx_packets
+                    .get_or_create(labels)
+                    .inc_by(counter_delta(iface.rx_packets, snapshot.rx_packets));
+                self.interface_tx_packets
+                    .get_or_create(labels)
+                    .inc_by(counter_delta(iface.tx_packets, snapshot.tx_packets));
+                self.interface_rx_errors
+                    .get_or_create(labels)
+                    .inc_by(counter_delta(iface.rx_errors, snapshot.rx_errors));
+                self.interface_tx_errors
+                    .get_or_create(labels)
+                    .inc_by(counter_delta(iface.tx_errors, snapshot.tx_errors));
+            }
+        } else {
+            let _ = self.interface_rx_bytes.get_or_create(labels);
+            let _ = self.interface_tx_bytes.get_or_create(labels);
+            let _ = self.interface_rx_packets.get_or_create(labels);
+            let _ = self.interface_tx_packets.get_or_create(labels);
+            let _ = self.interface_rx_errors.get_or_create(labels);
+            let _ = self.interface_tx_errors.get_or_create(labels);
+        }
+    }
+
+    fn process_interface_gauges(&self, iface: &InterfaceStats, labels: &InterfaceLabels) {
+        self.interface_running
+            .get_or_create(labels)
+            .set(i64::from(iface.running));
+    }
+
+    fn process_interface_info(
+        &self,
+        iface: &InterfaceStats,
+        labels: &InterfaceLabels,
+        info_labels: &InterfaceInfoLabels,
+        now: Instant,
+    ) {
+        self.interface_info.get_or_create(info_labels).set(1);
+        self.prev_iface.insert(
+            labels.clone(),
+            InterfaceSnapshot {
+                rx_bytes: iface.rx_bytes,
+                tx_bytes: iface.tx_bytes,
+                rx_packets: iface.rx_packets,
+                tx_packets: iface.tx_packets,
+                rx_errors: iface.rx_errors,
+                tx_errors: iface.tx_errors,
+            },
+        );
+        self.interface_info_last_seen
+            .insert(info_labels.clone(), now);
+    }
+
+    fn cleanup_stale_interfaces(
+        &self,
+        metrics: &RouterMetrics,
+        current_interfaces: &HashSet<InterfaceLabels>,
+        current_interface_info: &HashMap<InterfaceLabels, InterfaceInfoLabels>,
+    ) {
+        let mut prev_info_entry = self
+            .prev_interface_info
+            .entry(metrics.router_name.clone())
+            .or_default();
+        let prev_map = prev_info_entry.value_mut();
+
+        if current_interfaces.is_empty() && !prev_map.is_empty() {
+            tracing::warn!(
+                "Router {} returned empty interface snapshot; preserving previous interface metrics",
+                metrics.router_name
+            );
+            return;
+        }
+
+        for (labels, info_labels) in prev_map.iter() {
+            if !current_interface_info.contains_key(labels) {
+                self.interface_rx_bytes.remove(labels);
+                self.interface_tx_bytes.remove(labels);
+                self.interface_rx_packets.remove(labels);
+                self.interface_tx_packets.remove(labels);
+                self.interface_rx_errors.remove(labels);
+                self.interface_tx_errors.remove(labels);
+                self.interface_running.remove(labels);
+                self.prev_iface.remove(labels);
+
+                self.interface_info.remove(info_labels);
+                self.interface_info_last_seen.remove(info_labels);
+            } else if let Some(current_info) = current_interface_info.get(labels)
+                && current_info != info_labels
+            {
+                self.interface_info.get_or_create(info_labels).set(0);
+            }
+        }
+        prev_map.clone_from(current_interface_info);
     }
 
     fn update_interface_metrics(
@@ -91,111 +220,14 @@ impl MetricsRegistry {
             current_interfaces.insert(labels.clone());
             current_interface_info.insert(labels.clone(), info_labels.clone());
 
-            if apply_counters {
-                let is_first_collection = !self.prev_iface.contains_key(&labels);
-
-                if is_first_collection {
-                    self.interface_rx_bytes
-                        .get_or_create(&labels)
-                        .inc_by(iface.rx_bytes);
-                    self.interface_tx_bytes
-                        .get_or_create(&labels)
-                        .inc_by(iface.tx_bytes);
-                    self.interface_rx_packets
-                        .get_or_create(&labels)
-                        .inc_by(iface.rx_packets);
-                    self.interface_tx_packets
-                        .get_or_create(&labels)
-                        .inc_by(iface.tx_packets);
-                    self.interface_rx_errors
-                        .get_or_create(&labels)
-                        .inc_by(iface.rx_errors);
-                    self.interface_tx_errors
-                        .get_or_create(&labels)
-                        .inc_by(iface.tx_errors);
-                } else if let Some(snapshot) = self.prev_iface.get(&labels) {
-                    let snapshot = *snapshot.value();
-                    self.interface_rx_bytes
-                        .get_or_create(&labels)
-                        .inc_by(counter_delta(iface.rx_bytes, snapshot.rx_bytes));
-                    self.interface_tx_bytes
-                        .get_or_create(&labels)
-                        .inc_by(counter_delta(iface.tx_bytes, snapshot.tx_bytes));
-                    self.interface_rx_packets
-                        .get_or_create(&labels)
-                        .inc_by(counter_delta(iface.rx_packets, snapshot.rx_packets));
-                    self.interface_tx_packets
-                        .get_or_create(&labels)
-                        .inc_by(counter_delta(iface.tx_packets, snapshot.tx_packets));
-                    self.interface_rx_errors
-                        .get_or_create(&labels)
-                        .inc_by(counter_delta(iface.rx_errors, snapshot.rx_errors));
-                    self.interface_tx_errors
-                        .get_or_create(&labels)
-                        .inc_by(counter_delta(iface.tx_errors, snapshot.tx_errors));
-                }
-            } else {
-                let _ = self.interface_rx_bytes.get_or_create(&labels);
-                let _ = self.interface_tx_bytes.get_or_create(&labels);
-                let _ = self.interface_rx_packets.get_or_create(&labels);
-                let _ = self.interface_tx_packets.get_or_create(&labels);
-                let _ = self.interface_rx_errors.get_or_create(&labels);
-                let _ = self.interface_tx_errors.get_or_create(&labels);
-            }
-
-            self.interface_running
-                .get_or_create(&labels)
-                .set(i64::from(iface.running));
-            self.interface_info.get_or_create(&info_labels).set(1);
-
-            self.prev_iface.insert(
-                labels.clone(),
-                InterfaceSnapshot {
-                    rx_bytes: iface.rx_bytes,
-                    tx_bytes: iface.tx_bytes,
-                    rx_packets: iface.rx_packets,
-                    tx_packets: iface.tx_packets,
-                    rx_errors: iface.rx_errors,
-                    tx_errors: iface.tx_errors,
-                },
-            );
-            self.interface_info_last_seen.insert(info_labels, now);
+            // Process different types of metrics
+            self.process_interface_counters(iface, &labels, apply_counters);
+            self.process_interface_gauges(iface, &labels);
+            self.process_interface_info(iface, &labels, &info_labels, now);
         }
 
-        let mut prev_info_entry = self
-            .prev_interface_info
-            .entry(metrics.router_name.clone())
-            .or_default();
-        let prev_map = prev_info_entry.value_mut();
-
-        if current_interfaces.is_empty() && !prev_map.is_empty() {
-            tracing::warn!(
-                "Router {} returned empty interface snapshot; preserving previous interface metrics",
-                metrics.router_name
-            );
-            return;
-        }
-
-        for (labels, info_labels) in prev_map.iter() {
-            if !current_interface_info.contains_key(labels) {
-                self.interface_rx_bytes.remove(labels);
-                self.interface_tx_bytes.remove(labels);
-                self.interface_rx_packets.remove(labels);
-                self.interface_tx_packets.remove(labels);
-                self.interface_rx_errors.remove(labels);
-                self.interface_tx_errors.remove(labels);
-                self.interface_running.remove(labels);
-                self.prev_iface.remove(labels);
-
-                self.interface_info.remove(info_labels);
-                self.interface_info_last_seen.remove(info_labels);
-            } else if let Some(current_info) = current_interface_info.get(labels)
-                && current_info != info_labels
-            {
-                self.interface_info.get_or_create(info_labels).set(0);
-            }
-        }
-        *prev_map = current_interface_info;
+        // Clean up stale interfaces
+        self.cleanup_stale_interfaces(metrics, &current_interfaces, &current_interface_info);
     }
 
     fn update_system_metrics(&self, metrics: &RouterMetrics) {

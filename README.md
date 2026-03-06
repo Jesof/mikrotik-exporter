@@ -62,6 +62,8 @@ ROUTEROS_PASSWORD=                          # Legacy: password (default: empty)
 
 If `ROUTERS_CONFIG` is not set, legacy configuration
 `ROUTEROS_ADDRESS/ROUTEROS_USERNAME/ROUTEROS_PASSWORD` is used with router name `default`.
+If `ROUTERS_CONFIG` is present but cannot be parsed, the exporter logs an error and also
+falls back to the legacy single-router variables.
 
 ### Router Connectivity Check at Startup
 
@@ -103,8 +105,14 @@ STARTUP_CONNECTIVITY_TEST=true STRICT_STARTUP_MODE=true ./mikrotik-exporter
 
 Health status policy:
 
-- `healthy`: router has successful scrapes and is below consecutive error threshold.
-- `degraded`: router has scrape errors, too many consecutive connection errors, or has not yet had a successful scrape.
+- `healthy`: router has recent successful scrapes and is below the consecutive error threshold.
+- `degraded`: router has stale scrapes, scrape errors, too many consecutive connection errors, or has not yet had a successful scrape.
+- empty router configuration also returns `degraded` with HTTP `503` so deployments fail loudly.
+
+Observability notes:
+
+- invalid numeric fields returned by `RouterOS` are ignored as `0` and logged at `debug` level.
+- use `RUST_LOG=debug` when troubleshooting unexpected zero values in exported metrics.
 
 ## Deployment
 
@@ -144,6 +152,38 @@ cargo test --test integration_tests
 
 # Build
 cargo build --release
+```
+
+### Commit Message Template
+
+This repo follows Conventional Commits style used in recent history:
+
+- `feat:` new feature
+- `fix:` bug fix
+- `refactor:` structural/code cleanup
+- `test:` test changes
+
+Use the repository template from `.gitmessage`:
+
+```bash
+git config commit.template .gitmessage
+```
+
+Example:
+
+```text
+refactor: split modules and refresh architecture docs
+
+Refactor monolithic modules into focused submodules while preserving
+runtime behavior and public API.
+
+- split config loading into config/*.rs submodules
+- split mikrotik client into client/groups modules
+- split pool into ops/guard/types modules
+- split startup into check/policy modules
+- update README architecture tree
+
+No functional behavior changes; tests and lints remain passing.
 ```
 
 To run integration tests, configure connection to a real MikroTik device via environment variables in `.env` file:
@@ -264,6 +304,8 @@ src/
 ├── main.rs                 # Entry point
 ├── prelude.rs              # Re-exports
 ├── startup/                # Startup connectivity policy
+│   ├── check.rs            # Router connectivity checks
+│   └── policy.rs           # Startup mode policy handling
 ├── api/                    # HTTP handlers
 │   ├── health.rs           # Health domain policy
 │   └── handlers/           # HTTP endpoint handlers
@@ -271,6 +313,12 @@ src/
 │   ├── router_task.rs      # Per-router collection task
 │   └── cleanup.rs          # Periodic cleanup task
 ├── config/                 # Configuration loading
+│   ├── defaults.rs         # Default values
+│   ├── env_vars.rs         # Environment variable names
+│   ├── loader.rs           # Env parsing and bootstrap helpers
+│   ├── router.rs           # RouterConfig model + validation
+│   ├── tests.rs            # Config unit tests
+│   └── mod.rs
 ├── error.rs                # Error types
 ├── metrics/                # Prometheus metrics
 │   ├── labels.rs           # Label definitions
@@ -278,9 +326,21 @@ src/
 │   ├── registry/           # Metrics registry (init/update/cleanup/scrape)
 │   └── tests.rs            # Metric tests
 └── mikrotik/               # RouterOS API client
-    ├── client.rs           # Client implementation
+    ├── client/              # Client implementation split by metric groups
+    │   ├── mod.rs           # Client module exports
+    │   └── groups/          # Metric group implementations
+    │       ├── common.rs    # Shared parsing helpers
+    │       ├── conntrack.rs # Connection tracking collection
+    │       ├── firewall.rs  # Firewall-related collection
+    │       ├── mod.rs       # Group orchestration
+    │       ├── system.rs    # System/resource collection
+    │       └── vpn.rs       # WireGuard/certificates collection
     ├── connection/         # Connection handling (auth/protocol)
-    ├── pool.rs             # Connection pool
+    ├── pool/               # Connection pool
+    │   ├── guard.rs         # RAII guard
+    │   ├── ops.rs           # Pool operations
+    │   ├── types.rs         # Internal state
+    │   └── mod.rs
     ├── responses/          # Response parsers
     ├── types.rs            # Type definitions
     └── mod.rs              # Module exports

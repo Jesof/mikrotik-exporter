@@ -81,7 +81,7 @@ pub(super) fn spawn_router_collection(
 
                 let gap = metrics.record_scrape_success_and_check_gap(
                     &router_label,
-                    end,
+                    end.into(),
                     gap_reset_threshold,
                 );
                 if let Some(gap_duration) = gap {

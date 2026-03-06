@@ -6,6 +6,8 @@
 use crate::mikrotik::types::FirewallRuleStats;
 use std::collections::HashMap;
 
+use super::common::parse_u64_field;
+
 /// Parse firewall rules from `RouterOS` API responses
 ///
 /// # Arguments
@@ -37,8 +39,8 @@ pub(crate) fn parse_firewall_rules(
                 comment: s.get("comment").cloned().unwrap_or_default(),
                 chain: chain.clone(),
                 action: action.clone(),
-                bytes: s.get("bytes").and_then(|v| v.parse().ok()).unwrap_or(0),
-                packets: s.get("packets").and_then(|v| v.parse().ok()).unwrap_or(0),
+                bytes: parse_u64_field(s, "bytes", "firewall rules"),
+                packets: parse_u64_field(s, "packets", "firewall rules"),
                 ip_version: ip_version.to_string(),
                 section: section.to_string(),
             });

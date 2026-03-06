@@ -134,7 +134,9 @@ pub fn start_collection_loop(
 
             // Wait for all collection tasks to complete
             for task in tasks {
-                let _ = task.await;
+                if let Err(error) = task.await {
+                    tracing::error!("Router collection task failed to join: {}", error);
+                }
             }
 
             // Update pool statistics after all routers processed
