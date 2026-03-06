@@ -27,6 +27,15 @@ impl UpdateMode {
     }
 }
 
+#[inline]
+fn counter_delta(current: u64, previous: u64) -> u64 {
+    if current >= previous {
+        current - previous
+    } else {
+        current
+    }
+}
+
 impl MetricsRegistry {
     /// Update metrics from collected router data
     pub fn update_metrics(&self, metrics: &RouterMetrics) {
@@ -106,48 +115,24 @@ impl MetricsRegistry {
                         .inc_by(iface.tx_errors);
                 } else if let Some(snapshot) = self.prev_iface.get(&labels) {
                     let snapshot = *snapshot.value();
-                    self.interface_rx_bytes.get_or_create(&labels).inc_by(
-                        if iface.rx_bytes >= snapshot.rx_bytes {
-                            iface.rx_bytes - snapshot.rx_bytes
-                        } else {
-                            iface.rx_bytes
-                        },
-                    );
-                    self.interface_tx_bytes.get_or_create(&labels).inc_by(
-                        if iface.tx_bytes >= snapshot.tx_bytes {
-                            iface.tx_bytes - snapshot.tx_bytes
-                        } else {
-                            iface.tx_bytes
-                        },
-                    );
-                    self.interface_rx_packets.get_or_create(&labels).inc_by(
-                        if iface.rx_packets >= snapshot.rx_packets {
-                            iface.rx_packets - snapshot.rx_packets
-                        } else {
-                            iface.rx_packets
-                        },
-                    );
-                    self.interface_tx_packets.get_or_create(&labels).inc_by(
-                        if iface.tx_packets >= snapshot.tx_packets {
-                            iface.tx_packets - snapshot.tx_packets
-                        } else {
-                            iface.tx_packets
-                        },
-                    );
-                    self.interface_rx_errors.get_or_create(&labels).inc_by(
-                        if iface.rx_errors >= snapshot.rx_errors {
-                            iface.rx_errors - snapshot.rx_errors
-                        } else {
-                            iface.rx_errors
-                        },
-                    );
-                    self.interface_tx_errors.get_or_create(&labels).inc_by(
-                        if iface.tx_errors >= snapshot.tx_errors {
-                            iface.tx_errors - snapshot.tx_errors
-                        } else {
-                            iface.tx_errors
-                        },
-                    );
+                    self.interface_rx_bytes
+                        .get_or_create(&labels)
+                        .inc_by(counter_delta(iface.rx_bytes, snapshot.rx_bytes));
+                    self.interface_tx_bytes
+                        .get_or_create(&labels)
+                        .inc_by(counter_delta(iface.tx_bytes, snapshot.tx_bytes));
+                    self.interface_rx_packets
+                        .get_or_create(&labels)
+                        .inc_by(counter_delta(iface.rx_packets, snapshot.rx_packets));
+                    self.interface_tx_packets
+                        .get_or_create(&labels)
+                        .inc_by(counter_delta(iface.tx_packets, snapshot.tx_packets));
+                    self.interface_rx_errors
+                        .get_or_create(&labels)
+                        .inc_by(counter_delta(iface.rx_errors, snapshot.rx_errors));
+                    self.interface_tx_errors
+                        .get_or_create(&labels)
+                        .inc_by(counter_delta(iface.tx_errors, snapshot.tx_errors));
                 }
             } else {
                 let _ = self.interface_rx_bytes.get_or_create(&labels);
@@ -498,21 +483,13 @@ impl MetricsRegistry {
                 } else if let Some(prev_entry) = self.prev_firewall_rules.get(&labels) {
                     let (prev_bytes, prev_packets) = *prev_entry.value();
 
-                    self.firewall_rule_bytes.get_or_create(&labels).inc_by(
-                        if rule.bytes >= prev_bytes {
-                            rule.bytes - prev_bytes
-                        } else {
-                            rule.bytes
-                        },
-                    );
+                    self.firewall_rule_bytes
+                        .get_or_create(&labels)
+                        .inc_by(counter_delta(rule.bytes, prev_bytes));
 
-                    self.firewall_rule_packets.get_or_create(&labels).inc_by(
-                        if rule.packets >= prev_packets {
-                            rule.packets - prev_packets
-                        } else {
-                            rule.packets
-                        },
-                    );
+                    self.firewall_rule_packets
+                        .get_or_create(&labels)
+                        .inc_by(counter_delta(rule.packets, prev_packets));
                 }
             } else {
                 let _ = self.firewall_rule_bytes.get_or_create(&labels);
