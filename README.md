@@ -146,6 +146,38 @@ cargo test --test integration_tests
 cargo build --release
 ```
 
+### Commit Message Template
+
+This repo follows Conventional Commits style used in recent history:
+
+- `feat:` new feature
+- `fix:` bug fix
+- `refactor:` structural/code cleanup
+- `test:` test changes
+
+Use the repository template from `.gitmessage`:
+
+```bash
+git config commit.template .gitmessage
+```
+
+Example:
+
+```text
+refactor: split modules and refresh architecture docs
+
+Refactor monolithic modules into focused submodules while preserving
+runtime behavior and public API.
+
+- split config loading into config/*.rs submodules
+- split mikrotik client into client/groups modules
+- split pool into ops/guard/types modules
+- split startup into check/policy modules
+- update README architecture tree
+
+No functional behavior changes; tests and lints remain passing.
+```
+
 To run integration tests, configure connection to a real MikroTik device via environment variables in `.env` file:
 
 ```bash

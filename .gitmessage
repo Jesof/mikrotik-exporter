@@ -1,0 +1,27 @@
+# commit subject: one line, imperative, <=72 chars
+#
+# Examples:
+#   refactor: split modules and refresh architecture docs
+#   fix: validate snapshots and speed up recovery
+#   feat: improve startup resilience diagnostics
+
+<type>: <summary>
+
+# Newline
+
+# Body (optional, one sentence of why)
+#
+# Refactor monolithic modules into focused submodules while preserving
+# runtime behavior and public API.
+
+# Affected areas
+
+- 
+
+# Validation summary
+
+- tests: cargo test
+- lints: cargo clippy --all-targets --all-features --locked -- -W clippy::pedantic ...
+- formatting: cargo fmt
+
+# End file. Leave this block to preserve your history style.
