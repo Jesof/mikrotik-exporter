@@ -231,44 +231,15 @@ impl MikroTikClient {
             .await;
 
         let success = system_result.is_ok() && interfaces_result.is_ok();
-        let system_count = system_result.as_ref().map(Vec::len).unwrap_or(0);
         let interfaces_count = interfaces_result.as_ref().map(Vec::len).unwrap_or(0);
 
-        if !success {
-            tracing::warn!(
-                "Router '{}' system group failed - system_ok: {}, interfaces_ok: {}",
-                self.config.name,
-                system_result.is_ok(),
-                interfaces_result.is_ok()
-            );
-            if let Err(ref e) = system_result {
-                tracing::debug!("Router '{}' system command error: {}", self.config.name, e);
-            }
-            if let Err(ref e) = interfaces_result {
-                tracing::debug!(
-                    "Router '{}' interfaces command error: {}",
-                    self.config.name,
-                    e
-                );
-            }
-        }
-
-        // Log if RouterOS returned empty responses (this is the RB5009 bug)
-        if system_count == 0 && system_result.is_ok() {
-            tracing::warn!(
-                "Router '{}' /system/resource/print returned empty response (0 sentences)",
-                self.config.name
-            );
-        }
+        // Handle empty responses - RouterOS may return !done without data after reconnect
         if interfaces_count == 0 && interfaces_result.is_ok() {
             tracing::warn!(
-                "Router '{}' /interface/print returned empty response (0 sentences) - forcing reconnect",
+                "Router '{}' /interface/print returned empty response, forcing reconnect",
                 self.config.name
             );
-            // This is the RB5009 bug - RouterOS returns !done without data
-            // Mark connection as broken to force reconnect on next attempt
             guard.mark_broken();
-            // Also force close ALL connections for this router to ensure clean state
             self.pool
                 .force_close_router_connections(&self.config.address)
                 .await;
@@ -279,26 +250,15 @@ impl MikroTikClient {
 
         drop(guard);
 
-        // If interfaces returned empty response, treat as error to trigger reconnect
         if interfaces_count == 0 && interfaces_result.is_ok() {
             return Err(AppError::RouterOs(format!(
-                "Router '{}' /interface/print returned empty response - connection may be stale",
+                "Router '{}' returned empty interface list",
                 self.config.name
             )));
         }
 
-        let system = system_result.map_err(|e| {
-            tracing::warn!("Router '{}' system parse failed: {}", self.config.name, e);
-            e
-        })?;
-        let interfaces = interfaces_result.map_err(|e| {
-            tracing::warn!(
-                "Router '{}' interfaces parse failed: {}",
-                self.config.name,
-                e
-            );
-            e
-        })?;
+        let system = system_result?;
+        let interfaces = interfaces_result?;
 
         let system = parse_system(&system);
         let interfaces = parse_interfaces(&interfaces);
