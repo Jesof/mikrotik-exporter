@@ -736,6 +736,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_conntrack_observability_for_ten_routers() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        for router_index in 0..10 {
+            let router_name = format!("router-{router_index}");
+            let mut metrics =
+                make_router_metrics(&router_name, vec![iface.clone()], system.clone());
+            metrics.connection_tracking = vec![
+                make_conntrack("192.168.1.1", "tcp", 100, "ipv4"),
+                make_conntrack("192.168.1.1", "udp", 50, "ipv4"),
+                make_conntrack("2001:db8::1", "tcp", 20, "ipv6"),
+            ];
+            registry.update_metrics(&metrics);
+
+            let router_labels = RouterLabels {
+                router: router_name,
+            };
+            assert_eq!(
+                registry
+                    .conntrack_active_series
+                    .get_or_create(&router_labels)
+                    .get(),
+                3
+            );
+            assert!(
+                registry
+                    .conntrack_update_duration_milliseconds
+                    .get_or_create(&router_labels)
+                    .get()
+                    >= 0
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn test_conntrack_partial_snapshot_preserves_previous_series() {
         let registry = MetricsRegistry::new();
         let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
