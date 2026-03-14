@@ -67,7 +67,7 @@ jobs:
       deny_config: ${{ steps.filter.outputs.deny_config }}
     steps:
       - uses: actions/checkout@v6
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
