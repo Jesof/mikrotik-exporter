@@ -65,7 +65,7 @@ md5 = "0.8.0"
 hex = "0.4"
 
 # Prometheus metrics
-prometheus-client = "0.24.0"
+prometheus-client = "0.25.0"
 
 # Secure credential handling
 secrecy = { version = "0.10.0", features = ["serde"] }
