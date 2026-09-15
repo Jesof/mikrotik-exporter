@@ -121,17 +121,20 @@ jobs:
         env:
           IMAGE: ${{ needs.prepare.outputs.image }}
           DIGEST: ${{ steps.push.outputs.digest }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
+          docker pull --platform "$PLATFORM" "$IMAGE@$DIGEST"
           trivy image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 "$IMAGE@$DIGEST"
       - name: Verify published image configuration
         if: inputs.push
         env:
           IMAGE: ${{ needs.prepare.outputs.image }}
           DIGEST: ${{ steps.push.outputs.digest }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
-          docker pull "$IMAGE@$DIGEST"
+          docker pull --platform "$PLATFORM" "$IMAGE@$DIGEST"
           test "$(docker inspect --format '{{.Config.User}}' "$IMAGE@$DIGEST")" = '1000:1000'
           docker run --rm --entrypoint /bin/sh "$IMAGE@$DIGEST" -c 'test -x /app/mikrotik-exporter'
       - name: Export digest
