@@ -22,6 +22,11 @@ fn make_state(routers: Vec<RouterConfig>) -> Arc<AppState> {
         strict_startup_mode: false,
     };
     let metrics = MetricsRegistry::new();
+    for router in &config.routers {
+        metrics.initialize_router_metrics(&RouterLabels {
+            router: router.name.clone(),
+        });
+    }
     let pool = Arc::new(ConnectionPool::new());
     Arc::new(AppState {
         config,

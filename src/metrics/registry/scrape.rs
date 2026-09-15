@@ -97,12 +97,18 @@ impl MetricsRegistry {
     ///
     /// This ensures that counters like `scrape_success` and `scrape_errors`
     /// exist from the start, allowing Prometheus to calculate rates correctly
-    /// even before the first success or error occurs.
+    /// even before the first success or error occurs. It also pre-creates the
+    /// per-router `conntrack` gauges so their families are rendered (with zero
+    /// values) before the first conntrack update.
     pub fn initialize_router_metrics(&self, labels: &RouterLabels) {
         let _ = self.scrape_success.get_or_create(labels);
         let _ = self.scrape_errors.get_or_create(labels);
         let _ = self.scrape_duration_milliseconds.get_or_create(labels);
         let _ = self.connection_consecutive_errors.get_or_create(labels);
+        let _ = self.conntrack_active_series.get_or_create(labels);
+        let _ = self
+            .conntrack_update_duration_milliseconds
+            .get_or_create(labels);
     }
 
     pub fn record_scrape_duration(&self, labels: &RouterLabels, duration_secs: f64) {
