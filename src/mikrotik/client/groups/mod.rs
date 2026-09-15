@@ -39,7 +39,7 @@ pub(crate) async fn collect_group_firewall(
 pub(crate) fn timeout_group_ok<T>(
     group: &std::result::Result<Result<T>, tokio::time::error::Elapsed>,
 ) -> bool {
-    group.as_ref().map(Result::is_ok).unwrap_or(false)
+    group.as_ref().is_ok_and(Result::is_ok)
 }
 
 pub(crate) fn failed_group_names(groups: &[(&'static str, bool)]) -> Vec<&'static str> {

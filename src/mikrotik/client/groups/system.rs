@@ -35,7 +35,7 @@ pub(crate) async fn collect_group_system_interfaces(
         )
         .await;
 
-    let interfaces_count = interfaces_result.as_ref().map(Vec::len).unwrap_or(0);
+    let interfaces_count = interfaces_result.as_ref().map_or(0, Vec::len);
     let empty_interfaces_anomaly = interfaces_count == 0 && interfaces_result.is_ok();
     let success = system_result.is_ok() && interfaces_result.is_ok() && !empty_interfaces_anomaly;
 
