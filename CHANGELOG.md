@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-15
+
 ### Added
 - Added configurable gap reset threshold via `GAP_RESET_THRESHOLD_SECONDS` environment variable
 - Enhanced connection pool backoff strategy for faster recovery after network outages
