@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- CI runs on pull requests, schedules, manual dispatches, and `main` pushes instead of repeating
+  the full quality suite on every feature-branch push.
+- Release recovery is repeatable for an existing tag, and release images expose exact, minor-line,
+  and major-line tags in addition to the immutable source-SHA tag; `latest` remains the checked
+  `main` image.
+
 ## [0.4.0] - 2026-09-15
 
 ### Added

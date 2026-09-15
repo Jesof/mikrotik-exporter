@@ -173,7 +173,15 @@ jobs:
           tags=(--tag "$IMAGE:sha-$SOURCE_SHA")
           if [[ -n "$RELEASE_TAG" ]]; then
             [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
-            tags+=(--tag "$IMAGE:$RELEASE_TAG" --tag "$IMAGE:${RELEASE_TAG#v}")
+            version=${RELEASE_TAG#v}
+            minor=${version%.*}
+            major=${version%%.*}
+            tags+=(
+              --tag "$IMAGE:$RELEASE_TAG"
+              --tag "$IMAGE:$version"
+              --tag "$IMAGE:$minor"
+              --tag "$IMAGE:$major"
+            )
           else
             [[ "$GITHUB_REF" == refs/heads/main && "$GITHUB_EVENT_NAME" == push ]]
             tags+=(--tag "$IMAGE:main" --tag "$IMAGE:latest")

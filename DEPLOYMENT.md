@@ -13,7 +13,21 @@ bash build-docker.sh mikrotik-exporter:local
 ```
 
 The script only builds an image; it does not start containers, contact routers, or publish images.
-For production, choose a tested released image and pin its digest instead of relying on `latest`.
+For production, choose a tested released image. Use an exact version or digest when an automated
+patch update is not acceptable; `:0.4` is the convenient default for routine patch updates.
+
+Published GHCR tags have different stability guarantees:
+
+| Tag | Meaning | Recommended use |
+| --- | --- | --- |
+| `:0.4.0` | Exact release | Reproducible deployments without a digest |
+| `:0.4` | Newest patch in the 0.4 line | Recommended default for routine updates |
+| `:0` | Newest pre-1.0 release in the 0.x line | Only when minor-line changes are acceptable |
+| `:latest` | Newest stable release from `main` | Local evaluation, not production |
+| `@sha256:...` | Exact published image manifest | Highest reproducibility and rollback safety |
+| `:main` | Current checked `main` build | Development only |
+
+Release tags, including `:0.4`, are rebuilt only from verified release commits.
 
 Create a private `exporter.env` containing `SERVER_ADDR=0.0.0.0:9090`, the router JSON, and any
 other settings from [.env.example](.env.example). Docker `--env-file` expects the JSON value

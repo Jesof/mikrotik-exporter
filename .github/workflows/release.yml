@@ -210,6 +210,7 @@ jobs:
         with:
           subject-path: artifacts/*
       - name: Create release for the verified existing tag
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.verify.outputs.tag }}
@@ -218,8 +219,12 @@ jobs:
           set -euo pipefail
           remote_sha=$(git ls-remote origin "refs/tags/$RELEASE_TAG" "refs/tags/$RELEASE_TAG^{}" | sort -k2 | tail -n 1 | cut -f1)
           [[ "$remote_sha" == "$SOURCE_SHA" ]]
-          gh release create "$RELEASE_TAG" --verify-tag --target "$SOURCE_SHA" \
-            --title "$RELEASE_TAG" --generate-notes -- artifacts/*
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" artifacts/* --clobber
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --target "$SOURCE_SHA" \
+              --title "$RELEASE_TAG" --generate-notes -- artifacts/*
+          fi
 
   docker:
     name: Publish release image
