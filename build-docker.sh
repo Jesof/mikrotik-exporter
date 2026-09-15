@@ -1,14 +1,10 @@
-# Build the Docker image
-docker build -t ghcr.io/jesof/mikrotik-exporter:latest .
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Run locally for testing
-docker run --rm -p 9090:9090 \
-  -e ROUTERS_CONFIG='[{"name":"test","address":"192.168.88.1:8728","username":"admin","password":"admin"}]' \
-  ghcr.io/jesof/mikrotik-exporter:latest
+if [[ $# -gt 1 || ${1:-} == -* ]]; then
+    printf 'Usage: bash build-docker.sh [local-image-tag]\n' >&2
+    exit 2
+fi
 
-# Tag for version
-docker tag ghcr.io/jesof/mikrotik-exporter:latest ghcr.io/jesof/mikrotik-exporter:v0.1.0
-
-# Push to registry (requires authentication)
-docker push ghcr.io/jesof/mikrotik-exporter:latest
-docker push ghcr.io/jesof/mikrotik-exporter:v0.1.0
+root=$(dirname -- "${BASH_SOURCE[0]}")
+docker build --tag "${1:-mikrotik-exporter:local}" "$root"

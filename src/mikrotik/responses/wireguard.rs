@@ -1,386 +1,138 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! `WireGuard` metrics collection for `MikroTik` routers
-//!
-//! This module implements parsing of `WireGuard` interface and peer information
-//! from `RouterOS` API responses and structures for storing the parsed data.
-//!
-//! For peer identification, we use `.id` as the primary key.
-
+use super::common::{parse_u64_field, required_field};
+use crate::metrics::parsers::parse_uptime_to_seconds;
 use crate::mikrotik::types::WireGuardPeerStats;
+use crate::prelude::{AppError, Result};
 use std::collections::HashMap;
 use std::time::SystemTime;
 
-use super::common::parse_u64_field;
-
-/// Parse `WireGuard` peer information from `RouterOS` API response
 pub(crate) fn parse_wireguard_peers(
     sentences: &[HashMap<String, String>],
-) -> Vec<WireGuardPeerStats> {
-    let mut peers = Vec::new();
-
-    for sentence in sentences {
-        if sentence
-            .get("disabled")
-            .is_some_and(|value| value.eq_ignore_ascii_case("true"))
-        {
-            continue;
-        }
-
-        if let (Some(id), Some(interface)) = (sentence.get(".id"), sentence.get("interface")) {
-            let rx_bytes = parse_u64_field(sentence, "rx", "wireguard peers");
-
-            let tx_bytes = parse_u64_field(sentence, "tx", "wireguard peers");
-
-            let latest_handshake =
-                get_field_value(sentence, &["last-handshake", "latest-handshake"])
-                    .and_then(|v| parse_handshake_to_timestamp(&v));
-
-            if let Some(allowed_address) = sentence.get("allowed-address") {
-                peers.push(WireGuardPeerStats {
-                    id: id.clone(),
-                    interface: interface.clone(),
-                    name: sentence
-                        .get("name")
-                        .cloned()
-                        .unwrap_or_else(|| "unnamed-peer".to_string()),
-                    comment: sentence.get("comment").cloned().unwrap_or_default(),
-                    allowed_address: allowed_address.clone(),
-                    endpoint: parse_peer_endpoint(sentence),
-                    rx_bytes,
-                    tx_bytes,
-                    latest_handshake,
-                });
-            }
-        }
-    }
-
-    peers
-}
-
-fn get_field_value(fields: &HashMap<String, String>, possible_names: &[&str]) -> Option<String> {
-    possible_names
+) -> Result<Vec<WireGuardPeerStats>> {
+    sentences
         .iter()
-        .find_map(|name| fields.get(*name).cloned())
+        .filter(|s| {
+            !s.get("disabled")
+                .is_some_and(|v| v.eq_ignore_ascii_case("true"))
+        })
+        .map(|s| {
+            let rx_bytes = parse_u64_field(s, "rx", "wireguard")?;
+            let tx_bytes = parse_u64_field(s, "tx", "wireguard")?;
+            if rx_bytes > i64::MAX as u64 || tx_bytes > i64::MAX as u64 {
+                return Err(AppError::InvalidSnapshot(
+                    "wireguard byte count exceeds gauge range".into(),
+                ));
+            }
+            let latest_handshake = s
+                .get("last-handshake")
+                .or_else(|| s.get("latest-handshake"))
+                .map(|v| parse_handshake_to_timestamp(v))
+                .transpose()?
+                .flatten();
+            Ok(WireGuardPeerStats {
+                id: required_field(s, ".id")?.into(),
+                interface: required_field(s, "interface")?.into(),
+                name: s
+                    .get("name")
+                    .cloned()
+                    .unwrap_or_else(|| "unnamed-peer".into()),
+                comment: s.get("comment").cloned().unwrap_or_default(),
+                allowed_address: required_field(s, "allowed-address")?.into(),
+                endpoint: s
+                    .get("current-endpoint-address")
+                    .or_else(|| s.get("endpoint"))
+                    .filter(|v| !v.is_empty())
+                    .cloned(),
+                rx_bytes,
+                tx_bytes,
+                latest_handshake,
+            })
+        })
+        .collect()
 }
 
-fn parse_peer_endpoint(fields: &HashMap<String, String>) -> Option<String> {
-    let address = get_field_value(fields, &["current-endpoint-address", "endpoint"])?;
-    if address.is_empty() {
-        return None;
+fn parse_handshake_to_timestamp(value: &str) -> Result<Option<u64>> {
+    if value.is_empty() || value == "never" {
+        return Ok(None);
     }
-    Some(address)
-}
-
-fn parse_handshake_to_timestamp(handshake_str: &str) -> Option<u64> {
-    if handshake_str.is_empty() || handshake_str == "never" {
-        return None;
-    }
-
-    let duration_secs = if let Ok(seconds) = handshake_str.parse::<u64>() {
-        seconds
-    } else {
-        parse_routeros_duration(handshake_str)
-    };
-
+    let invalid = || AppError::InvalidSnapshot("invalid wireguard handshake duration".into());
+    let elapsed = parse_uptime_to_seconds(value).ok_or_else(invalid)?;
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
-        .ok()?
+        .map_err(|_| invalid())?
         .as_secs();
-
-    Some(now.saturating_sub(duration_secs))
-}
-
-fn parse_routeros_duration(duration_str: &str) -> u64 {
-    if duration_str.is_empty() {
-        return 0;
-    }
-
-    let mut total_seconds: u64 = 0;
-    let mut current_number = 0u64;
-
-    for ch in duration_str.chars() {
-        match ch {
-            '0'..='9' => {
-                if let Some(new_val) = current_number
-                    .checked_mul(10)
-                    .and_then(|v| v.checked_add(u64::from(ch as u8 - b'0')))
-                {
-                    current_number = new_val;
-                } else {
-                    return u64::MAX;
-                }
-            }
-            's' => {
-                total_seconds = total_seconds.saturating_add(current_number);
-                current_number = 0;
-            }
-            'm' => {
-                total_seconds = total_seconds.saturating_add(current_number.saturating_mul(60));
-                current_number = 0;
-            }
-            'h' => {
-                total_seconds = total_seconds.saturating_add(current_number.saturating_mul(3600));
-                current_number = 0;
-            }
-            'd' => {
-                total_seconds = total_seconds.saturating_add(current_number.saturating_mul(86400));
-                current_number = 0;
-            }
-            'w' => {
-                total_seconds =
-                    total_seconds.saturating_add(current_number.saturating_mul(604_800));
-                current_number = 0;
-            }
-            _ => {}
-        }
-    }
-
-    total_seconds
+    Ok(Some(now.checked_sub(elapsed).ok_or_else(invalid)?))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn test_parse_wireguard_peers_empty() {
-        let result = parse_wireguard_peers(&[]);
-        assert_eq!(result.len(), 0);
+    fn test_wireguard_validation() {
+        let row: HashMap<String, String> = [
+            (".id", "*1"),
+            ("interface", "wg1"),
+            ("allowed-address", "10.0.0.1/32"),
+            ("rx", "1024"),
+            ("tx", "2048"),
+            ("last-handshake", "never"),
+            ("current-endpoint-address", "2001:db8::1"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.into(), v.into()))
+        .collect();
+        let parsed = parse_wireguard_peers(std::slice::from_ref(&row)).unwrap();
+        assert_eq!(parsed[0].rx_bytes, 1024);
+        assert_eq!(parsed[0].name, "unnamed-peer");
+        assert_eq!(parsed[0].endpoint.as_deref(), Some("2001:db8::1"));
+        assert_eq!(parsed[0].latest_handshake, None);
+        for field in [".id", "interface", "allowed-address", "rx", "tx"] {
+            let mut invalid = row.clone();
+            invalid.remove(field);
+            assert!(parse_wireguard_peers(&[invalid]).is_err());
+        }
+        let mut invalid = row.clone();
+        invalid.insert("rx".into(), "invalid".into());
+        assert!(parse_wireguard_peers(&[invalid]).is_err());
+        for field in ["rx", "tx"] {
+            let mut invalid = row.clone();
+            invalid.insert(field.into(), u64::MAX.to_string());
+            assert!(matches!(
+                parse_wireguard_peers(&[invalid]),
+                Err(AppError::InvalidSnapshot(_))
+            ));
+        }
+        let mut disabled = row;
+        disabled.insert("disabled".into(), "true".into());
+        disabled.remove("rx");
+        assert!(parse_wireguard_peers(&[disabled]).unwrap().is_empty());
+        assert!(parse_wireguard_peers(&[]).unwrap().is_empty());
     }
 
     #[test]
-    fn test_parse_wireguard_peers_single() {
-        let mut data = HashMap::new();
-        data.insert(".id".to_string(), "*1".to_string());
-        data.insert("interface".to_string(), "wg1".to_string());
-        data.insert("name".to_string(), "peer1".to_string());
-        data.insert("comment".to_string(), "John".to_string());
-        data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
-        data.insert(
-            "current-endpoint-address".to_string(),
-            "192.168.1.1".to_string(),
-        );
-        data.insert("rx".to_string(), "1024".to_string());
-        data.insert("tx".to_string(), "2048".to_string());
-        data.insert("last-handshake".to_string(), "never".to_string());
-
-        let result = parse_wireguard_peers(&[data]);
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].id, "*1");
-        assert_eq!(result[0].interface, "wg1");
-        assert_eq!(result[0].name, "peer1");
-        assert_eq!(result[0].comment, "John");
-        assert_eq!(result[0].allowed_address, "10.10.10.1/32");
-        assert_eq!(result[0].endpoint, Some("192.168.1.1".to_string()));
-        assert_eq!(result[0].rx_bytes, 1024);
-        assert_eq!(result[0].tx_bytes, 2048);
-        assert_eq!(result[0].latest_handshake, None);
-    }
-
-    #[test]
-    fn test_parse_wireguard_peers_with_handshake() {
-        let mut data = HashMap::new();
-        data.insert(".id".to_string(), "*1".to_string());
-        data.insert("interface".to_string(), "wg1".to_string());
-        data.insert("name".to_string(), "peer1".to_string());
-        data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
-        data.insert(
-            "current-endpoint-address".to_string(),
-            "192.168.1.1".to_string(),
-        );
-        data.insert("rx".to_string(), "1024".to_string());
-        data.insert("tx".to_string(), "2048".to_string());
-        data.insert("last-handshake".to_string(), "120".to_string());
-
-        let result = parse_wireguard_peers(&[data]);
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].id, "*1");
-        assert_eq!(result[0].interface, "wg1");
-        assert_eq!(result[0].name, "peer1");
-        assert_eq!(result[0].allowed_address, "10.10.10.1/32");
-        assert_eq!(result[0].endpoint, Some("192.168.1.1".to_string()));
-        assert_eq!(result[0].rx_bytes, 1024);
-        assert_eq!(result[0].tx_bytes, 2048);
-        assert!(result[0].latest_handshake.is_some());
-    }
-
-    #[test]
-    fn test_parse_wireguard_peers_missing_fields() {
-        let mut data = HashMap::new();
-        data.insert(".id".to_string(), "*1".to_string());
-        data.insert("interface".to_string(), "wg1".to_string());
-        data.insert("name".to_string(), "peer1".to_string());
-        data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
-
-        let result = parse_wireguard_peers(&[data]);
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].id, "*1");
-        assert_eq!(result[0].interface, "wg1");
-        assert_eq!(result[0].name, "peer1");
-        assert_eq!(result[0].allowed_address, "10.10.10.1/32");
-        assert_eq!(result[0].endpoint, None);
-        assert_eq!(result[0].rx_bytes, 0);
-        assert_eq!(result[0].tx_bytes, 0);
-        assert_eq!(result[0].latest_handshake, None);
-    }
-
-    #[test]
-    fn test_parse_wireguard_peers_missing_name_field() {
-        let mut data = HashMap::new();
-        data.insert(".id".to_string(), "*1".to_string());
-        data.insert("interface".to_string(), "wg1".to_string());
-        data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
-
-        let result = parse_wireguard_peers(&[data]);
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].id, "*1");
-        assert_eq!(result[0].interface, "wg1");
-        assert_eq!(result[0].name, "unnamed-peer");
-        assert_eq!(result[0].comment, "");
-        assert_eq!(result[0].allowed_address, "10.10.10.1/32");
-    }
-
-    #[test]
-    fn test_parse_wireguard_peers_invalid_numbers() {
-        let mut data = HashMap::new();
-        data.insert(".id".to_string(), "*1".to_string());
-        data.insert("interface".to_string(), "wg1".to_string());
-        data.insert("name".to_string(), "peer1".to_string());
-        data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
-        data.insert("rx".to_string(), "invalid".to_string());
-        data.insert("tx".to_string(), "also-invalid".to_string());
-
-        let result = parse_wireguard_peers(&[data]);
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].rx_bytes, 0);
-        assert_eq!(result[0].tx_bytes, 0);
-    }
-
-    #[test]
-    fn test_parse_wireguard_peers_missing_interface() {
-        let mut data = HashMap::new();
-        data.insert(".id".to_string(), "*1".to_string());
-        data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
-
-        let result = parse_wireguard_peers(&[data]);
-        assert_eq!(result.len(), 0);
-    }
-
-    #[test]
-    fn test_parse_wireguard_peers_missing_allowed_address() {
-        let mut data = HashMap::new();
-        data.insert(".id".to_string(), "*1".to_string());
-        data.insert("interface".to_string(), "wg1".to_string());
-        data.insert("name".to_string(), "peer1".to_string());
-
-        let result = parse_wireguard_peers(&[data]);
-        assert_eq!(result.len(), 0);
-    }
-
-    #[test]
-    fn test_parse_wireguard_peers_multiple() {
-        let mut peer1 = HashMap::new();
-        peer1.insert(".id".to_string(), "*1".to_string());
-        peer1.insert("interface".to_string(), "wg1".to_string());
-        peer1.insert("name".to_string(), "peer1".to_string());
-        peer1.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
-        peer1.insert(
-            "current-endpoint-address".to_string(),
-            "192.168.1.1".to_string(),
-        );
-        peer1.insert("rx".to_string(), "1024".to_string());
-        peer1.insert("tx".to_string(), "2048".to_string());
-
-        let mut peer2 = HashMap::new();
-        peer2.insert(".id".to_string(), "*2".to_string());
-        peer2.insert("interface".to_string(), "wg1".to_string());
-        peer2.insert("name".to_string(), "peer2".to_string());
-        peer2.insert("allowed-address".to_string(), "10.10.10.2/32".to_string());
-        peer2.insert(
-            "current-endpoint-address".to_string(),
-            "192.168.1.2".to_string(),
-        );
-        peer2.insert("rx".to_string(), "2048".to_string());
-        peer2.insert("tx".to_string(), "4096".to_string());
-
-        let result = parse_wireguard_peers(&[peer1, peer2]);
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0].name, "peer1");
-        assert_eq!(result[1].name, "peer2");
-    }
-
-    #[test]
-    fn test_parse_wireguard_peers_disabled() {
-        let mut data = HashMap::new();
-        data.insert(".id".to_string(), "*1".to_string());
-        data.insert("interface".to_string(), "wg1".to_string());
-        data.insert("name".to_string(), "peer1".to_string());
-        data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
-        data.insert("disabled".to_string(), "true".to_string());
-
-        let result = parse_wireguard_peers(&[data]);
-        assert_eq!(result.len(), 0);
-    }
-
-    #[test]
-    fn test_parse_wireguard_peers_current_endpoint_only() {
-        let mut data = HashMap::new();
-        data.insert(".id".to_string(), "*1".to_string());
-        data.insert("interface".to_string(), "wg1".to_string());
-        data.insert("allowed-address".to_string(), "10.10.10.1/32".to_string());
-        data.insert(
-            "current-endpoint-address".to_string(),
-            "2001:db8::1".to_string(),
-        );
-
-        let result = parse_wireguard_peers(&[data]);
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].endpoint, Some("2001:db8::1".to_string()));
-    }
-
-    #[test]
-    fn test_parse_handshake_to_timestamp() {
-        assert_eq!(parse_handshake_to_timestamp("never"), None);
-        assert_eq!(parse_handshake_to_timestamp(""), None);
-
-        let ts120 = parse_handshake_to_timestamp("120");
-        assert!(ts120.is_some());
-    }
-
-    #[test]
-    fn test_parse_routeros_duration() {
-        assert_eq!(parse_routeros_duration("7s"), 7);
-        assert_eq!(parse_routeros_duration("1m30s"), 90);
-        assert_eq!(parse_routeros_duration("2h30m"), 9000);
-        assert_eq!(parse_routeros_duration("1d2h"), 93600);
-        assert_eq!(parse_routeros_duration("1w2d"), 777_600);
-        assert_eq!(parse_routeros_duration(""), 0);
-        assert_eq!(parse_routeros_duration("0s"), 0);
-    }
-
-    #[test]
-    fn test_get_field_value() {
-        let mut data = HashMap::new();
-        data.insert("last-handshake".to_string(), "120".to_string());
-
-        assert_eq!(
-            get_field_value(&data, &["last-handshake"]),
-            Some("120".to_string())
-        );
-        assert_eq!(
-            get_field_value(&data, &["latest-handshake", "last-handshake"]),
-            Some("120".to_string())
-        );
-        assert_eq!(get_field_value(&data, &["nonexistent"]), None);
-    }
-
-    #[test]
-    fn test_parse_routeros_duration_overflow_protection() {
-        assert_eq!(
-            parse_routeros_duration("9999999999999999999999999999999999999999s"),
-            u64::MAX
-        );
+    fn test_handshake_invalid_duration_never_becomes_current_time() {
+        for input in [
+            "invalid",
+            "1hgarbage",
+            "1m2",
+            "18446744073709551615w",
+            "18446744073709551615",
+        ] {
+            assert!(parse_handshake_to_timestamp(input).is_err(), "{input}");
+        }
+        for input in ["", "never"] {
+            assert_eq!(parse_handshake_to_timestamp(input).unwrap(), None);
+        }
+        for input in ["120", "1m30s", "00:01:30"] {
+            let before = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            let timestamp = parse_handshake_to_timestamp(input).unwrap().unwrap();
+            assert!(timestamp <= before - 89);
+            assert!(timestamp >= before - 120);
+        }
     }
 }

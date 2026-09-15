@@ -1,84 +1,32 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.22.0@sha256:4a43a54dd1fedceb30ba47e76cfcf2b47304f4161c0caeac2db1c61804ea3c91
 
-# Build stage
-FROM --platform=$TARGETPLATFORM rust:1.91-alpine AS builder
-
-# Install build dependencies (disable triggers for QEMU compatibility)
-RUN apk add --no-cache --no-scripts \
-    musl-dev \
-    openssl-dev \
-    openssl-libs-static \
-    pkgconfig
-
+FROM rust:1.98.0-alpine3.24@sha256:a10e64dd139b7387337c7fbe8aca31b959b57b2fd4c8ae20a02cf1d6ea424dce AS builder
+RUN apk add --no-cache musl-dev
 WORKDIR /app
-
-# Copy manifests
-COPY Cargo.toml Cargo.lock ./
-
-ARG TARGETARCH
-RUN if [ "$TARGETARCH" = "amd64" ]; then \
-        RUST_TARGET="x86_64-unknown-linux-musl"; \
-    elif [ "$TARGETARCH" = "arm64" ]; then \
-        RUST_TARGET="aarch64-unknown-linux-musl"; \
-    else \
-        echo "Unsupported TARGETARCH: $TARGETARCH" && exit 1; \
-    fi && \
-    rustup target add $RUST_TARGET
-
-# Pre-build dependencies (no cleanup)
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target,id=target-${TARGETARCH},sharing=locked \
-    --mount=type=cache,target=/root/.cargo/registry \
-    if [ "$TARGETARCH" = "amd64" ]; then \
-        RUST_TARGET="x86_64-unknown-linux-musl"; \
-    elif [ "$TARGETARCH" = "arm64" ]; then \
-        RUST_TARGET="aarch64-unknown-linux-musl"; \
-    fi && \
-    mkdir src && echo "fn main() {}" > src/main.rs && \
-    cargo build --release --locked --target $RUST_TARGET
-
-# Copy actual source code
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY .cargo ./.cargo
 COPY src ./src
-COPY clippy.toml rustfmt.toml ./
+ARG TARGETARCH
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/app/target,id=target-1.98.0-${TARGETARCH},sharing=locked \
+    case "$TARGETARCH" in \
+      amd64) target=x86_64-unknown-linux-musl ;; \
+      arm64) target=aarch64-unknown-linux-musl ;; \
+      *) exit 1 ;; \
+    esac && \
+    cargo build --release --all-features --locked --bin mikrotik-exporter --target "$target" && \
+    cp "target/$target/release/mikrotik-exporter" /app/mikrotik-exporter
 
-# Build for release with improved caching
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target,id=target-${TARGETARCH},sharing=locked \
-    --mount=type=cache,target=/root/.cargo/registry \
-    if [ "$TARGETARCH" = "amd64" ]; then \
-        RUST_TARGET="x86_64-unknown-linux-musl"; \
-    elif [ "$TARGETARCH" = "arm64" ]; then \
-        RUST_TARGET="aarch64-unknown-linux-musl"; \
-    fi && \
-    cargo build --release --locked --target $RUST_TARGET && \
-    cp target/$RUST_TARGET/release/mikrotik-exporter /app/mikrotik-exporter
-
-# Runtime stage
-FROM alpine:3.19
-
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates libgcc
-
-# Create non-root user
-RUN addgroup -g 1000 mikrotik && \
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+RUN apk upgrade --no-cache && \
+    apk add --no-cache ca-certificates libgcc && \
+    addgroup -g 1000 mikrotik && \
     adduser -D -u 1000 -G mikrotik mikrotik
-
 WORKDIR /app
-
-# Copy binary from builder
-COPY --from=builder --chown=mikrotik:mikrotik /app/mikrotik-exporter /app/mikrotik-exporter
-
-# Switch to non-root user
-USER mikrotik
-
-# Expose port
+COPY --from=builder --chown=1000:1000 /app/mikrotik-exporter /app/mikrotik-exporter
+USER 1000:1000
 EXPOSE 9090
-
-# Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:9090/health || exit 1
-
-# Run the binary
+    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:9090/live || exit 1
 ENTRYPOINT ["/app/mikrotik-exporter"]

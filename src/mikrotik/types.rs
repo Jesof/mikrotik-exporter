@@ -122,7 +122,7 @@ impl Default for CollectionStatusParts {
 impl Default for CollectionStatus {
     fn default() -> Self {
         Self {
-            bits: 0b11_1111_1111,
+            bits: 0b1111_1111_1111,
         }
     }
 }
@@ -137,6 +137,9 @@ impl CollectionStatus {
     const CERTIFICATES_OK: u16 = 1 << 6;
     const FIREWALL_COMPLETE_OK: u16 = 1 << 7;
     const FIREWALL_INFO_COMPLETE_OK: u16 = 1 << 8;
+    const SYSTEM_COMPLETE_OK: u16 = 1 << 9;
+    const WIREGUARD_COMPLETE_OK: u16 = 1 << 10;
+    const CERTIFICATES_COMPLETE_OK: u16 = 1 << 11;
 
     #[must_use]
     pub fn from_group_results(results: [bool; 4]) -> Self {
@@ -146,20 +149,20 @@ impl CollectionStatus {
             vpn_certs_ok,
             firewall_ok,
         ] = results;
-        let mut bits = 0;
-        if system_interfaces_ok {
-            bits |= Self::SYSTEM_INTERFACES_OK;
-        }
-        if conntrack_ok {
-            bits |= Self::CONNTRACK_OK;
-        }
-        if vpn_certs_ok {
-            bits |= Self::VPN_CERTS_OK;
-        }
-        if firewall_ok {
-            bits |= Self::FIREWALL_OK;
-        }
-        Self { bits }
+        let state = |ok| {
+            if ok {
+                FetchState::Complete
+            } else {
+                FetchState::Failed
+            }
+        };
+        Self::from_parts(CollectionStatusParts {
+            system_interfaces: state(system_interfaces_ok),
+            conntrack: state(conntrack_ok),
+            wireguard: state(vpn_certs_ok),
+            certificates: state(vpn_certs_ok),
+            firewall: state(firewall_ok),
+        })
     }
 
     #[must_use]
@@ -167,6 +170,15 @@ impl CollectionStatus {
         let mut bits = 0;
         if parts.system_interfaces.any_ok() {
             bits |= Self::SYSTEM_INTERFACES_OK;
+        }
+        if parts.system_interfaces.complete() {
+            bits |= Self::SYSTEM_COMPLETE_OK;
+        }
+        if parts.wireguard.complete() {
+            bits |= Self::WIREGUARD_COMPLETE_OK;
+        }
+        if parts.certificates.complete() {
+            bits |= Self::CERTIFICATES_COMPLETE_OK;
         }
         if parts.conntrack.any_ok() {
             bits |= Self::CONNTRACK_OK;
@@ -240,10 +252,43 @@ impl CollectionStatus {
 
     #[must_use]
     pub fn all_ok(&self) -> bool {
-        self.system_interfaces_ok()
-            && self.conntrack_ok()
-            && self.vpn_certs_ok()
-            && self.firewall_ok()
+        self.group_states()
+            .iter()
+            .all(|(_, state)| state.complete())
+    }
+
+    pub(crate) fn group_states(&self) -> [(&'static str, FetchState); 5] {
+        let state = |ok, complete| {
+            if self.bits & complete != 0 {
+                FetchState::Complete
+            } else if self.bits & ok != 0 {
+                FetchState::Partial
+            } else {
+                FetchState::Failed
+            }
+        };
+        [
+            (
+                "system_interfaces",
+                state(Self::SYSTEM_INTERFACES_OK, Self::SYSTEM_COMPLETE_OK),
+            ),
+            (
+                "conntrack",
+                state(Self::CONNTRACK_OK, Self::CONNTRACK_COMPLETE_OK),
+            ),
+            (
+                "wireguard",
+                state(Self::WIREGUARD_OK, Self::WIREGUARD_COMPLETE_OK),
+            ),
+            (
+                "certificates",
+                state(Self::CERTIFICATES_OK, Self::CERTIFICATES_COMPLETE_OK),
+            ),
+            (
+                "firewall",
+                state(Self::FIREWALL_OK, Self::FIREWALL_COMPLETE_OK),
+            ),
+        ]
     }
 }
 
@@ -263,6 +308,39 @@ pub struct RouterMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_collection_completeness_requires_every_group_complete() {
+        assert!(CollectionStatus::default().all_ok());
+        assert!(CollectionStatus::from_group_results([true; 4]).all_ok());
+        for state in [FetchState::Failed, FetchState::Partial] {
+            let variants = [
+                CollectionStatusParts {
+                    system_interfaces: state,
+                    ..Default::default()
+                },
+                CollectionStatusParts {
+                    conntrack: state,
+                    ..Default::default()
+                },
+                CollectionStatusParts {
+                    wireguard: state,
+                    ..Default::default()
+                },
+                CollectionStatusParts {
+                    certificates: state,
+                    ..Default::default()
+                },
+                CollectionStatusParts {
+                    firewall: state,
+                    ..Default::default()
+                },
+            ];
+            for parts in variants {
+                assert!(!CollectionStatus::from_parts(parts).all_ok());
+            }
+        }
+    }
 
     #[test]
     fn test_interface_stats_creation() {

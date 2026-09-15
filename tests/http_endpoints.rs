@@ -41,6 +41,7 @@ fn test_router(name: &str) -> RouterConfig {
         address: "192.168.1.1:8728".to_string(),
         username: "admin".to_string(),
         password: secrecy::SecretString::new("password".to_string().into()),
+        tls: None,
     }
 }
 
@@ -91,9 +92,16 @@ async fn metrics_contains_registered_metric_names() {
 
     assert!(body.contains("mikrotik_connection_pool_size"));
     assert!(body.contains("mikrotik_connection_pool_active"));
-    assert!(body.contains("mikrotik_collection_cycle_duration_milliseconds"));
+    assert!(body.contains("mikrotik_collection_cycle_duration_seconds"));
     assert!(body.contains("mikrotik_conntrack_active_series"));
-    assert!(body.contains("mikrotik_conntrack_update_duration_milliseconds"));
+    assert!(body.contains("mikrotik_conntrack_update_duration_seconds"));
+    assert!(body.contains(
+        "mikrotik_group_collection_success{router=\"r1\",group=\"system_interfaces\"} 0"
+    ));
+    assert!(body.contains(
+        "mikrotik_group_last_success_timestamp_seconds{router=\"r1\",group=\"firewall\"} 0"
+    ));
+    assert!(!body.contains("milliseconds"));
 }
 
 #[tokio::test]
@@ -163,7 +171,7 @@ async fn metrics_contains_router_data_after_update() {
     assert!(body.contains(
         "mikrotik_interface_info{router=\"myrouter\",id=\"*1\",name=\"ether1\",comment=\"WAN\"} 1"
     ));
-    assert!(body.contains("mikrotik_system_cpu_load"));
+    assert!(body.contains("mikrotik_system_cpu_load_ratio{router=\"myrouter\"} 0.42"));
 }
 
 #[tokio::test]

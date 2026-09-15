@@ -23,25 +23,42 @@ pub(crate) async fn collect_group_conntrack(
             &client.config.username,
             client.config.password.expose_secret(),
             Some("conntrack"),
+            client.config.tls.as_ref(),
         )
         .await?;
 
     let conn = guard.get_mut();
     let mut conntrack_results = Vec::with_capacity(CONNTRACK_COMMANDS.len());
     for (path, ip_version) in CONNTRACK_COMMANDS {
-        conntrack_results.push((ip_version, conn.command(path, &[]).await));
+        conntrack_results.push((
+            ip_version,
+            conn.command(path, &[])
+                .await
+                .and_then(|rows| parse_connection_tracking(&rows, ip_version)),
+        ));
     }
 
-    let success = conntrack_results
+    let any_success = conntrack_results
         .iter()
         .any(|(_ip_version, result)| result.is_ok());
+    let success = conntrack_results.iter().all(|(_, result)| result.is_ok());
     client
         .record_group_result(&mut guard, "conntrack", success)
         .await;
 
     drop(guard);
 
-    if !success {
+    if let Some(index) = conntrack_results
+        .iter()
+        .position(|(_, result)| matches!(result, Err(crate::prelude::AppError::InvalidSnapshot(_))))
+    {
+        return conntrack_results
+            .remove(index)
+            .1
+            .map(|_| super::super::ConntrackGroupData::default());
+    }
+
+    if !any_success {
         return Err(crate::prelude::AppError::RouterOs(format!(
             "Router '{}' conntrack collection failed for both IPv4 and IPv6",
             client.config.name
@@ -51,12 +68,9 @@ pub(crate) async fn collect_group_conntrack(
     let mut entries = Vec::new();
     let mut complete_ok = true;
 
-    for (ip_version, result) in conntrack_results {
+    for (_, result) in conntrack_results {
         complete_ok &= result.is_ok();
-        entries.extend(parse_connection_tracking(
-            &result.unwrap_or_default(),
-            ip_version,
-        ));
+        entries.extend(result.unwrap_or_default());
     }
 
     Ok(super::super::ConntrackGroupData {

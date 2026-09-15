@@ -18,6 +18,7 @@ pub(crate) async fn collect_group_system_interfaces(
             &client.config.username,
             client.config.password.expose_secret(),
             Some("system"),
+            client.config.tls.as_ref(),
         )
         .await?;
 
@@ -25,19 +26,30 @@ pub(crate) async fn collect_group_system_interfaces(
     let system_result = conn
         .command(
             "/system/resource/print",
-            &[".proplist=uptime,cpu-load,free-memory,total-memory,version,board-name"],
+            &["=.proplist=uptime,cpu-load,free-memory,total-memory,version,board-name"],
         )
         .await;
     let interfaces_result = conn
         .command(
             "/interface/print",
-            &[".proplist=.id,name,comment,type,rx-byte,tx-byte,rx-packet,tx-packet,rx-error,tx-error,running"],
+            &["=.proplist=.id,name,comment,type,rx-byte,tx-byte,rx-packet,tx-packet,rx-error,tx-error,running"],
         )
         .await;
 
     let interfaces_count = interfaces_result.as_ref().map_or(0, Vec::len);
     let empty_interfaces_anomaly = interfaces_count == 0 && interfaces_result.is_ok();
-    let success = system_result.is_ok() && interfaces_result.is_ok() && !empty_interfaces_anomaly;
+    let parsed = system_result
+        .and_then(|rows| parse_system(&rows))
+        .and_then(|system| {
+            let interfaces = parse_interfaces(&interfaces_result?)?;
+            if empty_interfaces_anomaly {
+                return Err(crate::prelude::AppError::InvalidSnapshot(
+                    "empty interface snapshot".into(),
+                ));
+            }
+            Ok(super::super::SystemInterfacesGroupData { system, interfaces })
+        });
+    let success = parsed.is_ok();
 
     if empty_interfaces_anomaly {
         tracing::warn!(
@@ -53,14 +65,5 @@ pub(crate) async fn collect_group_system_interfaces(
 
     drop(guard);
 
-    if empty_interfaces_anomaly {
-        return Err(crate::prelude::AppError::RouterOs(
-            "inconsistent snapshot: /interface/print returned empty response".to_string(),
-        ));
-    }
-
-    let system = parse_system(&system_result?);
-    let interfaces = parse_interfaces(&interfaces_result?);
-
-    Ok(super::super::SystemInterfacesGroupData { system, interfaces })
+    parsed
 }

@@ -8,12 +8,10 @@ use crate::mikrotik::responses::parse_firewall_rules;
 use crate::prelude::Result;
 use secrecy::ExposeSecret;
 
-use super::common::parse_count_only;
-
 pub(crate) async fn collect_group_firewall(
     client: &MikroTikClient,
 ) -> Result<super::super::FirewallGroupData> {
-    const FIREWALL_PROPLIST: &str = ".proplist=.id,chain,action,bytes,packets,disabled,comment";
+    const FIREWALL_PROPLIST: &str = "=.proplist=.id,chain,action,bytes,packets,disabled,comment";
     const FIREWALL_SECTIONS: [(&str, &str, &str); 8] = [
         ("/ip/firewall/filter/print", "ipv4", "filter"),
         ("/ip/firewall/nat/print", "ipv4", "nat"),
@@ -32,6 +30,7 @@ pub(crate) async fn collect_group_firewall(
             &client.config.username,
             client.config.password.expose_secret(),
             Some("firewall"),
+            client.config.tls.as_ref(),
         )
         .await?;
 
@@ -41,29 +40,25 @@ pub(crate) async fn collect_group_firewall(
     let mut inconsistent_sections = Vec::new();
 
     for (path, ip_version, section) in FIREWALL_SECTIONS {
-        let section_result = conn.command(path, &[FIREWALL_PROPLIST]).await;
+        let mut section_result = conn.command(path, &[FIREWALL_PROPLIST]).await;
 
         if matches!(&section_result, Ok(rows) if rows.is_empty()) {
-            let count = conn
-                .command(path, &["=count-only="])
-                .await
-                .ok()
-                .and_then(|rows| parse_count_only(&rows))
-                .unwrap_or(0);
+            let count = conn.count_only(path).await.ok();
 
-            if count > 0 {
+            if count != Some(0) {
                 inconsistent_sections.push(format!("{ip_version}/{section}"));
+                section_result = Err(crate::prelude::AppError::InvalidSnapshot(
+                    "unverified empty firewall snapshot".into(),
+                ));
             }
         }
 
-        section_results.push((ip_version, section, section_result));
+        section_results
+            .push(section_result.and_then(|rows| parse_firewall_rules(&rows, ip_version, section)));
     }
 
     let has_inconsistent_snapshot = !inconsistent_sections.is_empty();
-    let success = section_results
-        .iter()
-        .any(|(_ip_version, _section, result)| result.is_ok())
-        && !has_inconsistent_snapshot;
+    let success = section_results.iter().all(Result::is_ok) && !has_inconsistent_snapshot;
     client
         .record_group_result(&mut guard, "firewall", success)
         .await;
@@ -71,13 +66,22 @@ pub(crate) async fn collect_group_firewall(
     drop(guard);
 
     if has_inconsistent_snapshot {
-        return Err(crate::prelude::AppError::RouterOs(format!(
+        return Err(crate::prelude::AppError::InvalidSnapshot(format!(
             "inconsistent snapshot: firewall count mismatch in sections {}",
             inconsistent_sections.join(",")
         )));
     }
 
-    if !success {
+    if let Some(index) = section_results
+        .iter()
+        .position(|result| matches!(result, Err(crate::prelude::AppError::InvalidSnapshot(_))))
+    {
+        return section_results
+            .remove(index)
+            .map(|_| super::super::FirewallGroupData::default());
+    }
+
+    if section_results.iter().all(Result::is_err) {
         return Err(crate::prelude::AppError::RouterOs(format!(
             "Router '{}' firewall collection failed",
             client.config.name
@@ -87,13 +91,9 @@ pub(crate) async fn collect_group_firewall(
     let mut firewall_rules = Vec::new();
     let mut complete_ok = true;
 
-    for (ip_version, section, result) in section_results {
+    for result in section_results {
         complete_ok &= result.is_ok();
-        firewall_rules.extend(parse_firewall_rules(
-            &result.unwrap_or_default(),
-            ip_version,
-            section,
-        ));
+        firewall_rules.extend(result.unwrap_or_default());
     }
 
     Ok(super::super::FirewallGroupData {

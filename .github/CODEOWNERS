@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Jesof
+#
+# CODEOWNERS — review requirements for this repository.
+# The default owner is the maintainer. Agents must not self-merge changes that
+# alter the public API, wire protocol, metric contract, or release process.
+
+* @Jesof

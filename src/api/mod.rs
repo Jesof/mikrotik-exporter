@@ -28,10 +28,34 @@ pub struct AppState {
 
 /// Creates the main Axum router with all endpoints
 pub fn create_router(state: Arc<AppState>) -> Router {
-    Router::new()
-        .route("/health", get(handlers::health_check))
-        .route("/metrics", get(handlers::metrics_handler))
-        .with_state(state)
+    let (_ready_tx, ready_rx) = tokio::sync::watch::channel(true);
+    state.router_with_readiness(ready_rx)
+}
+
+impl AppState {
+    pub fn router_with_readiness(
+        self: Arc<Self>,
+        ready: tokio::sync::watch::Receiver<bool>,
+    ) -> Router {
+        Router::new()
+            .route("/live", get(|| async { axum::http::StatusCode::OK }))
+            .route(
+                "/ready",
+                get(move || {
+                    let ready = *ready.borrow();
+                    async move {
+                        if ready {
+                            axum::http::StatusCode::OK
+                        } else {
+                            axum::http::StatusCode::SERVICE_UNAVAILABLE
+                        }
+                    }
+                }),
+            )
+            .route("/health", get(handlers::health_check))
+            .route("/metrics", get(handlers::metrics_handler))
+            .with_state(self)
+    }
 }
 
 #[cfg(test)]
@@ -49,6 +73,7 @@ mod tests {
                 address: "192.168.1.1:8728".to_string(),
                 username: "admin".to_string(),
                 password: "password".to_string().into(),
+                tls: None,
             }],
             collection_interval_secs: 30,
             gap_reset_threshold_secs: 60,

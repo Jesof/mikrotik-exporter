@@ -25,6 +25,12 @@ pub struct RouterLabels {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub(crate) struct GroupLabels {
+    pub(crate) router: String,
+    pub(crate) group: &'static str,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct SystemInfoLabels {
     pub(crate) router: String,
     pub(crate) version: String,

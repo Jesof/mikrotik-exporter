@@ -2,6 +2,7 @@
 name = "mikrotik-exporter"
 version = "0.3.3"
 edition = "2024"
+rust-version = "1.98.0"
 authors = ["Jesof <jesof@me.com>"]
 license = "MIT"
 description = "Prometheus exporter for MikroTik RouterOS devices"
@@ -33,53 +34,61 @@ panic = "abort"
 
 [dependencies]
 # HTTP server
-axum = "0.8.8"
-tokio = { version = "1.50.0", features = [
+axum = "0.8.9"
+tokio = { version = "1.53.1", features = [
     "macros",
     "rt-multi-thread",
-    "test-util",
+    "net",
+    "sync",
+    "time",
+    "fs",
     "signal",
     "io-util",
 ] }
 
 # Serialization
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 
 # Logging
 tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.22", features = [
+tracing-subscriber = { version = "0.3.23", features = [
     "env-filter",
     "fmt",
     "time",
 ] }
 
 # Error handling
-thiserror = "2.0.18"
+thiserror = "2.0.20"
 
 # Environment variables
 dotenvy = "0.15.7"
 
 # Cryptography for RouterOS API
-md5 = "0.8.0"
+md5 = "0.8.1"
 hex = "0.4"
+tokio-rustls = { version = "0.26.5", default-features = false, features = ["ring", "tls12"] }
+rustls-native-certs = "0.8.4"
 
 # Prometheus metrics
-prometheus-client = "0.24.0"
+prometheus-client = "0.25.1"
 
 # Secure credential handling
-secrecy = { version = "0.10.0", features = ["serde"] }
+secrecy = { version = "0.10.3", features = ["serde"] }
 
 # Date/time parsing for certificate expiration
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4.45", features = ["serde"] }
 
 # Concurrent hash maps for metrics optimization
-dashmap = "6.1.0"
+dashmap = "6.2.1"
 
 [dev-dependencies]
-tower = { version = "0.5", features = ["util"] }
-http-body-util = "0.1"
-proptest = "1.6"
+tokio = { version = "1.53.1", features = ["test-util"] }
+rcgen = { version = "0.14.10", default-features = false, features = ["ring", "pem"] }
+tempfile = "3.23.0"
+tower = { version = "0.5.3", features = ["util"] }
+http-body-util = "0.1.5"
+proptest = "1.11.0"
 
 [lints.clippy]
 pedantic = "warn"

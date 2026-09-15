@@ -1,310 +1,190 @@
-name: Docker Build and Push
+name: Docker Build
 
 on:
   workflow_call:
     inputs:
+      source_sha:
+        description: Exact source commit
+        type: string
+        required: true
       platforms:
-        description: Docker platforms to build
         type: string
         required: true
       push:
-        description: Whether to push to registry
         type: boolean
         required: true
       cache_scope:
-        description: Cache scope for GHA cache
         type: string
         required: true
+      release_tag:
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       platforms:
-        description: Docker platforms to build
-        type: string
-        required: true
+        description: Platforms to validate (manual runs never publish)
+        type: choice
+        options: [linux/amd64, linux/arm64, 'linux/amd64,linux/arm64']
         default: linux/amd64,linux/arm64
-      push:
-        description: Whether to push to registry
-        type: boolean
-        required: true
-        default: false
-      cache_scope:
-        description: Cache scope for GHA cache
-        type: string
-        required: true
-        default: manual
-
-concurrency:
-  group: docker-build-${{ github.sha }}
-  cancel-in-progress: false
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 permissions:
   contents: read
 
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
-      tags: ${{ steps.meta.outputs.tags }}
-      labels: ${{ steps.meta.outputs.labels }}
-      base_tags: ${{ steps.tags.outputs.base_tags }}
-      arm64_tags: ${{ steps.tags.outputs.arm64_tags }}
-      amd64_tags: ${{ steps.tags.outputs.amd64_tags }}
-      should_push: ${{ inputs.push }}
-      build_multiarch: ${{ steps.check.outputs.build_multiarch }}
+      matrix: ${{ steps.prepare.outputs.matrix }}
+      image: ${{ steps.prepare.outputs.image }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Check if multi-arch build
-        id: check
+      - id: prepare
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
+          REPOSITORY: ${{ github.repository }}
+          PUSH: ${{ inputs.push }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          if [[ "${{ inputs.platforms }}" == *"linux/arm64"* && "${{ inputs.platforms }}" == *"linux/amd64"* ]]; then
-            echo "build_multiarch=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "build_multiarch=false" >> "$GITHUB_OUTPUT"
+          case "$PLATFORMS" in
+            linux/amd64|linux/arm64|linux/amd64,linux/arm64) ;;
+            *) exit 1 ;;
+          esac
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          if [[ "$PUSH" == true ]]; then
+            [[ "$GITHUB_EVENT_NAME" != workflow_dispatch || -n "$RELEASE_TAG" ]]
           fi
+          matrix=$(jq -cn --arg platforms "$PLATFORMS" '{include: ($platforms | split(",") | map({platform: ., arch: split("/")[1], runner: (if . == "linux/arm64" then "ubuntu-24.04-arm" else "ubuntu-24.04" end)}))}')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=semver,pattern=v{{version}}
-            type=semver,pattern=v{{major}}.{{minor}}
-            type=semver,pattern=v{{major}}
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Prepare arch tags
-        id: tags
-        if: inputs.push && steps.check.outputs.build_multiarch == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          base_tags="${{ steps.meta.outputs.tags }}"
-          arm64_tags=""
-          amd64_tags=""
-          while IFS= read -r tag; do
-            [ -z "$tag" ] && continue
-            arm64_tags+="${tag}-arm64"$'\n'
-            amd64_tags+="${tag}-amd64"$'\n'
-          done <<< "$base_tags"
-          {
-            echo "base_tags<<EOF"
-            echo "$base_tags"
-            echo "EOF"
-            echo "arm64_tags<<EOF"
-            echo "$arm64_tags"
-            echo "EOF"
-            echo "amd64_tags<<EOF"
-            echo "$amd64_tags"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-  build-amd64:
+  build:
     needs: prepare
-    if: contains(inputs.platforms, 'linux/amd64')
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GitHub Container Registry
-        if: inputs.push
-        uses: docker/login-action@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Docker image (amd64, no push)
-        if: ${{ !inputs.push }}
-        uses: docker/build-push-action@v7
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4
+        with:
+          version: v0.37.1
+          driver-opts: image=moby/buildkit:v0.33.0
+      - name: Build and load for validation
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
-          platforms: linux/amd64
-          push: false
-          tags: ${{ needs.prepare.outputs.tags }}
-          labels: ${{ needs.prepare.outputs.labels }}
-          cache-from: |
-            type=gha,scope=${{ inputs.cache_scope }}-amd64
-            type=gha,scope=main-amd64
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-amd64
-
-      - name: Build Docker image (amd64, push)
-        id: build
-        if: inputs.push
-        uses: docker/build-push-action@v7
+          platforms: ${{ matrix.platform }}
+          load: true
+          tags: mikrotik-exporter:validation
+          cache-from: type=gha,scope=${{ inputs.cache_scope || 'manual-v2' }}-${{ matrix.arch }}-rust-1.98.0
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope || 'manual-v2' }}-${{ matrix.arch }}-rust-1.98.0
+      - uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
         with:
-          context: .
-          platforms: linux/amd64
-          push: true
-          tags: ${{ needs.prepare.outputs.build_multiarch == 'true' && needs.prepare.outputs.amd64_tags || needs.prepare.outputs.tags }}
-          labels: ${{ needs.prepare.outputs.labels }}
-          cache-from: |
-            type=gha,scope=${{ inputs.cache_scope }}-amd64
-            type=gha,scope=main-amd64
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-amd64
-
-  build-arm64:
-    needs: prepare
-    if: contains(inputs.platforms, 'linux/arm64')
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GitHub Container Registry
-        if: inputs.push
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Docker image (arm64, no push)
-        if: ${{ !inputs.push }}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/arm64
-          push: false
-          tags: ${{ needs.prepare.outputs.tags }}
-          labels: ${{ needs.prepare.outputs.labels }}
-          cache-from: |
-            type=gha,scope=${{ inputs.cache_scope }}-arm64
-            type=gha,scope=main-arm64
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-arm64
-
-      - name: Build Docker image (arm64, push)
-        id: build
-        if: inputs.push
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/arm64
-          push: true
-          tags: ${{ needs.prepare.outputs.build_multiarch == 'true' && needs.prepare.outputs.arm64_tags || needs.prepare.outputs.tags }}
-          labels: ${{ needs.prepare.outputs.labels }}
-          cache-from: |
-            type=gha,scope=${{ inputs.cache_scope }}-arm64
-            type=gha,scope=main-arm64
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}-arm64
-
-  manifest:
-    needs: [prepare, build-amd64, build-arm64]
-    if: inputs.push && needs.prepare.outputs.build_multiarch == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      digest: ${{ steps.create-manifest.outputs.digest }}
-    steps:
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create multi-arch manifest
-        id: create-manifest
-        shell: bash
+          version: v0.74.0
+          cache: false
+      - name: Scan image before publication
+        run: trivy image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 mikrotik-exporter:validation
+      - name: Verify unprivileged image configuration
         run: |
-          set -euo pipefail
-          retry() {
-            local attempt=1
-            local max_attempts=5
-            local delay=2
-            while true; do
-              "$@" && return 0
-              if [ "$attempt" -ge "$max_attempts" ]; then
-                return 1
-              fi
-              sleep "$delay"
-              delay=$((delay * 2))
-              attempt=$((attempt + 1))
-            done
-          }
-          first_tag=""
-          while IFS= read -r tag; do
-            [ -z "$tag" ] && continue
-            if [ -z "$first_tag" ]; then
-              first_tag="$tag"
-            fi
-            retry docker buildx imagetools create \
-              -t "$tag" \
-              "${tag}-arm64" \
-              "${tag}-amd64"
-          done <<< "${{ needs.prepare.outputs.base_tags }}"
-          inspect_output=$(retry docker buildx imagetools inspect "$first_tag")
-          digest=$(printf '%s\n' "$inspect_output" | awk '/^Digest: /{print $2; exit}')
-          if [ -z "$digest" ]; then
-            echo "Digest not found in imagetools inspect output" >&2
-            exit 1
-          fi
-          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          test "$(docker inspect --format '{{.Config.User}}' mikrotik-exporter:validation)" = '1000:1000'
+          docker run --rm --entrypoint /bin/sh mikrotik-exporter:validation -c 'test -x /app/mikrotik-exporter'
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        if: inputs.push
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push validated build by digest
+        id: push
+        if: inputs.push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ needs.prepare.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          provenance: mode=max
+      - name: Export digest
+        if: inputs.push
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: inputs.push
+        with:
+          name: docker-digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
 
-  attest:
-    needs: [prepare, build-amd64, build-arm64, manifest]
+  publish:
+    needs: [prepare, build]
     if: inputs.push
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
       attestations: write
       id-token: write
     steps:
-      - name: Login to GHCR
-        uses: docker/login-action@v4
+      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4
         with:
-          registry: ${{ env.REGISTRY }}
+          version: v0.37.1
+          driver-opts: image=moby/buildkit:v0.33.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: docker-digest-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Determine digest
-        id: digest
+      - name: Publish manifest from immutable digests
+        id: manifest
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          PLATFORMS: ${{ inputs.platforms }}
         run: |
-          if [[ "${{ needs.prepare.outputs.build_multiarch }}" == "true" ]]; then
-            echo "value=${{ needs.manifest.outputs.digest }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ inputs.platforms }}" == *"linux/arm64"* ]]; then
-            echo "value=${{ needs.build-arm64.outputs.digest }}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          sources=()
+          for file in "$RUNNER_TEMP"/digests/*; do
+            digest=${file##*/}
+            [[ "$digest" =~ ^[0-9a-f]{64}$ ]]
+            sources+=("$IMAGE@sha256:$digest")
+          done
+          expected=1
+          [[ "$PLATFORMS" != *,* ]] || expected=2
+          [[ ${#sources[@]} -eq "$expected" ]]
+          tags=(--tag "$IMAGE:sha-$SOURCE_SHA")
+          if [[ -n "$RELEASE_TAG" ]]; then
+            [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+            tags+=(--tag "$IMAGE:$RELEASE_TAG" --tag "$IMAGE:${RELEASE_TAG#v}")
           else
-            echo "value=${{ needs.build-amd64.outputs.digest }}" >> "$GITHUB_OUTPUT"
+            [[ "$GITHUB_REF" == refs/heads/main && "$GITHUB_EVENT_NAME" == push ]]
+            tags+=(--tag "$IMAGE:main" --tag "$IMAGE:latest")
           fi
-
-      - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v4
+          docker buildx imagetools create "${tags[@]}" "${sources[@]}"
+          digest=$(docker buildx imagetools inspect "$IMAGE:sha-$SOURCE_SHA" --format '{{.Manifest.Digest}}')
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Attest published single- or multi-platform manifest
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.digest.outputs.value }}
+          subject-name: ${{ needs.prepare.outputs.image }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
           push-to-registry: true

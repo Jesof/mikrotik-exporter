@@ -24,5 +24,3 @@ pub use types::{
     CertificateStats, CollectionStatus, CollectionStatusParts, ConnectionTrackingStats, FetchState,
     FirewallRuleStats, InterfaceStats, RouterMetrics, SystemResource, WireGuardPeerStats,
 };
-
-pub use connection::encode_length;

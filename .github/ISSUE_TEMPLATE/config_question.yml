@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Jesof
+
+name: Configuration / deployment question
+description: Ask about configuration, labels, or deployment
+title: "docs: "
+labels: ["question", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, private keys, or private topology. Use private security reporting for vulnerabilities.
+  - type: input
+    id: version
+    attributes:
+      label: Exporter version
+      placeholder: "0.3.3"
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: Paste redacted environment variables/router JSON, TLS trust setup, and deployment type. Never include passwords or private keys.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+    validations:
+      required: true
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What you have tried
+      description: Docs read (`README.md`, `EXAMPLES.md`, `DEPLOYMENT.md`), commands run, results.
+    validations:
+      required: false

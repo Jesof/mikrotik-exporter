@@ -10,12 +10,16 @@
 //!
 //! ## Installation
 //!
-//! To use this library in your project, add it to your `Cargo.toml`:
+//! To use the published 0.3 line, add it to your `Cargo.toml`:
 //!
 //! ```toml
 //! [dependencies]
 //! mikrotik-exporter = "0.3"
 //! ```
+//!
+//! Documentation built from the current checkout includes unreleased breaking changes. The
+//! collector lifecycle below targets this checkout; consult the changelog when migrating from
+//! published 0.3.3. Use a path dependency for local development against this source tree.
 //!
 //! To install the exporter as a binary, use cargo:
 //!
@@ -37,43 +41,62 @@
 //! - **Built-in connection pooling**: Automatic connection management with exponential backoff
 //! - **Delta calculation**: Automatic counter delta calculation for accurate rate metrics
 //! - **Startup connectivity testing**: Optional connectivity verification during application startup
-//! - **Health checking**: Built-in health endpoint with router status monitoring
+//! - **Verified TLS**: Optional per-router API-SSL with system roots or a custom CA bundle
+//! - **Health checking**: Process probes and cached router/group freshness diagnostics
 //!
-//! ## Quick Start
+//! ## Collector Lifecycle
+//!
+//! This compile-checked example does not run during doctests. Running it explicitly contacts the
+//! configured routers. The binary in `src/main.rs` also supervises HTTP serving and startup checks,
+//! manages readiness, and handles platform shutdown signals.
 //!
 //! ```rust,no_run
 //! use std::sync::Arc;
+//! use std::time::Duration;
 //! use tokio::sync::watch;
 //! use mikrotik_exporter::{
-//!     AppState, Config, ConnectionPool, MetricsRegistry, Result, create_router,
+//!     AppError, Config, ConnectionPool, MetricsRegistry, Result,
 //!     start_collection_loop,
 //! };
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<()> {
-//!     let config = Config::from_env();
+//!     let config = Config::from_env()?;
 //!     let metrics = MetricsRegistry::new();
 //!     let pool = Arc::new(ConnectionPool::new());
-//!     let state = Arc::new(AppState {
-//!         config: config.clone(),
-//!         metrics: metrics.clone(),
-//!         pool: pool.clone(),
-//!     });
-//!
-//!     let (_shutdown_tx, shutdown_rx) = watch::channel(false);
-//!     start_collection_loop(shutdown_rx, Arc::new(config), metrics, pool);
-//!
-//!     let app = create_router(state);
-//!     let listener = tokio::net::TcpListener::bind("0.0.0.0:9090").await?;
-//!     axum::serve(listener, app.into_make_service()).await?;
-//!     Ok(())
+//!     let (shutdown_tx, shutdown_rx) = watch::channel(false);
+//!     let mut collector = start_collection_loop(shutdown_rx, Arc::new(config), metrics, pool);
+//!     let signal_result = tokio::select! {
+//!         result = &mut collector => {
+//!             result.map_err(|error| AppError::Io(std::io::Error::other(error)))??;
+//!             return Err(AppError::Io(std::io::Error::other("collector stopped unexpectedly")));
+//!         }
+//!         result = tokio::signal::ctrl_c() => result,
+//!     };
+//!     shutdown_tx.send_replace(true);
+//!     match tokio::time::timeout(Duration::from_secs(5), &mut collector).await {
+//!         Ok(result) => result.map_err(|error| AppError::Io(std::io::Error::other(error)))??,
+//!         Err(_) => {
+//!             collector.abort();
+//!             let _ = collector.await;
+//!             return Err(AppError::Io(std::io::Error::other("collector shutdown timed out")));
+//!         }
+//!     }
+//!     signal_result.map_err(AppError::Io)
 //! }
 //! ```
 //!
 //! ## Configuration
 //!
-//! Configuration can be loaded from environment variables using `Config::from_env()`.
-//! See `Config` documentation for available options including startup connectivity testing.
+//! [`Config::from_env`] returns [`Result<Config>`] and rejects invalid settings and duplicate
+//! router names. Call [`Config::validate`] for programmatically constructed configurations.
+//! Library callers can load dotenv explicitly before reading configuration; the binary does so.
+//! [`RouterConfig::tls`] selects verified TLS when present, even as an empty object in JSON;
+//! omission or `null` selects plaintext. [`RouterTlsConfig`] controls identity and trust roots.
+//!
+//! [`create_router`] assumes initialization is complete. Use [`AppState::router_with_readiness`]
+//! to control `/ready` via a watch receiver; `/live` is independent of router availability and
+//! `/health` reports cached diagnostics. Neither `/metrics` nor `/health` initiates router I/O.
 //!
 //! ## Main modules
 //! - `api`: HTTP API handlers
@@ -86,10 +109,10 @@
 //!
 //! ## Performance Optimizations
 //!
-//! - **DashMap-based metrics registry**: Lock-free concurrent access for better performance
+//! - **DashMap-based bookkeeping**: Sharded concurrent maps for metric state
 //! - **Efficient delta calculations**: Minimal overhead for counter metric processing
 //! - **Connection pooling**: Reuse connections to reduce authentication overhead
-//! - **Incremental cleanup**: Periodic cleanup of stale metrics to prevent memory growth
+//! - **Bounded cardinality**: Conntrack retained-series cap and periodic stale-label cleanup
 
 mod api;
 mod collector;
@@ -102,7 +125,7 @@ mod startup;
 
 // Re-export commonly used types
 /// Application configuration
-pub use config::{Config, RouterConfig};
+pub use config::{Config, RouterConfig, RouterTlsConfig};
 
 /// Application error and result type
 pub use error::{AppError, Result};
@@ -125,6 +148,3 @@ pub use mikrotik::{
     ConnectionTrackingStats, FetchState, FirewallRuleStats, InterfaceStats, RouterMetrics,
     SystemResource, WireGuardPeerStats,
 };
-
-/// `RouterOS` wire protocol length encoding (public for tests)
-pub use mikrotik::encode_length;

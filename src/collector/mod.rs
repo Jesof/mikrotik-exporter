@@ -1,159 +1,183 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! Metrics collection orchestration module for `MikroTik` routers
-//!
-//! # Architecture
-//!
-//! This module implements the core metrics collection loop that runs in the background
-//! to periodically collect metrics from all configured `MikroTik` routers.
-//!
-//! ## Components
-//!
-//! - **Main Collection Loop**: Manages the periodic collection schedule and spawns per-router tasks
-//! - **Router Task** (`router_task`): Handles metrics collection for a single router
-//! - **Cleanup** (`cleanup`): Periodic cleanup of stale connections and metrics
-//!
-//! ## Collection Flow
-//!
-//! 1. The main loop waits for the configured interval (default: 30 seconds)
-//! 2. For each configured router, spawns a collection task using connection pooling
-//! 3. All router tasks run concurrently using `tokio::spawn`
-//! 4. After all tasks complete, updates pool statistics and records cycle duration
-//! 5. Every 20 cycles (10 minutes by default), performs cleanup of:
-//!    - Stale interface metrics for removed interfaces
-//!    - Expired dynamic labels (30-minute TTL)
-//!    - Inactive router metrics
-//!    - Connection pool states for removed routers
-//!
-//! ## Connection Management
-//!
-//! Uses [`ConnectionPool`] for efficient connection reuse with exponential backoff
-//! for failed connections. Connections are automatically returned to the pool via
-//! RAII guards (`PooledConnectionGuard`).
-//!
-//! ## Graceful Shutdown
-//!
-//! The collection loop listens for shutdown signals via `watch::channel` and
-//! gracefully stops collection, waiting for the cleanup task to complete.
-
 mod cleanup;
 mod router_task;
 
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::watch;
-use tokio::task::JoinHandle;
+use tokio::sync::{mpsc, watch};
+use tokio::task::{JoinHandle, JoinSet};
+use tokio::time::{Instant, MissedTickBehavior};
 
 use crate::config::Config;
 use crate::metrics::{MetricsRegistry, RouterLabels};
 use crate::mikrotik::ConnectionPool;
+use crate::prelude::{AppError, Result};
 
-use self::router_task::spawn_router_collection;
+const STALE_LABEL_TTL: Duration = Duration::from_mins(30);
 
-const CLEANUP_EVERY_N_CYCLES: u64 = 20;
-const STALE_LABEL_TTL: Duration = Duration::from_secs(60 * 30);
-const MIN_GAP_RESET_SECS: u64 = 30;
-
-/// Starts the background metrics collection loop
-///
-/// Spawns a background task that periodically collects metrics from all configured routers.
-/// The collection interval is configurable via `Config::collection_interval_secs`.
-///
-/// Also starts the connection pool cleanup task.
+#[must_use]
 pub fn start_collection_loop(
     mut shutdown_rx: watch::Receiver<bool>,
     config: Arc<Config>,
     metrics: MetricsRegistry,
     pool: Arc<ConnectionPool>,
-) -> JoinHandle<()> {
-    let interval = config.collection_interval_secs;
-    tracing::info!("Starting background collection loop every {}s", interval);
-
-    // Start cleanup task for expired connections (joined inside collection loop on shutdown)
-    let cleanup_handle = cleanup::start_pool_cleanup_task(pool.clone(), shutdown_rx.clone());
-
-    // Initialize metrics for all routers to ensure counters start at zero
-    for router in &config.routers {
-        let router_label = RouterLabels {
-            router: router.name.clone(),
-        };
-        metrics.initialize_router_metrics(&router_label);
-    }
-
-    tracing::trace!(
-        "Collection loop initialized with {} routers",
-        config.routers.len()
-    );
-
-    // Cleanup interval: every 20 collection cycles
-    let gap_reset_threshold = Duration::from_secs(config.gap_reset_threshold_secs)
-        .max(Duration::from_secs(MIN_GAP_RESET_SECS));
-
-    let active_routers: HashSet<String> = config
-        .routers
-        .iter()
-        .map(|router| router.name.clone())
-        .collect();
-    let active_pool_keys: HashSet<String> = config
-        .routers
-        .iter()
-        .map(|router| format!("{}:{}", router.address, router.username))
-        .collect();
-
+) -> JoinHandle<Result<()>> {
     tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval));
-        let mut collection_cycle: u64 = 0;
+        config.validate()?;
+        if *shutdown_rx.borrow() || shutdown_rx.has_changed().is_err() {
+            return Ok(());
+        }
+        let mut tasks = JoinSet::new();
+        let (completed_tx, mut completed_rx) = mpsc::channel(config.routers.len().max(1));
+        for router in &config.routers {
+            metrics.initialize_router_metrics(&RouterLabels {
+                router: router.name.clone(),
+            });
+            let router = router.clone();
+            let pool = pool.clone();
+            let metrics = metrics.clone();
+            let completed = completed_tx.clone();
+            let period = Duration::from_secs(config.collection_interval_secs);
+            let gap = Duration::from_secs(config.gap_reset_threshold_secs);
+            tasks.spawn(async move {
+                run_schedule(period, || async {
+                    router_task::collect_router(&router, &pool, &metrics, gap).await;
+                    let _ = completed.send(router.name.clone()).await;
+                })
+                .await;
+            });
+        }
+        drop(completed_tx);
+        tasks.spawn(cleanup::run_pool_cleanup(pool.clone()));
 
-        loop {
+        let active_routers: HashSet<_> = config
+            .routers
+            .iter()
+            .map(|router| router.name.clone())
+            .collect();
+        let active_pool_keys: HashSet<_> = config
+            .routers
+            .iter()
+            .map(|router| format!("{}:{}", router.address, router.username))
+            .collect();
+        let mut pending = active_routers.clone();
+        let mut cycle_start = Instant::now();
+        let mut cleanup_tick =
+            tokio::time::interval(Duration::from_secs(config.collection_interval_secs * 20));
+        cleanup_tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let result = loop {
             tokio::select! {
-                _ = ticker.tick() => {},
-                _ = shutdown_rx.changed() => {
-                    if *shutdown_rx.borrow() {
-                        tracing::info!("Stopping collection loop");
-                        let _ = cleanup_handle.await;
-                        break;
+                biased;
+                changed = shutdown_rx.changed() => {
+                    if changed.is_err() || *shutdown_rx.borrow() {
+                        break Ok(());
                     }
                 }
-            }
-
-            let cycle_start = std::time::Instant::now();
-
-            // Collect metrics from all routers
-            let mut tasks = Vec::new();
-            for router in &config.routers {
-                let task = spawn_router_collection(
-                    router.clone(),
-                    pool.clone(),
-                    metrics.clone(),
-                    gap_reset_threshold,
-                );
-                tasks.push(task);
-            }
-
-            // Wait for all collection tasks to complete
-            for task in tasks {
-                if let Err(error) = task.await {
-                    tracing::error!("Router collection task failed to join: {}", error);
+                result = tasks.join_next() => {
+                    break Err(AppError::Io(std::io::Error::other(format!("Collector worker stopped unexpectedly: {result:?}"))));
+                }
+                Some(router) = completed_rx.recv() => {
+                    pending.remove(&router);
+                    if pending.is_empty() {
+                        metrics.record_collection_cycle_duration(cycle_start.elapsed().as_secs_f64());
+                        pending.clone_from(&active_routers);
+                        cycle_start = Instant::now();
+                    }
+                    let (total, active) = pool.get_pool_stats().await;
+                    metrics.update_pool_stats(total, active);
+                }
+                _ = cleanup_tick.tick() => {
+                    metrics.cleanup_expired_dynamic_labels(STALE_LABEL_TTL);
+                    metrics.cleanup_stale_routers(&active_routers);
+                    pool.cleanup_states(&active_pool_keys).await;
                 }
             }
-
-            // Update pool statistics after all routers processed
-            let (total, active) = pool.get_pool_stats().await;
-            metrics.update_pool_stats(total, active);
-
-            // Record full collection cycle duration
-            metrics.record_collection_cycle_duration(cycle_start.elapsed().as_secs_f64());
-
-            // Periodic cleanup
-            collection_cycle += 1;
-            if collection_cycle % CLEANUP_EVERY_N_CYCLES == 0 {
-                metrics.cleanup_expired_dynamic_labels(STALE_LABEL_TTL);
-                metrics.cleanup_stale_routers(&active_routers);
-                pool.cleanup_states(&active_pool_keys).await;
-                tracing::debug!("Cleanup cycle {} completed", collection_cycle,);
-            }
-        }
+        };
+        tasks.shutdown().await;
+        result
     })
+}
+
+async fn run_schedule<F, Fut>(period: Duration, mut collect: F)
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    let mut ticker = tokio::time::interval(period);
+    ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    loop {
+        ticker.tick().await;
+        collect().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[tokio::test(start_paused = true)]
+    async fn test_slow_router_does_not_block_other_schedules() {
+        let fast_count = Arc::new(AtomicUsize::new(0));
+        let count = fast_count.clone();
+        let mut tasks = JoinSet::new();
+        tasks.spawn(run_schedule(Duration::from_secs(1), move || {
+            count.fetch_add(1, Ordering::SeqCst);
+            async {}
+        }));
+        tasks.spawn(run_schedule(Duration::from_secs(1), || async {
+            std::future::pending::<()>().await;
+        }));
+        tokio::task::yield_now().await;
+        for _ in 0..3 {
+            tokio::time::advance(Duration::from_secs(1)).await;
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(fast_count.load(Ordering::SeqCst), 4);
+        tasks.shutdown().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_collector_exits_on_closed_or_already_signalled_channel() {
+        for signalled in [false, true] {
+            let (tx, rx) = watch::channel(signalled);
+            if !signalled {
+                drop(tx);
+            }
+            let handle = start_collection_loop(
+                rx,
+                Arc::new(Config::default()),
+                MetricsRegistry::new(),
+                Arc::new(ConnectionPool::new()),
+            );
+            tokio::time::timeout(Duration::from_secs(1), handle)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_collector_invalid_programmatic_configuration_returns_error() {
+        let (_tx, rx) = watch::channel(false);
+        let config = Config {
+            collection_interval_secs: 0,
+            ..Config::default()
+        };
+        assert!(
+            start_collection_loop(
+                rx,
+                Arc::new(config),
+                MetricsRegistry::new(),
+                Arc::new(ConnectionPool::new())
+            )
+            .await
+            .unwrap()
+            .is_err()
+        );
+    }
 }
