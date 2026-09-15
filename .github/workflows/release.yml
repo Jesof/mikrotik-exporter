@@ -44,9 +44,10 @@ jobs:
           ref: main
           fetch-depth: 0
           persist-credentials: false
-      - name: Resolve tag and verify version and main ancestry
+      - name: Resolve tag and verify signature, version, and main ancestry
         id: source
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
@@ -54,6 +55,10 @@ jobs:
           [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
           sha=$(git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}")
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          tag_object=$(git rev-parse --verify "refs/tags/$RELEASE_TAG^{tag}")
+          [[ "$tag_object" =~ ^[0-9a-f]{40}$ ]]
+          verification=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_object" --jq '.verification.verified')
+          [[ "$verification" == true ]]
           if [[ "$EVENT_NAME" == push ]]; then
             [[ "$sha" == "$GITHUB_SHA" ]]
           fi
@@ -87,26 +92,14 @@ jobs:
           gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100&filter=latest" \
             --jq '.jobs[] | {name, conclusion, status, head_sha}' | jq -s . > "$RUNNER_TEMP/jobs.json"
           jq -e --arg sha "$SOURCE_SHA" '
-            . as $jobs | ["Check", "Test Suite", "Rustfmt", "Clippy", "Cargo Deny", "Security Audit"]
+            . as $jobs | ["Check", "Test Suite", "Rustfmt", "Clippy", "Cargo Deny", "Security Audit", "Publish main image"]
             | all(.[]; . as $name | any($jobs[];
                 .name == $name and .head_sha == $sha and .status == "completed" and .conclusion == "success"))
           ' "$RUNNER_TEMP/jobs.json"
 
-  quality:
-    name: Release Quality
-    needs: verify
-    permissions:
-      contents: read
-      packages: write
-      attestations: write
-      id-token: write
-    uses: ./.github/workflows/ci.yml
-    with:
-      source_sha: ${{ needs.verify.outputs.sha }}
-
   build:
     name: Build ${{ matrix.target }}
-    needs: [verify, quality]
+    needs: verify
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -150,13 +143,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
         with:
           targets: ${{ matrix.target }}
-      - name: Build and test natively
+      - name: Build release binary
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: cc
         run: |
-          cargo test --all-features --locked --target "$TARGET"
           cargo build --release --all-features --locked --bin mikrotik-exporter --target "$TARGET"
       - name: Package binary and checksum
         shell: bash
@@ -182,7 +174,7 @@ jobs:
 
   release:
     name: Publish attested binaries
-    needs: [verify, quality, build]
+    needs: [verify, build]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -228,16 +220,49 @@ jobs:
 
   docker:
     name: Publish release image
-    needs: [verify, quality, build, release]
+    needs: [verify, release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
       attestations: write
       id-token: write
-    uses: ./.github/workflows/docker-build.yml
-    with:
-      source_sha: ${{ needs.verify.outputs.sha }}
-      release_tag: ${{ needs.verify.outputs.tag }}
-      platforms: linux/amd64,linux/arm64
-      push: true
-      cache_scope: release-v2
+    steps:
+      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4
+        with:
+          version: v0.37.1
+          driver-opts: image=moby/buildkit:v0.33.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promote verified main image to release tags
+        id: manifest
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+          SOURCE_SHA: ${{ needs.verify.outputs.sha }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+        run: |
+          set -euo pipefail
+          source_ref="$IMAGE:sha-$SOURCE_SHA"
+          docker buildx imagetools inspect "$source_ref" >/dev/null
+          version=${RELEASE_TAG#v}
+          minor=${version%.*}
+          major=${version%%.*}
+          docker buildx imagetools create \
+            --tag "$IMAGE:$RELEASE_TAG" \
+            --tag "$IMAGE:$version" \
+            --tag "$IMAGE:$minor" \
+            --tag "$IMAGE:$major" \
+            "$source_ref"
+          digest=$(docker buildx imagetools inspect "$source_ref" --format '{{.Manifest.Digest}}')
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Attest promoted release image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true

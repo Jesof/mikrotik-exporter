@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release recovery is repeatable for an existing tag, and release images expose exact, minor-line,
   and major-line tags in addition to the immutable source-SHA tag; `latest` remains the checked
   `main` image.
+- Release workflows reuse successful exact-SHA main CI, build release binaries without repeating
+  tests, and promote the already scanned immutable Docker image instead of rebuilding it.
+- Release tags must be annotated and cryptographically signed; Dependabot auto-merge excludes CI,
+  release, Docker, and dependency configuration files.
 
 ## [0.4.0] - 2026-09-15
 
@@ -53,8 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   freshness-based alerts, the correct ServiceMonitor port, and actual Kubernetes manifests.
 - Full CI on pushes, PRs, schedules, and manual runs; required `Check` aggregates Rust, coverage,
   workflow, and native multi-architecture Docker validation. Actions are SHA-pinned.
-- Releases verify exact tag/Cargo version, main ancestry, and successful main CI for the same SHA,
-  rerun quality checks, natively test/build release targets, and attest binaries/checksums and images.
+- Releases verify exact signed tag/Cargo version, main ancestry, and successful main CI for the same
+  SHA, build release targets, and attest binaries/checksums and the promoted image.
 - Updated public contribution/security policies and issue/PR guidance.
 
 ### Fixed

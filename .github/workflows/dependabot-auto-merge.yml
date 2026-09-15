@@ -19,10 +19,28 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Reject sensitive file changes
+        id: scope
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          safe=true
+          while IFS= read -r file; do
+            case "$file" in
+              .github/workflows/*|.github/dependabot.yml|.github/CODEOWNERS|Dockerfile|build-docker.sh|deny.toml|rust-toolchain.toml|.cargo/*)
+                safe=false
+                ;;
+            esac
+          done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[].filename')
+          echo "safe=$safe" >> "$GITHUB_OUTPUT"
+
       - name: Approve patch and minor updates
         if: >-
-          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+          steps.scope.outputs.safe == 'true' &&
+          (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor')
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -30,8 +48,9 @@ jobs:
 
       - name: Enable auto-merge for patch and minor updates
         if: >-
-          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+          steps.scope.outputs.safe == 'true' &&
+          (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor')
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}

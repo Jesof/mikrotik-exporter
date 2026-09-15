@@ -181,12 +181,13 @@ Before tagging, require green checks on the exact squash-merge commit on `main`,
 explicit approval to create and push the signed tag. Never tag the branch head or delete/move an
 already-published tag. A bad release is corrected by a new version.
 
-The workflow resolves an existing exact `vX.Y.Z` tag, checks Cargo version and `main` ancestry,
-requires a successful main push CI run and the required check names on that SHA, and reruns the
-full quality workflow on it. Manual dispatch must run from `main` with that existing tag. Native
-Linux/macOS amd64+arm64 and Windows amd64 jobs test/build locked binaries; checksums and provenance
-attestations accompany release assets. Images are published from the same verified SHA after the
-binary release succeeds. Do not disable provenance permissions or bypass these gates.
+The workflow resolves an existing exact annotated, signed `vX.Y.Z` tag, checks Cargo version and
+`main` ancestry, requires a successful main push CI run and the required check names on that SHA.
+Manual dispatch must run from `main` with that existing tag. Native
+Linux/macOS amd64+arm64 and Windows amd64 jobs build locked binaries; checksums and provenance
+attestations accompany release assets. Images are promoted from the same verified SHA after the
+binary release succeeds; Docker is not rebuilt during release. Do not disable provenance permissions
+or bypass these gates.
 
 Crates.io publication is a separate final step (`cargo publish`) requiring explicit approval;
 the tag workflow does not publish the crate automatically.
