@@ -78,6 +78,7 @@ jobs:
           version: v0.37.1
           driver-opts: image=moby/buildkit:v0.33.0
       - name: Build and load for validation
+        if: ${{ !inputs.push }}
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
@@ -91,8 +92,10 @@ jobs:
           version: v0.74.0
           cache: false
       - name: Scan image before publication
+        if: ${{ !inputs.push }}
         run: trivy image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 mikrotik-exporter:validation
       - name: Verify unprivileged image configuration
+        if: ${{ !inputs.push }}
         run: |
           test "$(docker inspect --format '{{.Config.User}}' mikrotik-exporter:validation)" = '1000:1000'
           docker run --rm --entrypoint /bin/sh mikrotik-exporter:validation -c 'test -x /app/mikrotik-exporter'
@@ -110,7 +113,27 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           outputs: type=image,name=${{ needs.prepare.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ inputs.cache_scope || 'manual-v2' }}-${{ matrix.arch }}-rust-1.98.0
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope || 'manual-v2' }}-${{ matrix.arch }}-rust-1.98.0
           provenance: mode=max
+      - name: Scan published image by digest
+        if: inputs.push
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          trivy image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 "$IMAGE@$DIGEST"
+      - name: Verify published image configuration
+        if: inputs.push
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE@$DIGEST"
+          test "$(docker inspect --format '{{.Config.User}}' "$IMAGE@$DIGEST")" = '1000:1000'
+          docker run --rm --entrypoint /bin/sh "$IMAGE@$DIGEST" -c 'test -x /app/mikrotik-exporter'
       - name: Export digest
         if: inputs.push
         env:
