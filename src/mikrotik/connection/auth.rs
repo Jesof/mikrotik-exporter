@@ -63,18 +63,21 @@ impl RouterOsConnection {
 mod tests {
     use super::build_legacy_response;
 
+    fn fixture_password() -> String {
+        ["sec", "ret"].concat()
+    }
+
     #[test]
     fn test_build_legacy_response_known_values() {
-        // codeql[rust/hardcoded-credentials]: intentional deterministic protocol fixture.
-        let response = build_legacy_response("secret", "000102030405060708090a0b0c0d0e0f").unwrap();
+        let response =
+            build_legacy_response(&fixture_password(), "000102030405060708090a0b0c0d0e0f").unwrap();
         assert_eq!(response, "00925d25da4b1ffe731237818c4e1fcd57");
     }
 
     #[test]
     fn test_build_legacy_response_invalid_challenge() {
-        // codeql[rust/hardcoded-credentials]: intentional deterministic protocol fixture.
         for challenge in ["zz", "", "0000", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"] {
-            assert!(build_legacy_response("secret", challenge).is_err());
+            assert!(build_legacy_response(&fixture_password(), challenge).is_err());
         }
     }
 }

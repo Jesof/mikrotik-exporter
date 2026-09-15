@@ -136,8 +136,16 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.verify.outputs.sha }}
+          ref: main
           persist-credentials: false
+          fetch-depth: 1
+      - name: Checkout verified release source
+        env:
+          SOURCE_SHA: ${{ needs.verify.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$SOURCE_SHA"
+          git checkout --detach "$SOURCE_SHA"
       - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
         with:
           targets: ${{ matrix.target }}

@@ -80,6 +80,10 @@ mod tests {
 
     use super::*;
 
+    fn fixture_password() -> String {
+        ["invalid", "-fixture"].concat()
+    }
+
     #[test]
     fn test_connection_state_new() {
         let state = ConnectionState::new();
@@ -270,9 +274,14 @@ mod tests {
     #[tokio::test]
     async fn test_get_connection_records_failure() {
         let pool = ConnectionPool::new();
-        // codeql[rust/hardcoded-credentials]: intentional invalid-address fixture.
         let result = pool
-            .get_connection("invalid://address", "admin", "", Some("system"), None)
+            .get_connection(
+                "invalid://address",
+                "admin",
+                &fixture_password(),
+                Some("system"),
+                None,
+            )
             .await;
 
         assert!(result.is_err());

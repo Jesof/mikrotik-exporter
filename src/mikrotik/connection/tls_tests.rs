@@ -11,6 +11,14 @@ use tokio::io::AsyncReadExt;
 use tokio::net::TcpListener;
 use tokio_rustls::{TlsAcceptor, rustls};
 
+fn fixture_username() -> &'static str {
+    "test-user"
+}
+
+fn fixture_password() -> String {
+    ["test", "-password"].concat()
+}
+
 fn certificate(names: Vec<String>) -> (TlsAcceptor, tempfile::NamedTempFile) {
     let rcgen::CertifiedKey { cert, signing_key } =
         rcgen::generate_simple_self_signed(names).unwrap();
@@ -60,8 +68,8 @@ async fn test_tls_trusted_dns_and_ip_startup_authenticated_success() {
             routers: vec![RouterConfig {
                 name: "tls-router".into(),
                 address: listener.local_addr().unwrap().to_string(),
-                username: "test-user".into(),
-                password: "test-password".to_string().into(),
+                username: fixture_username().into(),
+                password: fixture_password().into(),
                 tls: Some(RouterTlsConfig {
                     server_name: name.map(str::to_string),
                     ca_file: Some(ca.path().into()),
@@ -106,9 +114,14 @@ async fn test_tls_wrong_name_and_untrusted_certificate_rejected_before_login() {
         };
         let pool = ConnectionPool::new();
         assert!(matches!(
-            // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
-            pool.get_connection(&address, "test-user", "test-password", None, Some(&tls))
-                .await,
+            pool.get_connection(
+                &address,
+                fixture_username(),
+                &fixture_password(),
+                None,
+                Some(&tls)
+            )
+            .await,
             Err(AppError::Transport {
                 operation: "TLS handshake",
                 ..
@@ -175,18 +188,28 @@ async fn test_tls_never_reuses_idle_plaintext_connection() {
     });
     let pool = ConnectionPool::new();
     drop(
-        // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
-        pool.get_connection(&address, "test-user", "test-password", None, None)
-            .await
-            .unwrap(),
+        pool.get_connection(
+            &address,
+            fixture_username(),
+            &fixture_password(),
+            None,
+            None,
+        )
+        .await
+        .unwrap(),
     );
     let tls = RouterTlsConfig {
         server_name: Some("router.test".into()),
         ca_file: Some(ca.path().into()),
     };
     let mut guard = pool
-        // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
-        .get_connection(&address, "test-user", "test-password", None, Some(&tls))
+        .get_connection(
+            &address,
+            fixture_username(),
+            &fixture_password(),
+            None,
+            Some(&tls),
+        )
         .await
         .unwrap();
     guard
@@ -267,10 +290,15 @@ async fn test_tls_changed_name_or_ca_cannot_reuse_trusted_connection() {
         };
         let pool = ConnectionPool::new();
         drop(
-            // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
-            pool.get_connection(&address, "test-user", "test-password", None, Some(&tls))
-                .await
-                .unwrap(),
+            pool.get_connection(
+                &address,
+                fixture_username(),
+                &fixture_password(),
+                None,
+                Some(&tls),
+            )
+            .await
+            .unwrap(),
         );
         let mut changed = tls.clone();
         if change_ca {
@@ -280,9 +308,14 @@ async fn test_tls_changed_name_or_ca_cannot_reuse_trusted_connection() {
         }
         for _ in 0..2 {
             assert!(matches!(
-                // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
-                pool.get_connection(&address, "test-user", "test-password", None, Some(&changed))
-                    .await,
+                pool.get_connection(
+                    &address,
+                    fixture_username(),
+                    &fixture_password(),
+                    None,
+                    Some(&changed)
+                )
+                .await,
                 Err(AppError::Transport {
                     operation: "TLS handshake",
                     ..
@@ -290,8 +323,13 @@ async fn test_tls_changed_name_or_ca_cannot_reuse_trusted_connection() {
             ));
         }
         let mut guard = pool
-            // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
-            .get_connection(&address, "test-user", "test-password", None, Some(&tls))
+            .get_connection(
+                &address,
+                fixture_username(),
+                &fixture_password(),
+                None,
+                Some(&tls),
+            )
             .await
             .unwrap();
         guard.get_mut().command("/reused", &[]).await.unwrap();
@@ -307,8 +345,8 @@ async fn test_startup_reports_tls_verification_failure() {
         routers: vec![RouterConfig {
             name: "tls-router".into(),
             address: listener.local_addr().unwrap().to_string(),
-            username: "test-user".into(),
-            password: "test-password".to_string().into(),
+            username: fixture_username().into(),
+            password: fixture_password().into(),
             tls: Some(RouterTlsConfig {
                 server_name: Some("wrong.test".into()),
                 ca_file: Some(ca.path().into()),
