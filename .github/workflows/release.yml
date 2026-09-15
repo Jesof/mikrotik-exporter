@@ -140,6 +140,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
       - name: Checkout verified release source
+        shell: bash
         env:
           SOURCE_SHA: ${{ needs.verify.outputs.sha }}
         run: |
