@@ -1,109 +1,60 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! `RouterOS` authentication
-
 use crate::prelude::{AppError, Result};
 use md5::compute as md5_compute;
 
 use super::RouterOsConnection;
 
-fn is_auth_failure_message(message: &str) -> bool {
-    let lowercase = message.to_ascii_lowercase();
-    lowercase.contains("failure") || lowercase.contains("invalid")
-}
-
-fn extract_challenge(sentences: &[std::collections::HashMap<String, String>]) -> Option<String> {
-    sentences
-        .iter()
-        .find_map(|sentence| sentence.get("ret").cloned())
-}
-
 fn build_legacy_response(password: &str, challenge_hex: &str) -> Result<String> {
-    let challenge = hex::decode(challenge_hex).map_err(|error| {
-        AppError::RouterOs(format!(
-            "Invalid RouterOS challenge hex '{challenge_hex}': {error}"
-        ))
-    })?;
-
+    if challenge_hex.len() != 32 {
+        return Err(AppError::Authentication("invalid challenge length".into()));
+    }
+    let challenge = hex::decode(challenge_hex)
+        .map_err(|_| AppError::Authentication("invalid challenge encoding".into()))?;
     let mut data = Vec::with_capacity(1 + password.len() + challenge.len());
     data.push(0u8);
     data.extend_from_slice(password.as_bytes());
     data.extend_from_slice(&challenge);
     let digest = md5_compute(&data);
-    let mut response = String::from("00");
-    response.push_str(&hex::encode(digest.0));
-    Ok(response)
+    Ok(format!("00{}", hex::encode(digest.0)))
 }
 
 impl RouterOsConnection {
     pub(crate) async fn login(&mut self, username: &str, password: &str) -> Result<()> {
-        tracing::trace!("Attempting login for user: {}", username);
-        // Try new login method first (RouterOS 6.43+)
-        let login_result = self
+        let response = self
             .raw_command(vec![
-                "/login".to_string(),
-                format!("=name={}", username),
-                format!("=password={}", password),
+                "/login".into(),
+                format!("=name={username}"),
+                format!("=password={password}"),
             ])
-            .await;
-
-        match login_result {
-            Ok(sentences) => {
-                tracing::trace!(
-                    "New login method response received, {} sentences",
-                    sentences.len()
-                );
-                for sentence in &sentences {
-                    if let Some(msg) = sentence.get("message") {
-                        if is_auth_failure_message(msg) {
-                            tracing::trace!("Login failed with message: {}", msg);
-                            return Err(AppError::RouterOs(format!(
-                                "Login failed (new auth method): {msg}"
-                            )));
-                        }
-                        tracing::debug!("Login message: {}", msg);
-                    }
+            .await?;
+        if !response.records.is_empty() {
+            self.dirty = true;
+            return Err(AppError::Authentication("unexpected login records".into()));
+        }
+        if let Some(challenge) = response.done.get("ret") {
+            let legacy = match build_legacy_response(password, challenge) {
+                Ok(legacy) => legacy,
+                Err(error) => {
+                    self.dirty = true;
+                    return Err(error);
                 }
-                tracing::debug!("Login successful (new method)");
-                return Ok(());
-            }
-            Err(error) => {
-                tracing::debug!("New login method failed, trying legacy method: {}", error);
-            }
-        }
-
-        tracing::trace!("Requesting challenge for legacy login");
-        let challenge_sentences =
-            self.raw_command(vec!["/login".to_string()])
-                .await
-                .map_err(|error| {
-                    AppError::RouterOs(format!("Legacy login challenge request failed: {error}"))
-                })?;
-
-        let challenge_hex = extract_challenge(&challenge_sentences).ok_or_else(|| {
-            AppError::RouterOs("Legacy login failed: no challenge 'ret' received".to_string())
-        })?;
-        tracing::trace!("Challenge received, length: {}", challenge_hex.len());
-        let response = build_legacy_response(password, &challenge_hex)?;
-
-        let login_sentences = self
-            .raw_command(vec![
-                "/login".to_string(),
-                format!("=name={}", username),
-                format!("=response={}", response),
-            ])
-            .await
-            .map_err(|error| {
-                AppError::RouterOs(format!("Legacy login response submission failed: {error}"))
-            })?;
-
-        for sentence in &login_sentences {
-            if let Some(message) = sentence.get("message") {
-                tracing::warn!("Login message: {}", message);
+            };
+            let response = self
+                .raw_command(vec![
+                    "/login".into(),
+                    format!("=name={username}"),
+                    format!("=response={legacy}"),
+                ])
+                .await?;
+            if !response.records.is_empty() || response.done.contains_key("ret") {
+                self.dirty = true;
+                return Err(AppError::Authentication(
+                    "challenge was not accepted".into(),
+                ));
             }
         }
-        tracing::debug!("Login successful (legacy method)");
         Ok(())
     }
 }
@@ -112,16 +63,21 @@ impl RouterOsConnection {
 mod tests {
     use super::build_legacy_response;
 
-    #[test]
-    fn test_build_legacy_response_known_values() {
-        let response = build_legacy_response("secret", "0f0e0d0c0b0a09080706050403020100")
-            .expect("response should build");
-        assert_eq!(response, "006207c72a4341e4f21771ae7f77036fed");
+    fn fixture_password() -> String {
+        ["sec", "ret"].concat()
     }
 
     #[test]
-    fn test_build_legacy_response_invalid_hex() {
-        let result = build_legacy_response("secret", "zz");
-        assert!(result.is_err());
+    fn test_build_legacy_response_known_values() {
+        let response =
+            build_legacy_response(&fixture_password(), "000102030405060708090a0b0c0d0e0f").unwrap();
+        assert_eq!(response, "00925d25da4b1ffe731237818c4e1fcd57");
+    }
+
+    #[test]
+    fn test_build_legacy_response_invalid_challenge() {
+        for challenge in ["zz", "", "0000", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"] {
+            assert!(build_legacy_response(&fixture_password(), challenge).is_err());
+        }
     }
 }

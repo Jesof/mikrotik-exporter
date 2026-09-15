@@ -13,7 +13,9 @@ Practical deployment examples for various scenarios.
 
 ## Docker Compose - Production Stack
 
-Complete monitoring stack with Prometheus, Grafana, and Alertmanager.
+Complete monitoring stack with Prometheus, Grafana, and Alertmanager. Credentials below are
+placeholders: inject deployment secrets and pin image versions/digests before production use.
+These examples target the unreleased metric/probe contract documented in [CHANGELOG.md](CHANGELOG.md).
 
 ### docker-compose.yml
 
@@ -46,7 +48,7 @@ services:
           "--quiet",
           "--tries=1",
           "--spider",
-          "http://localhost:9090/health",
+           "http://localhost:9090/live",
         ]
       interval: 30s
       timeout: 10s
@@ -169,7 +171,7 @@ groups:
           description: "Exporter has not responded for more than 5 minutes"
 
       - alert: MikroTikRouterDown
-        expr: mikrotik_scrape_success_total == 0
+        expr: mikrotik_scrape_last_success_timestamp_seconds == 0 or time() - mikrotik_scrape_last_success_timestamp_seconds > 300
         for: 5m
         labels:
           severity: warning
@@ -178,16 +180,16 @@ groups:
           description: "Unable to collect metrics from {{ $labels.router }}"
 
       - alert: MikroTikHighCPU
-        expr: mikrotik_system_cpu_load > 80
+        expr: mikrotik_system_cpu_load_ratio > 0.8
         for: 10m
         labels:
           severity: warning
         annotations:
           summary: "High CPU usage on {{ $labels.router }}"
-          description: "CPU load = {{ $value }}%"
+          description: "CPU load = {{ $value | humanizePercentage }}"
 
       - alert: MikroTikLowMemory
-        expr: (mikrotik_system_free_memory_bytes / mikrotik_system_total_memory_bytes) * 100 < 10
+        expr: mikrotik_system_free_memory_bytes / mikrotik_system_total_memory_bytes < 0.1
         for: 10m
         labels:
           severity: warning
@@ -201,8 +203,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Interface {{ $labels.interface }} on {{ $labels.router }} is down"
-          description: "Interface {{ $labels.interface }} is in down state"
+          summary: "Interface {{ $labels.id }} on {{ $labels.router }} is down"
+          description: "Interface {{ $labels.id }} is in down state"
 ```
 
 ### grafana/provisioning/datasources/prometheus.yml
@@ -356,7 +358,7 @@ docker run -d \
   --restart=unless-stopped \
   -p 9090:9090 \
   -e ROUTERS_CONFIG='[{"name":"router1","address":"192.168.88.1:8728","username":"admin","password":"pass"}]' \
-  --health-cmd='wget --quiet --tries=1 --spider http://localhost:9090/health || exit 1' \
+  --health-cmd='wget --quiet --tries=1 --spider http://localhost:9090/live || exit 1' \
   --health-interval=30s \
   --health-timeout=10s \
   --health-retries=3 \
@@ -455,7 +457,7 @@ spec:
               memory: 256Mi
           livenessProbe:
             httpGet:
-              path: /health
+              path: /live
               port: 9090
             initialDelaySeconds: 10
             periodSeconds: 30
@@ -463,7 +465,7 @@ spec:
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: 9090
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -478,8 +480,8 @@ spec:
 ### System Metrics
 
 ```promql
-# CPU load by router
-mikrotik_system_cpu_load
+# CPU utilization by router (ratio, 0–1)
+mikrotik_system_cpu_load_ratio
 
 # Memory usage (%)
 100 - (mikrotik_system_free_memory_bytes / mikrotik_system_total_memory_bytes * 100)
@@ -488,7 +490,7 @@ mikrotik_system_cpu_load
 mikrotik_system_uptime_seconds / 86400
 
 # Routers with CPU load > 70%
-mikrotik_system_cpu_load > 70
+mikrotik_system_cpu_load_ratio > 0.7
 ```
 
 ### Network Traffic
@@ -532,8 +534,8 @@ mikrotik_interface_rx_errors_total > 0 or mikrotik_interface_tx_errors_total > 0
 # Metrics collection success rate (%)
 rate(mikrotik_scrape_success_total[5m]) / (rate(mikrotik_scrape_success_total[5m]) + rate(mikrotik_scrape_errors_total[5m])) * 100
 
-# Scrape duration (ms)
-mikrotik_scrape_duration_milliseconds
+# Scrape duration (seconds)
+mikrotik_scrape_duration_seconds
 
 # Time since last successful scrape (minutes)
 (time() - mikrotik_scrape_last_success_timestamp_seconds) / 60
@@ -541,8 +543,8 @@ mikrotik_scrape_duration_milliseconds
 # Routers with connection errors
 mikrotik_connection_consecutive_errors > 0
 
-# Connection pool usage (%)
-mikrotik_connection_pool_active / mikrotik_connection_pool_size * 100
+# Active share of all pooled connections (%); pool_size counts idle connections
+mikrotik_connection_pool_active / clamp_min(mikrotik_connection_pool_size + mikrotik_connection_pool_active, 1) * 100
 ```
 
 ### Alerts
@@ -551,11 +553,11 @@ mikrotik_connection_pool_active / mikrotik_connection_pool_size * 100
 # Exporter unavailable
 up{job="mikrotik-exporter"} == 0
 
-# Router unavailable
-mikrotik_scrape_success_total == 0
+# Router has never completed collection or has stale data
+mikrotik_scrape_last_success_timestamp_seconds == 0 or time() - mikrotik_scrape_last_success_timestamp_seconds > 300
 
 # High CPU load
-mikrotik_system_cpu_load > 80
+mikrotik_system_cpu_load_ratio > 0.8
 
 # Low memory (<10%)
 (mikrotik_system_free_memory_bytes / mikrotik_system_total_memory_bytes) * 100 < 10
@@ -611,7 +613,7 @@ docker stats mikrotik-exporter
 # Execute command inside
 docker exec -it mikrotik-exporter sh
 
-# Check health
+# Inspect cached router diagnostics (not a process probe)
 docker exec mikrotik-exporter wget -qO- http://localhost:9090/health
 
 # Restart

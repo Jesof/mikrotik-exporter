@@ -18,6 +18,7 @@ use policy::enforce_startup_connectivity_policy;
 /// Returns `AppError::Config` when strict startup mode is enabled and
 /// at least one router is unreachable.
 pub async fn run_startup_connectivity_tests(config: &Config) -> Result<()> {
+    config.validate()?;
     if !config.startup_connectivity_test || config.routers.is_empty() {
         return Ok(());
     }

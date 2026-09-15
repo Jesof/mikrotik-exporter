@@ -41,13 +41,13 @@ mod types;
 
 pub(crate) use guard::PooledConnectionGuard;
 use types::timeouts;
-use types::{ConnectionState, PooledConnection};
+use types::{ConnectionKey, ConnectionState, PooledConnection};
 
 /// Connection pool for reusing `RouterOS` connections.
 #[derive(Clone)]
 pub struct ConnectionPool {
-    connections: Arc<Mutex<HashMap<String, PooledConnection>>>,
-    connection_states: Arc<Mutex<HashMap<String, ConnectionState>>>,
+    connections: Arc<Mutex<HashMap<ConnectionKey, PooledConnection>>>,
+    connection_states: Arc<Mutex<HashMap<ConnectionKey, ConnectionState>>>,
     active_connections: Arc<AtomicUsize>,
     max_idle_time: Duration,
 }
@@ -79,6 +79,10 @@ mod tests {
     use std::collections::HashSet;
 
     use super::*;
+
+    fn fixture_password() -> String {
+        ["invalid", "-fixture"].concat()
+    }
 
     #[test]
     fn test_connection_state_new() {
@@ -186,9 +190,8 @@ mod tests {
         pool.record_success("192.168.1.1", "admin", None).await;
 
         let states = pool.connection_states.lock().await;
-        let key = "192.168.1.1:admin";
-        assert!(states.contains_key(key));
-        assert_eq!(states[key].consecutive_errors, 0);
+        assert_eq!(states.len(), 1);
+        assert_eq!(states.values().next().unwrap().consecutive_errors, 0);
     }
 
     #[tokio::test]
@@ -197,9 +200,8 @@ mod tests {
         pool.record_error("192.168.1.1", "admin", None).await;
 
         let states = pool.connection_states.lock().await;
-        let key = "192.168.1.1:admin";
-        assert!(states.contains_key(key));
-        assert_eq!(states[key].consecutive_errors, 1);
+        assert_eq!(states.len(), 1);
+        assert_eq!(states.values().next().unwrap().consecutive_errors, 1);
     }
 
     #[tokio::test]
@@ -273,7 +275,13 @@ mod tests {
     async fn test_get_connection_records_failure() {
         let pool = ConnectionPool::new();
         let result = pool
-            .get_connection("invalid://address", "admin", "", Some("system"))
+            .get_connection(
+                "invalid://address",
+                "admin",
+                &fixture_password(),
+                Some("system"),
+                None,
+            )
             .await;
 
         assert!(result.is_err());

@@ -111,6 +111,13 @@ impl MikroTikClient {
         let vpn_ok = groups::timeout_group_ok(&g3);
         let firewall_ok = groups::timeout_group_ok(&g4);
 
+        reject_invalid_snapshot([
+            groups::inconsistent_snapshot_error(&g1),
+            groups::inconsistent_snapshot_error(&g2),
+            groups::inconsistent_snapshot_error(&g3),
+            groups::inconsistent_snapshot_error(&g4),
+        ])?;
+
         if system_ok && conntrack_ok && vpn_ok && firewall_ok {
             tracing::debug!(
                 "Router '{}' collection succeeded for all groups",
@@ -137,21 +144,6 @@ impl MikroTikClient {
                 return Err(AppError::RouterOs(format!(
                     "Router '{}' critical collection failure - system/interfaces group failed",
                     self.config.name
-                )));
-            }
-
-            if let Some(inconsistent) = [
-                groups::inconsistent_snapshot_error(&g2),
-                groups::inconsistent_snapshot_error(&g3),
-                groups::inconsistent_snapshot_error(&g4),
-            ]
-            .into_iter()
-            .flatten()
-            .next()
-            {
-                return Err(AppError::RouterOs(format!(
-                    "Router '{}' {}",
-                    self.config.name, inconsistent
                 )));
             }
         }
@@ -206,37 +198,18 @@ impl MikroTikClient {
     async fn record_group_result(
         &self,
         guard: &mut PooledConnectionGuard,
-        group: &'static str,
+        _group: &'static str,
         success: bool,
     ) {
-        if success {
-            self.pool
-                .record_success(&self.config.address, &self.config.username, Some(group))
-                .await;
-        } else {
+        if !success {
             guard.mark_broken();
-            self.pool
-                .record_error(&self.config.address, &self.config.username, Some(group))
-                .await;
         }
+        guard.record_result(success).await;
     }
 
     /// Test connectivity to the router.
     pub(crate) async fn test_connection(&self) -> Result<()> {
-        use tokio::time::{Duration, timeout};
-
-        const TEST_CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
-
-        if let Ok(result) = timeout(TEST_CONNECTION_TIMEOUT, self.test_connection_real()).await {
-            result
-        } else {
-            let err = format!(
-                "Router '{}' connection test timeout (>10s)",
-                self.config.name
-            );
-            tracing::error!("{err}");
-            Err(AppError::RouterOs(err))
-        }
+        self.test_connection_real().await
     }
 
     async fn test_connection_real(&self) -> Result<()> {
@@ -247,6 +220,7 @@ impl MikroTikClient {
                 &self.config.username,
                 self.config.password.expose_secret(),
                 None,
+                self.config.tls.as_ref(),
             )
             .await?;
 
@@ -254,15 +228,10 @@ impl MikroTikClient {
 
         let result = conn.command("/system/resource/print", &[]).await;
 
-        if result.is_ok() {
-            self.pool
-                .record_success(&self.config.address, &self.config.username, None)
-                .await;
-        } else {
-            self.pool
-                .record_error(&self.config.address, &self.config.username, None)
-                .await;
+        if result.is_err() {
+            guard.mark_broken();
         }
+        guard.record_result(result.is_ok()).await;
 
         drop(guard);
 
@@ -271,9 +240,118 @@ impl MikroTikClient {
     }
 }
 
+fn reject_invalid_snapshot(messages: [Option<&str>; 4]) -> Result<()> {
+    if let Some(message) = messages.into_iter().flatten().next() {
+        return Err(AppError::InvalidSnapshot(message.to_string()));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    #[ignore = "explicit read-only collection from devices configured in local .env"]
+    async fn test_real_router_single_snapshot() -> std::result::Result<(), &'static str> {
+        let entries = dotenvy::dotenv_iter().map_err(|_| "cannot open dotenv")?;
+        let mut values = std::collections::HashMap::new();
+        for entry in entries {
+            let (key, value) = entry.map_err(|_| "invalid dotenv syntax")?;
+            values.insert(key, value);
+        }
+        let config = crate::config::Config::from_lookup(|key| Ok(values.get(key).cloned()))
+            .map_err(|_| "invalid configuration (details redacted)")?;
+        if config.routers.is_empty() {
+            return Err("no configured devices");
+        }
+        println!("configured_devices={}", config.routers.len());
+        let pool = Arc::new(ConnectionPool::new());
+        for (index, router) in config.routers.into_iter().enumerate() {
+            println!("device_index={index} tls={}", router.tls.is_some());
+            let client = MikroTikClient::with_pool(router, pool.clone());
+            tokio::time::timeout(std::time::Duration::from_secs(15), client.test_connection())
+                .await
+                .map_err(|_| "connectivity deadline exceeded")?
+                .map_err(|_| "connectivity failed (details redacted)")?;
+            println!("device_index={index} authenticated_resource_query=ok");
+            let (conntrack, vpn, firewall) = tokio::join!(
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(35),
+                    groups::collect_group_conntrack(&client)
+                ),
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(35),
+                    groups::collect_group_vpn_certs(&client)
+                ),
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(50),
+                    groups::collect_group_firewall(&client)
+                ),
+            );
+            match conntrack {
+                Ok(Ok(data)) => println!("conntrack_query=ok complete={}", data.complete_ok),
+                _ => println!("conntrack_query=failed"),
+            }
+            match vpn {
+                Ok(Ok(data)) => println!("wireguard_query={}", data.wireguard_ok),
+                _ => println!("vpn_cert_query=failed"),
+            }
+            match firewall {
+                Ok(Ok(data)) => println!("firewall_query=ok complete={}", data.complete_ok),
+                _ => println!("firewall_query=failed"),
+            }
+            let snapshot = client
+                .collect_metrics()
+                .await
+                .map_err(|error| match error {
+                    AppError::InvalidSnapshot(message) => {
+                        println!(
+                            "validation_missing_field={}",
+                            message.starts_with("missing field ")
+                        );
+                        "snapshot validation failed (details redacted)"
+                    }
+                    _ => "collection failed (details redacted)",
+                })?;
+            let status = &snapshot.collection_status;
+            println!(
+                "device_index={index} system={} conntrack_complete={} wireguard={} certificates={} firewall_complete={}",
+                status.system_interfaces_ok(),
+                status.conntrack_complete_ok(),
+                status.wireguard_ok(),
+                status.certificates_ok(),
+                status.firewall_complete_ok()
+            );
+            let registry = crate::metrics::MetricsRegistry::new();
+            registry.update_metrics(&snapshot);
+            let encoded = registry
+                .encode_metrics()
+                .await
+                .map_err(|_| "encoding failed")?;
+            if !encoded.ends_with("# EOF\n") || !encoded.contains("mikrotik_system_cpu_load_ratio{")
+            {
+                return Err("expected OpenMetrics data missing");
+            }
+            println!("device_index={index} openmetrics=ok");
+            if !status.all_ok() {
+                return Err("incomplete collection: see group booleans above");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_invalid_snapshot_remains_typed_for_every_group() {
+        for group in 0..4 {
+            let mut errors = [None; 4];
+            errors[group] = Some("invalid snapshot");
+            assert!(
+                matches!(reject_invalid_snapshot(errors), Err(AppError::InvalidSnapshot(message)) if message == "invalid snapshot")
+            );
+        }
+        assert!(reject_invalid_snapshot([None; 4]).is_ok());
+    }
 
     #[test]
     fn test_failed_group_names_returns_only_failed_groups() {
@@ -296,6 +374,7 @@ mod tests {
             address: "192.168.1.1:8728".to_string(),
             username: "admin".to_string(),
             password: "password".to_string().into(),
+            tls: None,
         };
 
         let pool = Arc::new(ConnectionPool::new());
@@ -312,6 +391,7 @@ mod tests {
             address: "invalid:address".to_string(),
             username: "admin".to_string(),
             password: "password".to_string().into(),
+            tls: None,
         };
 
         let pool = Arc::new(ConnectionPool::new());

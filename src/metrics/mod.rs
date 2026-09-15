@@ -6,7 +6,7 @@
 //! Contains types for labels, parsers, and Prometheus metrics registry.
 
 pub(crate) mod labels;
-mod parsers;
+pub(crate) mod parsers;
 mod registry;
 
 #[cfg(test)]

@@ -13,7 +13,7 @@ mod router;
 #[cfg(test)]
 mod tests;
 
-pub use self::router::RouterConfig;
+pub use self::router::{RouterConfig, RouterTlsConfig};
 
 /// Application-wide configuration
 #[derive(Debug, Clone)]
@@ -77,8 +77,11 @@ impl Config {
     ///
     /// # Returns
     ///
-    /// Returns a `Config` instance with loaded values. Invalid router configurations
-    /// are filtered out with warnings logged.
+    /// Returns a validated `Config` instance with loaded values.
+    ///
+    /// # Errors
+    /// Rejects malformed values, invalid routers, unknown JSON fields, and duplicate names.
+    /// Invalid JSON never falls back to legacy configuration.
     ///
     /// # Examples
     ///
@@ -86,36 +89,45 @@ impl Config {
     /// use mikrotik_exporter::Config;
     ///
     /// // Load configuration from environment variables
-    /// let config = Config::from_env();
+    /// let config = Config::from_env().unwrap();
     /// println!("Loaded configuration for {} router(s)", config.routers.len());
     /// ```
-    pub fn from_env() -> Self {
+    pub fn from_env() -> crate::Result<Self> {
+        Self::from_lookup(|key| match std::env::var(key) {
+            Ok(value) => Ok(Some(value)),
+            Err(std::env::VarError::NotPresent) => Ok(None),
+            Err(std::env::VarError::NotUnicode(_)) => {
+                Err(crate::AppError::Config(format!("Invalid Unicode in {key}")))
+            }
+        })
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn from_lookup(
+        lookup: impl Fn(&str) -> crate::Result<Option<String>>,
+    ) -> crate::Result<Self> {
         let server_addr =
-            loader::string_env_or_default(env_vars::SERVER_ADDR, defaults::SERVER_ADDR);
+            loader::string_env_or_default(&lookup, env_vars::SERVER_ADDR, defaults::SERVER_ADDR)?;
         let collection_interval_secs = loader::parse_env_or_default(
+            &lookup,
             env_vars::COLLECTION_INTERVAL_SECONDS,
             defaults::COLLECTION_INTERVAL_SECS,
-        );
+        )?;
         let gap_reset_threshold_secs = loader::parse_env_or_default(
+            &lookup,
             env_vars::GAP_RESET_THRESHOLD_SECONDS,
             defaults::GAP_RESET_THRESHOLD_SECS,
-        );
-        let routers = loader::validate_and_deduplicate_routers(loader::load_router_configs());
-
-        if routers.is_empty() {
-            tracing::warn!(
-                "No valid router configuration found. Service will start but /metrics will be empty."
-            );
-        }
+        )?;
+        let routers = loader::load_router_configs(&lookup)?;
 
         let startup_connectivity_test =
-            loader::parse_env_or_default(env_vars::STARTUP_CONNECTIVITY_TEST, false);
+            loader::parse_env_or_default(&lookup, env_vars::STARTUP_CONNECTIVITY_TEST, false)?;
         let startup_connectivity_timeout_secs =
-            loader::parse_env_or_default(env_vars::STARTUP_CONNECTIVITY_TIMEOUT_SECS, 10);
+            loader::parse_env_or_default(&lookup, env_vars::STARTUP_CONNECTIVITY_TIMEOUT_SECS, 10)?;
         let strict_startup_mode =
-            loader::parse_env_or_default(env_vars::STRICT_STARTUP_MODE, false);
+            loader::parse_env_or_default(&lookup, env_vars::STRICT_STARTUP_MODE, false)?;
 
-        Config {
+        let config = Config {
             server_addr,
             routers,
             collection_interval_secs,
@@ -123,7 +135,62 @@ impl Config {
             startup_connectivity_test,
             startup_connectivity_timeout_secs,
             strict_startup_mode,
+        };
+        config.validate()?;
+        Ok(config)
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn validate(&self) -> crate::Result<()> {
+        use crate::AppError;
+
+        self.server_addr
+            .parse::<std::net::SocketAddr>()
+            .map_err(|_| AppError::Config("SERVER_ADDR must be an IP socket address".into()))?;
+        for (key, value, maximum) in [
+            (
+                env_vars::COLLECTION_INTERVAL_SECONDS,
+                self.collection_interval_secs,
+                86_400,
+            ),
+            (
+                env_vars::GAP_RESET_THRESHOLD_SECONDS,
+                self.gap_reset_threshold_secs,
+                604_800,
+            ),
+            (
+                env_vars::STARTUP_CONNECTIVITY_TIMEOUT_SECS,
+                self.startup_connectivity_timeout_secs,
+                300,
+            ),
+        ] {
+            if !(1..=maximum).contains(&value) {
+                return Err(AppError::Config(format!(
+                    "{key} must be between 1 and {maximum}"
+                )));
+            }
         }
+        if self.strict_startup_mode && !self.startup_connectivity_test {
+            return Err(AppError::Config(
+                "STRICT_STARTUP_MODE requires STARTUP_CONNECTIVITY_TEST=true".into(),
+            ));
+        }
+        if self.strict_startup_mode && self.routers.is_empty() {
+            return Err(AppError::Config(
+                "STRICT_STARTUP_MODE requires at least one router".into(),
+            ));
+        }
+        let mut names = std::collections::HashSet::new();
+        for router in &self.routers {
+            router.validate().map_err(AppError::Config)?;
+            if !names.insert(&router.name) {
+                return Err(AppError::Config(format!(
+                    "Duplicate router name '{}'",
+                    router.name
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Test connectivity to all configured routers
@@ -145,7 +212,7 @@ impl Config {
     /// # async fn example() -> mikrotik_exporter::Result<()> {
     /// # use mikrotik_exporter::Config;
     /// # use mikrotik_exporter::AppError;
-    /// let config = Config::from_env();
+    /// let config = Config::from_env()?;
     /// if config.startup_connectivity_test {
     ///     let failed = config.test_router_connectivity(config.startup_connectivity_timeout_secs).await;
     ///     if !failed.is_empty() {

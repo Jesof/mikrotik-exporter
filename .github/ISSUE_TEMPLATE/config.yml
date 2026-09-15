@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Jesof
+
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Jesof/mikrotik-exporter/security/advisories/new
+    about: Report security issues privately — do not open a public issue.

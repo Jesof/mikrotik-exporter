@@ -15,10 +15,10 @@
 #
 # For more info: https://embarkstudios.github.io/cargo-deny/
 #
-# Tested with: cargo-deny 0.19.0
+# Tested with: cargo-deny 0.20.2
 
 [graph]
-# Target platforms for this project (Linux/macOS on x86_64/aarch64)
+# Target platforms for published binaries and container images
 targets = [
     "x86_64-unknown-linux-gnu",
     "x86_64-unknown-linux-musl",
@@ -26,9 +26,10 @@ targets = [
     "aarch64-unknown-linux-musl",
     "x86_64-apple-darwin",
     "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
 ]
-# Build dependency graph with default features only (not all-features)
-all-features = false
+# Match the CI and release build feature set
+all-features = true
 no-default-features = false
 
 [output]
@@ -62,6 +63,7 @@ allow = [
     "MIT",
     "Apache-2.0",
     "BSD-3-Clause",
+    "ISC",
     "Unicode-3.0",
 ]
 
@@ -97,7 +99,9 @@ allow-workspace = false
 deny = []
 
 # Skip specific crate versions during duplicate detection
-skip = []
+# syn: syn 2 and syn 3 coexist while the ecosystem migrates; tracing-attributes
+# (latest 0.1.31) still depends on syn 2 while other proc-macro crates use syn 3
+skip = ["syn"]
 
 # Skip entire dependency trees from duplicate checks (very heavy hammer)
 skip-tree = []

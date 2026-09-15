@@ -2,49 +2,22 @@ name: Rust CI
 
 on:
   push:
-    branches:
-      - '**'
-    tags:
-      - 'v*'
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'build.rs'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - 'deny.toml'
-      - 'clippy.toml'
-      - 'rustfmt.toml'
-      - '.github/workflows/**'
+    branches: ['**']
   pull_request:
-    branches: [ main ]
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'build.rs'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - 'deny.toml'
-      - 'clippy.toml'
-      - 'rustfmt.toml'
-      - '.github/workflows/**'
+    branches: [main]
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
+  workflow_call:
     inputs:
-      force_all:
-        description: 'Force run all jobs'
-        required: false
-        default: false
-        type: boolean
+      source_sha:
+        description: Exact commit to validate for a release
+        type: string
+        required: true
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: rust-ci-${{ github.event_name }}-${{ inputs.source_sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -54,181 +27,154 @@ permissions:
   contents: read
 
 jobs:
-  changes:
-    name: Detect Changes
-    runs-on: ubuntu-latest
-    if: github.event_name != 'schedule'
-    outputs:
-      src: ${{ steps.filter.outputs.src }}
-      tests: ${{ steps.filter.outputs.tests }}
-      cargo: ${{ steps.filter.outputs.cargo }}
-      docker: ${{ steps.filter.outputs.docker }}
-      rust_files: ${{ steps.filter.outputs.rust_files }}
-      deny_config: ${{ steps.filter.outputs.deny_config }}
+  cargo-check:
+    name: Cargo Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-      - uses: dorny/paths-filter@v4
-        id: filter
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          filters: |
-            src:
-              - 'src/**'
-            tests:
-              - 'tests/**'
-            cargo:
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'build.rs'
-            docker:
-              - 'Dockerfile'
-              - '.dockerignore'
-            rust_files:
-              - 'src/**'
-              - 'tests/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'build.rs'
-              - 'clippy.toml'
-            deny_config:
-              - 'deny.toml'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-
-  check:
-    name: Check
-    needs: [changes]
-    if: needs.changes.outputs.rust_files == 'true' || inputs.force_all == true
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo check --all-features --locked
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: check-1.98.0
+          save-if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+      - run: cargo check --all-targets --all-features --locked
+      - name: Require consistent compiler and MSRV pins
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import re
+          import tomllib
+          def load(path):
+              return tomllib.loads(pathlib.Path(path).read_text())
+          version = load("rust-toolchain.toml")["toolchain"]["channel"]
+          assert version == "1.98.0", "Update the CI action pins with the toolchain"
+          assert load("Cargo.toml")["package"]["rust-version"] == version
+          assert load("clippy.toml")["msrv"] == version
+          builder = re.search(r"^FROM rust:([0-9.]+)-", pathlib.Path("Dockerfile").read_text(), re.M)
+          assert builder and builder[1] == version, "Docker compiler mismatch"
+          PY
 
   test:
     name: Test Suite
-    needs: [changes]
-    if: needs.changes.outputs.rust_files == 'true' || inputs.force_all == true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: test-1.98.0
+          save-if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
       - run: cargo test --all-features --locked
 
   fmt:
     name: Rustfmt
-    needs: [changes]
-    if: needs.changes.outputs.rust_files == 'true' || inputs.force_all == true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
         with:
           components: rustfmt
       - run: cargo fmt --all -- --check
 
   clippy:
     name: Clippy
-    needs: [changes]
-    if: needs.changes.outputs.rust_files == 'true' || inputs.force_all == true
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
         with:
           components: clippy
-      - uses: Swatinem/rust-cache@v2
-      - name: Run strict clippy
-        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: clippy-1.98.0
+          save-if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+      - run: cargo clippy --all-targets --all-features --locked -- -D warnings
 
   coverage:
     name: Code Coverage
-    needs: [changes]
-    if: needs.changes.outputs.src == 'true' || needs.changes.outputs.tests == 'true' || needs.changes.outputs.cargo == 'true' || inputs.force_all == true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Cache cargo-tarpaulin
-        id: cache-tarpaulin
-        uses: actions/cache@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          path: ~/.cargo/bin/cargo-tarpaulin
-          key: ${{ runner.os }}-cargo-tarpaulin
-      - name: Install cargo-tarpaulin
-        if: steps.cache-tarpaulin.outputs.cache-hit != 'true'
-        uses: taiki-e/install-action@v2
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          tool: cargo-tarpaulin
-      - name: Generate coverage
-        run: cargo tarpaulin --out Xml --out Html --output-dir coverage
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v7
+          key: coverage-1.98.0-tarpaulin-0.37.2
+          save-if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
+        with:
+          tool: cargo-tarpaulin@0.37.2
+      - run: cargo tarpaulin --all-features --locked --out Xml --out Html --output-dir coverage
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage-report
-          path: ./coverage
+          path: coverage
           if-no-files-found: error
+          retention-days: 7
 
   deny:
     name: Cargo Deny
-    needs: [changes]
-    if: needs.changes.outputs.cargo == 'true' || needs.changes.outputs.deny_config == 'true' || inputs.force_all == true
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-      - name: Cache cargo-deny
-        id: cache-deny
-        uses: actions/cache@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          path: ~/.cargo/bin/cargo-deny
-          key: ${{ runner.os }}-cargo-deny
-      - name: Install cargo-deny
-        if: steps.cache-deny.outputs.cache-hit != 'true'
-        uses: taiki-e/install-action@v2
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
         with:
-          tool: cargo-deny
-      - run: cargo deny check
+          tool: cargo-deny@0.20.2
+      - run: cargo deny --locked check
 
   security-audit:
     name: Security Audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-      - name: Cache cargo-audit
-        id: cache-audit
-        uses: actions/cache@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          path: ~/.cargo/bin/cargo-audit
-          key: ${{ runner.os }}-cargo-audit
-      - name: Install cargo-audit
-        if: steps.cache-audit.outputs.cache-hit != 'true'
-        uses: taiki-e/install-action@v2
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
         with:
-          tool: cargo-audit
+          tool: cargo-audit@0.22.2
       - run: cargo audit
 
-  docker-build:
-    name: Docker Build and Push
-    needs: [changes, check, test, fmt, clippy, coverage, deny, security-audit]
-    if: >-
-      always() &&
-      !failure() &&
-      (startsWith(github.ref, 'refs/tags/v') ||
-      needs.changes.outputs.rust_files == 'true' ||
-      needs.changes.outputs.docker == 'true' ||
-      inputs.force_all == true) &&
-      (github.event_name == 'pull_request' ||
-      github.ref == 'refs/heads/main' ||
-      startsWith(github.ref, 'refs/tags/v'))
+  workflow-lint:
+    name: Workflow Validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - name: Run actionlint
+        run: docker run --rm -v "$GITHUB_WORKSPACE:/repo:ro" -w /repo rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
+      - run: shellcheck build-docker.sh
+
+  docker-validation:
+    name: Docker Validation
     permissions:
       contents: read
       packages: write
@@ -236,7 +182,36 @@ jobs:
       id-token: write
     uses: ./.github/workflows/docker-build.yml
     with:
-      platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
-      push: ${{ github.event_name != 'pull_request' }}
-      cache_scope: ${{ github.ref_name }}
-    secrets: inherit
+      source_sha: ${{ inputs.source_sha || github.sha }}
+      platforms: linux/amd64,linux/arm64
+      push: false
+      cache_scope: validation-v2
+
+  check:
+    name: Check
+    if: always()
+    needs: [cargo-check, test, fmt, clippy, coverage, deny, security-audit, workflow-lint, docker-validation]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every quality job to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          jq -e 'all(.[]; .result == "success")' <<< "$RESULTS"
+
+  docker-publish:
+    name: Publish main image
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && inputs.source_sha == ''
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      source_sha: ${{ github.sha }}
+      platforms: linux/amd64,linux/arm64
+      push: true
+      cache_scope: publication-v2

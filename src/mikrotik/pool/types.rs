@@ -7,6 +7,47 @@ use std::time::Duration;
 
 use crate::mikrotik::connection::RouterOsConnection;
 
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(super) struct ConnectionKey {
+    pub(super) address: String,
+    pub(super) username: String,
+    pub(super) credential: Credential,
+    pub(super) group: Option<String>,
+    pub(super) tls: Option<crate::config::RouterTlsConfig>,
+}
+
+// Keep credential identity opaque in diagnostics and zeroized when the key is dropped.
+#[derive(Clone)]
+pub(super) struct Credential(secrecy::SecretString);
+
+impl From<&str> for Credential {
+    fn from(password: &str) -> Self {
+        Self(password.to_owned().into())
+    }
+}
+
+impl PartialEq for Credential {
+    fn eq(&self, other: &Self) -> bool {
+        use secrecy::ExposeSecret;
+        self.0.expose_secret() == other.0.expose_secret()
+    }
+}
+
+impl Eq for Credential {}
+
+impl std::hash::Hash for Credential {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        use secrecy::ExposeSecret;
+        self.0.expose_secret().hash(state);
+    }
+}
+
+impl std::fmt::Display for ConnectionKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{} (TLS: {})", self.address, self.tls.is_some())
+    }
+}
+
 pub(super) mod timeouts {
     use std::time::Duration;
 

@@ -1,488 +1,262 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! Unit tests for configuration module
+use super::{Config, RouterConfig};
+use secrecy::ExposeSecret;
 
-#[cfg(test)]
-mod test {
-    use super::super::*;
-    use secrecy::ExposeSecret;
-    use std::sync::{Mutex, MutexGuard, OnceLock};
+fn load(values: &[(&str, &str)]) -> crate::Result<Config> {
+    Config::from_lookup(|key| {
+        Ok(values
+            .iter()
+            .find(|(name, _)| *name == key)
+            .map(|(_, value)| (*value).into()))
+    })
+}
 
-    struct EnvVarGuard {
-        key: String,
-        prev: Option<String>,
+#[test]
+fn test_missing_values_use_defaults() {
+    let config = load(&[]).unwrap();
+    assert_eq!(config.server_addr, "0.0.0.0:9090");
+    assert_eq!(config.collection_interval_secs, 30);
+    assert_eq!(config.gap_reset_threshold_secs, 60);
+    assert_eq!(config.startup_connectivity_timeout_secs, 10);
+    assert!(config.routers.is_empty());
+    assert!(!config.startup_connectivity_test);
+    assert!(!config.strict_startup_mode);
+}
+
+#[test]
+fn test_tls_configuration_is_opt_in_and_rejects_insecure_options() {
+    let router = r#"{"name":"edge","address":"localhost:8729","username":"admin","password":"test-password"}"#;
+    let load_tls = |tls: &str| {
+        load(&[(
+            "ROUTERS_CONFIG",
+            &format!("[{},\"tls\":{tls}}}]", &router[..router.len() - 1]),
+        )])
+    };
+    assert!(
+        load(&[("ROUTERS_CONFIG", &format!("[{router}]"))])
+            .unwrap()
+            .routers[0]
+            .tls
+            .is_none()
+    );
+    assert_eq!(
+        load_tls("{}").unwrap().routers[0].tls,
+        Some(super::RouterTlsConfig::default())
+    );
+    for tls in [
+        "false",
+        r#"{"insecure":true}"#,
+        r#"{"enabled":false}"#,
+        r#"{"server_name":""}"#,
+        r#"{"server_name":"https://router"}"#,
+        r#"{"ca_file":""}"#,
+    ] {
+        assert!(load_tls(tls).is_err(), "{tls}");
     }
+    assert!(
+        load(&[
+            ("ROUTEROS_ADDRESS", "localhost:8729"),
+            ("ROUTEROS_TLS", "{}")
+        ])
+        .unwrap()
+        .routers[0]
+            .tls
+            .is_some()
+    );
+    assert!(
+        load(&[
+            ("ROUTEROS_ADDRESS", "localhost:8729"),
+            ("ROUTEROS_TLS", "false")
+        ])
+        .is_err()
+    );
+}
 
-    impl EnvVarGuard {
-        fn set(key: &str, value: &str) -> Self {
-            let prev = std::env::var(key).ok();
-            unsafe {
-                std::env::set_var(key, value);
-            }
-            Self {
-                key: key.to_string(),
-                prev,
-            }
+#[test]
+fn test_tls_server_names_preserve_ip_and_dns_identity() {
+    use tokio_rustls::rustls::pki_types::ServerName;
+    let tls = super::RouterTlsConfig::default();
+    for address in ["127.0.0.1:8729", "[::1]:8729", "[2001:db8::1]:8729"] {
+        assert!(matches!(
+            tls.server_name_for_address(address).unwrap(),
+            ServerName::IpAddress(_)
+        ));
+    }
+    assert!(matches!(
+        tls.server_name_for_address("router.test:8729").unwrap(),
+        ServerName::DnsName(_)
+    ));
+}
+
+#[test]
+fn test_invalid_numeric_values_fail_instead_of_defaulting() {
+    for key in [
+        "COLLECTION_INTERVAL_SECONDS",
+        "GAP_RESET_THRESHOLD_SECONDS",
+        "STARTUP_CONNECTIVITY_TIMEOUT_SECS",
+    ] {
+        for value in [
+            "",
+            "bad",
+            "-1",
+            "1.5",
+            "0",
+            "18446744073709551615",
+            "18446744073709551616",
+        ] {
+            let error = load(&[(key, value)]).unwrap_err().to_string();
+            assert!(error.contains(key), "{key}={value}: {error}");
         }
-
-        fn unset(key: &str) -> Self {
-            let prev = std::env::var(key).ok();
-            unsafe {
-                std::env::remove_var(key);
-            }
-            Self {
-                key: key.to_string(),
-                prev,
-            }
-        }
     }
+}
 
-    impl Drop for EnvVarGuard {
-        fn drop(&mut self) {
-            match &self.prev {
-                Some(value) => unsafe {
-                    std::env::set_var(&self.key, value);
-                },
-                None => unsafe {
-                    std::env::remove_var(&self.key);
-                },
-            }
-        }
+#[test]
+fn test_duration_bounds() {
+    for (key, maximum) in [
+        ("COLLECTION_INTERVAL_SECONDS", 86_400),
+        ("GAP_RESET_THRESHOLD_SECONDS", 604_800),
+        ("STARTUP_CONNECTIVITY_TIMEOUT_SECS", 300),
+    ] {
+        assert!(load(&[(key, "1")]).is_ok());
+        assert!(load(&[(key, &maximum.to_string())]).is_ok());
+        assert!(load(&[(key, &(maximum + 1).to_string())]).is_err());
     }
+}
 
-    fn env_lock() -> MutexGuard<'static, ()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        match LOCK.get_or_init(|| Mutex::new(())).lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
-        }
+#[test]
+fn test_invalid_boolean_and_unicode_fail() {
+    for key in ["STARTUP_CONNECTIVITY_TEST", "STRICT_STARTUP_MODE"] {
+        assert!(load(&[(key, "yes")]).is_err());
     }
+    assert!(
+        Config::from_lookup(|_| Err(crate::AppError::Config("invalid Unicode".into()))).is_err()
+    );
+}
 
-    #[test]
-    fn test_config_default() {
-        let config = Config::default();
-        assert_eq!(config.server_addr, "0.0.0.0:9090");
-        assert_eq!(config.collection_interval_secs, 30);
-        assert!(config.routers.is_empty());
+#[test]
+fn test_invalid_json_never_falls_back_or_exposes_contents() {
+    for json in ["secret-not-json", r#"[{"name":"r","password":123456789}]"#] {
+        let error = load(&[
+            ("ROUTERS_CONFIG", json),
+            ("ROUTEROS_ADDRESS", "localhost:8728"),
+        ])
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("ROUTERS_CONFIG"));
+        assert!(!error.contains("secret-not-json"));
+        assert!(!error.contains("123456789"));
     }
+}
 
-    #[test]
-    fn test_router_config_deserialize() {
-        let json = r#"{
-            "name": "test-router",
-            "address": "192.168.1.1:8728",
-            "username": "admin",
-            "password": "secret"
-        }"#;
+#[test]
+fn test_json_router_validation_and_unique_names() {
+    let router =
+        r#"{"name":"edge","address":"localhost:8728","username":"admin","password":"secret"}"#;
+    let config = load(&[("ROUTERS_CONFIG", &format!("[{router}]"))]).unwrap();
+    assert_eq!(config.routers[0].name, "edge");
+    assert_eq!(config.routers[0].password.expose_secret(), "secret");
+    assert!(
+        load(&[("ROUTERS_CONFIG", &format!("[{router},{router}]"))])
+            .unwrap_err()
+            .to_string()
+            .contains("Duplicate")
+    );
+    assert!(
+        load(&[(
+            "ROUTERS_CONFIG",
+            &format!("[{}]", router.replace("edge", "bad name"))
+        )])
+        .is_err()
+    );
+    assert!(
+        load(&[(
+            "ROUTERS_CONFIG",
+            &format!("[{}]", router.replace("\"name\"", "\"typo\""))
+        )])
+        .is_err()
+    );
+}
 
-        let router: RouterConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(router.name, "test-router");
-        assert_eq!(router.address, "192.168.1.1:8728");
-        assert_eq!(router.username, "admin");
-        assert_eq!(router.password.expose_secret(), "secret");
+#[test]
+fn test_legacy_credentials_and_json_precedence() {
+    let config = load(&[("ROUTEROS_ADDRESS", "localhost:8728")]).unwrap();
+    assert_eq!(config.routers[0].name, "default");
+    assert_eq!(config.routers[0].username, "admin");
+    assert_eq!(config.routers[0].password.expose_secret(), "");
+    let config = load(&[
+        ("ROUTEROS_ADDRESS", "localhost:8728"),
+        ("ROUTEROS_USERNAME", "reader"),
+        ("ROUTEROS_PASSWORD", "example"),
+    ])
+    .unwrap();
+    assert_eq!(config.routers[0].username, "reader");
+    assert_eq!(config.routers[0].password.expose_secret(), "example");
+    assert!(
+        load(&[
+            ("ROUTERS_CONFIG", "[]"),
+            ("ROUTEROS_ADDRESS", "localhost:8728")
+        ])
+        .unwrap()
+        .routers
+        .is_empty()
+    );
+}
+
+#[test]
+fn test_strict_startup_requires_checks_and_routers() {
+    assert!(load(&[("STRICT_STARTUP_MODE", "true")]).is_err());
+    assert!(
+        load(&[
+            ("STRICT_STARTUP_MODE", "true"),
+            ("STARTUP_CONNECTIVITY_TEST", "true")
+        ])
+        .is_err()
+    );
+    assert!(
+        load(&[
+            ("STRICT_STARTUP_MODE", "true"),
+            ("STARTUP_CONNECTIVITY_TEST", "true"),
+            ("ROUTEROS_ADDRESS", "localhost:8728")
+        ])
+        .is_ok()
+    );
+}
+
+#[test]
+fn test_address_validation() {
+    let mut router = RouterConfig {
+        name: "edge-01_a".into(),
+        address: String::new(),
+        username: "admin".into(),
+        password: String::new().into(),
+        tls: None,
+    };
+    for address in [
+        "localhost:8728",
+        "192.168.1.1:8728",
+        "[2001:db8::1]:8728",
+        "router.example.:8728",
+    ] {
+        router.address = address.into();
+        assert!(router.validate().is_ok(), "{address}");
     }
-
-    #[test]
-    fn test_multiple_routers_deserialize() {
-        let json = r#"[
-            {
-                "name": "router1",
-                "address": "192.168.1.1:8728",
-                "username": "admin",
-                "password": "pass1"
-            },
-            {
-                "name": "router2",
-                "address": "192.168.2.1:8728",
-                "username": "admin",
-                "password": "pass2"
-            }
-        ]"#;
-
-        let routers: Vec<RouterConfig> = serde_json::from_str(json).unwrap();
-        assert_eq!(routers.len(), 2);
-        assert_eq!(routers[0].name, "router1");
-        assert_eq!(routers[1].name, "router2");
+    for address in [
+        "localhost",
+        ":8728",
+        "localhost:0",
+        "localhost:65536",
+        "localhost:abc",
+        "[garbage]:8728",
+        "2001:db8::1:8728",
+        "bad host:8728",
+        "-bad:8728",
+        "a..b:8728",
+        "http://router:8728",
+    ] {
+        router.address = address.into();
+        assert!(router.validate().is_err(), "{address}");
     }
-
-    #[test]
-    fn test_router_config_validate_valid() {
-        let config = RouterConfig {
-            name: "test-router".to_string(),
-            address: "192.168.1.1:8728".to_string(),
-            username: "admin".to_string(),
-            password: secrecy::SecretString::new("password".to_string().into()),
-        };
-
-        assert!(config.validate().is_ok());
-    }
-
-    #[test]
-    fn test_router_config_validate_empty_name() {
-        let config = RouterConfig {
-            name: "  ".to_string(),
-            address: "192.168.1.1:8728".to_string(),
-            username: "admin".to_string(),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("name cannot be empty"));
-    }
-
-    #[test]
-    fn test_router_config_validate_invalid_address() {
-        let config = RouterConfig {
-            name: "test-router".to_string(),
-            address: "192.168.1.1".to_string(), // Missing port
-            username: "admin".to_string(),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("expected 'host:port'"));
-    }
-
-    #[test]
-    fn test_router_config_validate_empty_username() {
-        let config = RouterConfig {
-            name: "test-router".to_string(),
-            address: "192.168.1.1:8728".to_string(),
-            username: "  ".to_string(),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Username cannot be empty"));
-    }
-
-    #[test]
-    fn test_router_config_validate_invalid_name_characters() {
-        let config = RouterConfig {
-            name: "test@router!".to_string(),
-            address: "192.168.1.1:8728".to_string(),
-            username: "admin".to_string(),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("invalid characters"));
-    }
-
-    #[test]
-    fn test_router_config_validate_valid_name_with_hyphen() {
-        let config = RouterConfig {
-            name: "my-router_01".to_string(),
-            address: "192.168.1.1:8728".to_string(),
-            username: "admin".to_string(),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_router_config_validate_invalid_port_zero() {
-        let config = RouterConfig {
-            name: "test-router".to_string(),
-            address: "192.168.1.1:0".to_string(),
-            username: "admin".to_string(),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("port cannot be 0"));
-    }
-
-    #[test]
-    fn test_router_config_validate_empty_host() {
-        let config = RouterConfig {
-            name: "test-router".to_string(),
-            address: ":8728".to_string(),
-            username: "admin".to_string(),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("host cannot be empty"));
-    }
-
-    #[test]
-    fn test_router_config_validate_unbracketed_ipv6_rejected() {
-        let config = RouterConfig {
-            name: "test-router".to_string(),
-            address: "2001:db8::1:8728".to_string(),
-            username: "admin".to_string(),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("wrap IPv6 hosts in brackets"));
-    }
-
-    #[test]
-    fn test_router_config_validate_malformed_bracketed_ipv6_rejected() {
-        let config = RouterConfig {
-            name: "test-router".to_string(),
-            address: "[::1:8728".to_string(),
-            username: "admin".to_string(),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("expected '[addr]:port'"));
-    }
-
-    #[test]
-    fn test_router_config_validate_invalid_port_non_numeric() {
-        let config = RouterConfig {
-            name: "test-router".to_string(),
-            address: "192.168.1.1:abc".to_string(),
-            username: "admin".to_string(),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("expected numeric value"));
-    }
-
-    #[test]
-    fn test_router_config_validate_invalid_port_out_of_range() {
-        let config = RouterConfig {
-            name: "test-router".to_string(),
-            address: "192.168.1.1:99999".to_string(),
-            username: "admin".to_string(),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("expected numeric value"));
-    }
-
-    #[test]
-    fn test_router_config_validate_address_too_long() {
-        let config = RouterConfig {
-            name: "test-router".to_string(),
-            address: format!("{}.example.com:8728", "a".repeat(240)),
-            username: "admin".to_string(),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("too long"));
-    }
-
-    #[test]
-    fn test_router_config_validate_username_too_long() {
-        let config = RouterConfig {
-            name: "test-router".to_string(),
-            address: "192.168.1.1:8728".to_string(),
-            username: "a".repeat(65),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("too long"));
-    }
-
-    #[test]
-    fn test_router_config_validate_weak_password_warning() {
-        // This test verifies that weak passwords are accepted but logged
-        let config = RouterConfig {
-            name: "test-router".to_string(),
-            address: "192.168.1.1:8728".to_string(),
-            username: "admin".to_string(),
-            password: "short".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(
-            result.is_ok(),
-            "Weak passwords should be accepted with a warning"
-        );
-    }
-
-    #[test]
-    fn test_router_config_validate_valid_ipv6_address() {
-        let config = RouterConfig {
-            name: "test-router".to_string(),
-            address: "[::1]:8728".to_string(),
-            username: "admin".to_string(),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_ok(), "IPv6 addresses should be supported");
-    }
-
-    #[test]
-    fn test_router_config_validate_valid_hostname() {
-        let config = RouterConfig {
-            name: "test-router".to_string(),
-            address: "mikrotik.local:8728".to_string(),
-            username: "admin".to_string(),
-            password: "password".to_string().into(),
-        };
-
-        let result = config.validate();
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_from_env_defaults_without_router() {
-        let _lock = env_lock();
-        let _guards = vec![
-            EnvVarGuard::unset("SERVER_ADDR"),
-            EnvVarGuard::unset("ROUTERS_CONFIG"),
-            EnvVarGuard::unset("ROUTEROS_ADDRESS"),
-            EnvVarGuard::unset("ROUTEROS_USERNAME"),
-            EnvVarGuard::unset("ROUTEROS_PASSWORD"),
-            EnvVarGuard::unset("COLLECTION_INTERVAL_SECONDS"),
-            EnvVarGuard::unset("STARTUP_CONNECTIVITY_TEST"),
-            EnvVarGuard::unset("STARTUP_CONNECTIVITY_TIMEOUT_SECS"),
-            EnvVarGuard::unset("STRICT_STARTUP_MODE"),
-        ];
-
-        let config = Config::from_env();
-        assert_eq!(config.server_addr, "0.0.0.0:9090");
-        assert_eq!(config.collection_interval_secs, 30);
-        assert!(config.routers.is_empty());
-        assert!(!config.startup_connectivity_test);
-        assert_eq!(config.startup_connectivity_timeout_secs, 10);
-        assert!(!config.strict_startup_mode);
-    }
-
-    #[test]
-    fn test_from_env_with_routers_config() {
-        let _lock = env_lock();
-        let routers_json = r#"[
-            {
-                "name": "edge",
-                "address": "10.0.0.1:8728",
-                "username": "admin",
-                "password": "secret"
-            }
-        ]"#;
-        let _guards = vec![
-            EnvVarGuard::set("SERVER_ADDR", "127.0.0.1:19090"),
-            EnvVarGuard::set("ROUTERS_CONFIG", routers_json),
-            EnvVarGuard::set("COLLECTION_INTERVAL_SECONDS", "45"),
-            EnvVarGuard::set("STARTUP_CONNECTIVITY_TEST", "true"),
-            EnvVarGuard::set("STARTUP_CONNECTIVITY_TIMEOUT_SECS", "20"),
-            EnvVarGuard::set("STRICT_STARTUP_MODE", "true"),
-            EnvVarGuard::unset("ROUTEROS_ADDRESS"),
-            EnvVarGuard::unset("ROUTEROS_USERNAME"),
-            EnvVarGuard::unset("ROUTEROS_PASSWORD"),
-        ];
-
-        let config = Config::from_env();
-        assert_eq!(config.server_addr, "127.0.0.1:19090");
-        assert_eq!(config.collection_interval_secs, 45);
-        assert!(config.startup_connectivity_test);
-        assert_eq!(config.startup_connectivity_timeout_secs, 20);
-        assert!(config.strict_startup_mode);
-        assert_eq!(config.routers.len(), 1);
-        assert_eq!(config.routers[0].name, "edge");
-        assert_eq!(config.routers[0].address, "10.0.0.1:8728");
-    }
-
-    #[test]
-    fn test_from_env_invalid_routers_config_falls_back_to_legacy() {
-        let _lock = env_lock();
-        let _guards = [
-            EnvVarGuard::set("ROUTERS_CONFIG", "not-json"),
-            EnvVarGuard::set("ROUTEROS_ADDRESS", "192.168.88.1:8728"),
-            EnvVarGuard::set("ROUTEROS_USERNAME", "admin"),
-            EnvVarGuard::set("ROUTEROS_PASSWORD", "secret"),
-        ];
-
-        let config = Config::from_env();
-        assert_eq!(config.routers.len(), 1);
-        assert_eq!(config.routers[0].name, "default");
-        assert_eq!(config.routers[0].address, "192.168.88.1:8728");
-    }
-
-    #[test]
-    fn test_from_env_filters_invalid_and_duplicates() {
-        let _lock = env_lock();
-        let routers_json = r#"[
-            {
-                "name": "core",
-                "address": "10.0.0.2:8728",
-                "username": "admin",
-                "password": "secret"
-            },
-            {
-                "name": "core",
-                "address": "10.0.0.3:8728",
-                "username": "admin",
-                "password": "secret"
-            },
-            {
-                "name": "  " ,
-                "address": "10.0.0.4",
-                "username": "admin",
-                "password": "secret"
-            }
-        ]"#;
-        let _guards = [
-            EnvVarGuard::set("ROUTERS_CONFIG", routers_json),
-            EnvVarGuard::unset("ROUTEROS_ADDRESS"),
-            EnvVarGuard::unset("ROUTEROS_USERNAME"),
-            EnvVarGuard::unset("ROUTEROS_PASSWORD"),
-        ];
-
-        let config = Config::from_env();
-        assert_eq!(config.routers.len(), 1);
-        assert_eq!(config.routers[0].name, "core");
-        assert_eq!(config.routers[0].address, "10.0.0.2:8728");
-    }
-
-    #[test]
-    fn test_from_env_legacy_router_defaults() {
-        let _lock = env_lock();
-        let _guards = [
-            EnvVarGuard::set("ROUTEROS_ADDRESS", "192.168.88.1:8728"),
-            EnvVarGuard::unset("ROUTERS_CONFIG"),
-            EnvVarGuard::unset("ROUTEROS_USERNAME"),
-            EnvVarGuard::unset("ROUTEROS_PASSWORD"),
-        ];
-
-        let config = Config::from_env();
-        assert_eq!(config.routers.len(), 1);
-        assert_eq!(config.routers[0].name, "default");
-        assert_eq!(config.routers[0].username, "admin");
-        assert_eq!(config.routers[0].password.expose_secret(), "");
-    }
-
-    #[test]
-    fn test_from_env_legacy_router_custom_creds() {
-        let _lock = env_lock();
-        let _guards = [
-            EnvVarGuard::set("ROUTEROS_ADDRESS", "192.168.88.2:8728"),
-            EnvVarGuard::set("ROUTEROS_USERNAME", "root"),
-            EnvVarGuard::set("ROUTEROS_PASSWORD", "topsecret"),
-            EnvVarGuard::unset("ROUTERS_CONFIG"),
-        ];
-
-        let config = Config::from_env();
-        assert_eq!(config.routers.len(), 1);
-        assert_eq!(config.routers[0].name, "default");
-        assert_eq!(config.routers[0].username, "root");
-        assert_eq!(config.routers[0].password.expose_secret(), "topsecret");
-    }
+    assert!(load(&[("SERVER_ADDR", "garbage")]).is_err());
 }

@@ -51,9 +51,16 @@ spec:
           limits:
             cpu: 200m
             memory: 256Mi
+        startupProbe:
+          httpGet:
+            path: /live
+            port: metrics
+          periodSeconds: 2
+          timeoutSeconds: 1
+          failureThreshold: 30
         livenessProbe:
           httpGet:
-            path: /health
+            path: /live
             port: metrics
           initialDelaySeconds: 10
           periodSeconds: 30
@@ -61,7 +68,7 @@ spec:
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /health
+            path: /ready
             port: metrics
           initialDelaySeconds: 5
           periodSeconds: 10

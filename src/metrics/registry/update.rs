@@ -10,10 +10,10 @@ use crate::metrics::labels::{
 };
 use crate::metrics::parsers::parse_uptime_to_seconds;
 use crate::mikrotik::{InterfaceStats, RouterMetrics, WireGuardPeerStats};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use tokio::time::Instant;
 
-use super::{InterfaceSnapshot, MetricsRegistry};
+use super::{CONNTRACK_SERIES_LIMIT_PER_ROUTER, InterfaceSnapshot, MetricsRegistry};
 
 #[derive(Clone, Copy)]
 enum UpdateMode {
@@ -48,6 +48,12 @@ impl MetricsRegistry {
     }
 
     fn update_metrics_with_mode(&self, metrics: &RouterMetrics, mode: UpdateMode) {
+        self.record_group_status(
+            &RouterLabels {
+                router: metrics.router_name.clone(),
+            },
+            &metrics.collection_status,
+        );
         let apply_counters = mode.apply_counters();
         let now = Instant::now();
         self.update_interface_metrics(metrics, now, apply_counters);
@@ -149,7 +155,6 @@ impl MetricsRegistry {
     fn cleanup_stale_interfaces(
         &self,
         metrics: &RouterMetrics,
-        current_interfaces: &HashSet<InterfaceLabels>,
         current_interface_info: &HashMap<InterfaceLabels, InterfaceInfoLabels>,
     ) {
         let mut prev_info_entry = self
@@ -157,14 +162,6 @@ impl MetricsRegistry {
             .entry(metrics.router_name.clone())
             .or_default();
         let prev_map = prev_info_entry.value_mut();
-
-        if current_interfaces.is_empty() && !prev_map.is_empty() {
-            tracing::warn!(
-                "Router {} returned empty interface snapshot; preserving previous interface metrics",
-                metrics.router_name
-            );
-            return;
-        }
 
         for (labels, info_labels) in prev_map.iter() {
             if !current_interface_info.contains_key(labels) {
@@ -202,7 +199,6 @@ impl MetricsRegistry {
             return;
         }
 
-        let mut current_interfaces = HashSet::new();
         let mut current_interface_info = HashMap::new();
 
         for iface in &metrics.interfaces {
@@ -217,7 +213,6 @@ impl MetricsRegistry {
                 comment: iface.comment.clone(),
             };
 
-            current_interfaces.insert(labels.clone());
             current_interface_info.insert(labels.clone(), info_labels.clone());
 
             // Process different types of metrics
@@ -227,7 +222,7 @@ impl MetricsRegistry {
         }
 
         // Clean up stale interfaces
-        self.cleanup_stale_interfaces(metrics, &current_interfaces, &current_interface_info);
+        self.cleanup_stale_interfaces(metrics, &current_interface_info);
     }
 
     fn update_system_metrics(&self, metrics: &RouterMetrics) {
@@ -242,18 +237,20 @@ impl MetricsRegistry {
         let router_label = RouterLabels {
             router: metrics.router_name.clone(),
         };
+        let Some(uptime_secs) = parse_uptime_to_seconds(&metrics.system.uptime) else {
+            return;
+        };
         #[allow(clippy::cast_possible_wrap)]
         {
             self.system_cpu_load
                 .get_or_create(&router_label)
-                .set(metrics.system.cpu_load as i64);
+                .set(f64::from(u32::try_from(metrics.system.cpu_load).unwrap_or(100)) / 100.0);
             self.system_free_memory
                 .get_or_create(&router_label)
                 .set(metrics.system.free_memory as i64);
             self.system_total_memory
                 .get_or_create(&router_label)
                 .set(metrics.system.total_memory as i64);
-            let uptime_secs = parse_uptime_to_seconds(&metrics.system.uptime);
             self.system_uptime_seconds
                 .get_or_create(&router_label)
                 .set(uptime_secs as i64);
@@ -271,6 +268,8 @@ impl MetricsRegistry {
         self.prev_system_info
             .insert(metrics.router_name.clone(), info_labels.clone());
         self.system_info.get_or_create(&info_labels).set(1);
+        self.system_info_last_seen
+            .insert(info_labels, Instant::now());
     }
 
     fn update_conntrack_metrics(&self, metrics: &RouterMetrics, now: Instant) {
@@ -284,45 +283,90 @@ impl MetricsRegistry {
                 "Skipping conntrack metric update for router {} due to partial collection",
                 metrics.router_name
             );
-            self.conntrack_update_duration_milliseconds
+            self.conntrack_update_duration_seconds
                 .get_or_create(&router_labels)
-                .set(0);
+                .set(0.0);
             return;
         }
 
-        let mut current_conntrack = HashSet::new();
+        let mut candidates = BTreeMap::new();
         for ct in &metrics.connection_tracking {
-            let ct_labels = ConntrackLabels {
-                router: metrics.router_name.clone(),
-                src_address: ct.src_address.clone(),
-                protocol: ct.protocol.clone(),
-                ip_version: ct.ip_version.clone(),
-            };
-            current_conntrack.insert(ct_labels.clone());
-            #[allow(clippy::cast_possible_wrap)]
-            self.connection_tracking_count
-                .get_or_create(&ct_labels)
-                .set(ct.connection_count as i64);
-            self.conntrack_last_seen.insert(ct_labels, now);
+            let key = (
+                ct.ip_version.clone(),
+                ct.src_address.clone(),
+                ct.protocol.clone(),
+            );
+            let count = candidates.entry(key).or_insert(0u64);
+            *count = count.saturating_add(ct.connection_count);
         }
-
+        let observed: HashSet<_> = candidates.keys().cloned().collect();
+        let snapshot_series = candidates.len();
         let mut prev_map_entry = self
             .prev_conntrack
             .entry(metrics.router_name.clone())
             .or_default();
         let prev_labels = prev_map_entry.value_mut();
-        let active_series_count = current_conntrack.len();
-        if metrics.collection_status.conntrack_complete_ok() {
-            for stale in prev_labels.difference(&current_conntrack) {
-                self.connection_tracking_count.get_or_create(stale).set(0);
+        if !metrics.collection_status.conntrack_complete_ok() {
+            for labels in prev_labels.iter() {
+                candidates
+                    .entry((
+                        labels.ip_version.clone(),
+                        labels.src_address.clone(),
+                        labels.protocol.clone(),
+                    ))
+                    .or_insert_with(|| {
+                        u64::try_from(self.connection_tracking_count.get_or_create(labels).get())
+                            .unwrap_or(0)
+                    });
             }
-            *prev_labels = current_conntrack;
-        } else {
-            tracing::debug!(
-                "Skipping conntrack stale cleanup for router {} due to partial conntrack snapshot",
-                metrics.router_name
-            );
         }
+        let mut current_conntrack = HashSet::new();
+        for ((ip_version, src_address, protocol), count) in candidates
+            .into_iter()
+            .take(CONNTRACK_SERIES_LIMIT_PER_ROUTER)
+        {
+            let ct_labels = ConntrackLabels {
+                router: metrics.router_name.clone(),
+                src_address,
+                protocol,
+                ip_version,
+            };
+            current_conntrack.insert(ct_labels.clone());
+            #[allow(clippy::cast_possible_wrap)]
+            self.connection_tracking_count
+                .get_or_create(&ct_labels)
+                .set(i64::try_from(count).unwrap_or(i64::MAX));
+            if observed.contains(&(
+                ct_labels.ip_version.clone(),
+                ct_labels.src_address.clone(),
+                ct_labels.protocol.clone(),
+            )) {
+                self.conntrack_last_seen.insert(ct_labels, now);
+            }
+        }
+
+        let active_series_count = current_conntrack.len();
+        let retained_observed = current_conntrack
+            .iter()
+            .filter(|labels| {
+                observed.contains(&(
+                    labels.ip_version.clone(),
+                    labels.src_address.clone(),
+                    labels.protocol.clone(),
+                ))
+            })
+            .count();
+        for stale in prev_labels.difference(&current_conntrack) {
+            self.connection_tracking_count.remove(stale);
+            self.conntrack_last_seen.remove(stale);
+        }
+        *prev_labels = current_conntrack;
+        self.conntrack_dropped_series
+            .get_or_create(&router_labels)
+            .set(
+                i64::try_from(snapshot_series.saturating_sub(retained_observed))
+                    .unwrap_or(i64::MAX),
+            );
 
         #[allow(clippy::cast_possible_wrap)]
         self.conntrack_active_series
@@ -330,9 +374,9 @@ impl MetricsRegistry {
             .set(active_series_count as i64);
 
         #[allow(clippy::cast_precision_loss)]
-        self.conntrack_update_duration_milliseconds
+        self.conntrack_update_duration_seconds
             .get_or_create(&router_labels)
-            .set(i64::try_from(started_at.elapsed().as_millis()).unwrap_or(i64::MAX));
+            .set(started_at.elapsed().as_secs_f64());
     }
 
     fn update_wireguard_metrics(&self, metrics: &RouterMetrics, now: Instant) {
@@ -555,19 +599,15 @@ impl MetricsRegistry {
             self.firewall_rule_info_last_seen.insert(info_labels, now);
         }
 
-        if !metrics.collection_status.firewall_complete_ok() {
-            tracing::debug!(
-                "Skipping firewall stale cleanup for router {} due to partial firewall snapshot",
-                metrics.router_name
-            );
-            return;
-        }
-
         let mut prev_rules_entry = self
             .prev_firewall_rules_by_router
             .entry(metrics.router_name.clone())
             .or_default();
         let prev_labels = prev_rules_entry.value_mut();
+        if !metrics.collection_status.firewall_complete_ok() {
+            // Retain missing rules, but remember newly observed rules for later cleanup.
+            current_firewall_rules.extend(prev_labels.iter().cloned());
+        }
         for stale in prev_labels.difference(&current_firewall_rules) {
             self.firewall_rule_bytes.remove(stale);
             self.firewall_rule_packets.remove(stale);
@@ -581,6 +621,13 @@ impl MetricsRegistry {
             .entry(metrics.router_name.clone())
             .or_default();
         let prev_map = prev_info_entry.value_mut();
+        if !metrics.collection_status.firewall_complete_ok() {
+            for (labels, info_labels) in prev_map.iter() {
+                current_firewall_info
+                    .entry(labels.clone())
+                    .or_insert_with(|| info_labels.clone());
+            }
+        }
         for (labels, info_labels) in prev_map.iter() {
             if !current_firewall_info.contains_key(labels) {
                 self.firewall_rule_info.remove(info_labels);

@@ -3,7 +3,8 @@
 
 //! Scrape and registry-level bookkeeping helpers
 
-use crate::metrics::labels::RouterLabels;
+use crate::metrics::labels::{GroupLabels, RouterLabels};
+use crate::mikrotik::CollectionStatus;
 use crate::prelude::{AppError, Result};
 use prometheus_client::encoding::text::encode;
 use std::time::Duration;
@@ -86,6 +87,7 @@ impl MetricsRegistry {
     }
 
     pub fn record_scrape_error(&self, labels: &RouterLabels) {
+        self.record_group_status(labels, &CollectionStatus::from_group_results([false; 4]));
         self.scrape_errors.get_or_create(labels).inc();
         self.consecutive_scrape_errors
             .entry(labels.router.clone())
@@ -101,30 +103,64 @@ impl MetricsRegistry {
     /// per-router `conntrack` gauges so their families are rendered (with zero
     /// values) before the first conntrack update.
     pub fn initialize_router_metrics(&self, labels: &RouterLabels) {
+        self.known_routers.insert(labels.router.clone(), ());
         let _ = self.scrape_success.get_or_create(labels);
         let _ = self.scrape_errors.get_or_create(labels);
-        let _ = self.scrape_duration_milliseconds.get_or_create(labels);
+        let _ = self.scrape_duration_seconds.get_or_create(labels);
+        let _ = self
+            .scrape_last_success_timestamp_seconds
+            .get_or_create(labels);
+        let _ = self.conntrack_dropped_series.get_or_create(labels);
+        for (group, _) in CollectionStatus::default().group_states() {
+            let group_labels = GroupLabels {
+                router: labels.router.clone(),
+                group,
+            };
+            let _ = self.group_collection_success.get_or_create(&group_labels);
+            let _ = self.group_collection_complete.get_or_create(&group_labels);
+            let _ = self
+                .group_last_success_timestamp_seconds
+                .get_or_create(&group_labels);
+        }
         let _ = self.connection_consecutive_errors.get_or_create(labels);
         let _ = self.conntrack_active_series.get_or_create(labels);
-        let _ = self
-            .conntrack_update_duration_milliseconds
-            .get_or_create(labels);
+        let _ = self.conntrack_update_duration_seconds.get_or_create(labels);
     }
 
     pub fn record_scrape_duration(&self, labels: &RouterLabels, duration_secs: f64) {
-        // Store as milliseconds for better precision (will be interpreted as fractional seconds)
-        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-        let millis = (duration_secs * 1000.0).round() as i64;
-        self.scrape_duration_milliseconds
+        self.scrape_duration_seconds
             .get_or_create(labels)
-            .set(millis);
+            .set(duration_secs);
     }
 
     pub fn record_collection_cycle_duration(&self, duration_secs: f64) {
-        // Store as milliseconds for better precision (will be interpreted as fractional seconds)
-        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-        let millis = (duration_secs * 1000.0).round() as i64;
-        self.collection_cycle_duration_milliseconds.set(millis);
+        self.collection_cycle_duration_seconds.set(duration_secs);
+    }
+
+    pub fn record_group_status(&self, labels: &RouterLabels, status: &CollectionStatus) {
+        self.initialize_router_metrics(labels);
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |duration| {
+                i64::try_from(duration.as_secs()).unwrap_or(i64::MAX)
+            });
+        for (group, state) in status.group_states() {
+            let labels = GroupLabels {
+                router: labels.router.clone(),
+                group,
+            };
+            self.group_collection_success
+                .get_or_create(&labels)
+                .set(i64::from(state.any_ok()));
+            self.group_collection_complete
+                .get_or_create(&labels)
+                .set(i64::from(state.complete()));
+            if state.complete() {
+                self.group_last_success_timestamp_seconds
+                    .get_or_create(&labels)
+                    .set(timestamp);
+            }
+        }
     }
 
     pub fn update_connection_errors(&self, labels: &RouterLabels, consecutive_errors: u32) {

@@ -1,294 +1,155 @@
-# MikroTik Exporter - Deployment
+# MikroTik Exporter Deployment
 
-Technical documentation for deploying in production environments.
-
-## Table of Contents
-
-- [Docker](#docker)
-- [Kubernetes](#kubernetes)
-- [Prometheus](#prometheus)
-- [Grafana](#grafana)
-- [Security](#security)
-
----
+This guide describes the current source tree. Review the [breaking migration](CHANGELOG.md#unreleased)
+before upgrading a published deployment. Configure RouterOS API-SSL with a dedicated `read,api`
+user and source restrictions as shown in [README.md](README.md#routeros-requirements).
 
 ## Docker
 
-### Building the Image
+Build the current checkout locally:
 
 ```bash
-# Multi-stage build (optimized size)
-docker build -t mikrotik-exporter:latest .
-
-# With version tag
-docker build -t mikrotik-exporter:0.1.0 .
+bash build-docker.sh mikrotik-exporter:local
 ```
 
-### Publishing to Registry
+The script only builds an image; it does not start containers, contact routers, or publish images.
+For production, choose a tested released image and pin its digest instead of relying on `latest`.
 
-#### GitHub Container Registry
+Create a private `exporter.env` containing `SERVER_ADDR=0.0.0.0:9090`, the router JSON, and any
+other settings from [.env.example](.env.example). Docker `--env-file` expects the JSON value
+without the outer single quotes used by dotenv/shell examples. Mount a private CA bundle at the
+path specified in `tls.ca_file` if needed:
 
 ```bash
-echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
-docker tag mikrotik-exporter:latest ghcr.io/jesof/mikrotik-exporter:latest
-docker push ghcr.io/jesof/mikrotik-exporter:latest
+docker run -d --name mikrotik-exporter --restart=unless-stopped \
+  --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+  -p 127.0.0.1:9090:9090 \
+  --env-file ./exporter.env \
+  --mount type=bind,src=/absolute/path/router-ca.pem,dst=/etc/mikrotik-exporter/router-ca.pem,readonly \
+  mikrotik-exporter:local
 ```
 
-#### Docker Hub
-
-```bash
-docker login
-docker tag mikrotik-exporter:latest username/mikrotik-exporter:latest
-docker push username/mikrotik-exporter:latest
-```
-
-### Running the Container
-
-```bash
-docker run -d \
-  --name mikrotik-exporter \
-  --restart=unless-stopped \
-  -p 9090:9090 \
-  -e ROUTERS_CONFIG='[{"name":"router1","address":"192.168.88.1:8728","username":"admin","password":"pass"}]' \
-  -e COLLECTION_INTERVAL_SECONDS=30 \
-  -e RUST_LOG=info \
-  ghcr.io/jesof/mikrotik-exporter:latest
-```
-
-If `ROUTERS_CONFIG` is not set, you can use the legacy configuration
-`ROUTEROS_ADDRESS/ROUTEROS_USERNAME/ROUTEROS_PASSWORD` (router name will be `default`).
-
----
+Omit the CA mount and `ca_file` when using system roots. Keep environment files out of source
+control; container administrators can inspect container environment variables. Restrict access to
+the container runtime as well as the files.
 
 ## Kubernetes
 
-### Quick Start
+### Deploy the Manifests
 
-```bash
-# Apply all manifests
-kubectl apply -k k8s/
+The repository provides plain manifests in `k8s/`, not a Helm chart. The Kustomize bundle includes
+a ServiceMonitor and therefore requires the Prometheus Operator CRD. Before using the full bundle,
+replace its example router credentials/configuration and pin the image in a private overlay.
+Do not commit a populated `k8s/secret.yaml`: base64 is not encryption.
 
-# Check status
-kubectl get pods -n monitoring -l app=mikrotik-exporter
-kubectl logs -n monitoring -l app=mikrotik-exporter -f
-```
-
-### Step-by-Step Deployment
-
-#### 1. Namespace
+For a deployment without the sample secret, create a private `routers.json` containing the JSON
+array documented in the README, then:
 
 ```bash
 kubectl apply -f k8s/namespace.yaml
-```
-
-#### 2. Secret (router configuration)
-
-Edit `k8s/secret.yaml`:
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: mikrotik-exporter-secret
-  namespace: monitoring
-type: Opaque
-stringData:
-  ROUTERS_CONFIG: |
-    [
-      {
-        "name": "main-router",
-        "address": "192.168.88.1:8728",
-        "username": "admin",
-        "password": "secure-password"
-      }
-    ]
-```
-
-```bash
-kubectl apply -f k8s/secret.yaml
-```
-
-#### 3. ConfigMap (server settings)
-
-```bash
+kubectl create secret generic mikrotik-exporter-secret \
+  --from-file=ROUTERS_CONFIG=./routers.json -n monitoring
 kubectl apply -f k8s/configmap.yaml
-```
-
-#### 4. Deployment
-
-```bash
 kubectl apply -f k8s/deployment.yaml
-```
-
-#### 5. Service
-
-```bash
 kubectl apply -f k8s/service.yaml
 ```
 
-#### 6. ServiceMonitor (for Prometheus Operator)
+With Prometheus Operator installed, also apply:
 
 ```bash
 kubectl apply -f k8s/servicemonitor.yaml
 ```
 
-### Verify Deployment
+For an already customized private overlay, `kubectl apply -k /path/to/overlay` applies the complete
+configuration. The supplied Deployment imports `SERVER_ADDR` from the ConfigMap and
+`ROUTERS_CONFIG` from the Secret; add explicit `env` entries in your overlay for collection interval,
+startup, or other settings. Merely adding those keys to the ConfigMap does not inject them.
+
+If `tls.ca_file` is configured, add a read-only ConfigMap/Secret volume to your overlay and mount
+the PEM bundle at that path. The supplied Deployment does not mount custom trust files. Ensure
+UID 1000 can read them. `tls: {}` uses container system roots without a custom mount.
+
+Use one replica per configured router set. Additional replicas independently poll every router
+and expose separate counters; plan sharding or Prometheus deduplication before scaling out.
+
+### Probes and Lifecycle
+
+The Deployment uses `/live` for startup/liveness and `/ready` for readiness on the named
+`metrics` port. `/ready` stays false during optional startup checks and becomes false during
+shutdown. `/health` is a diagnostic endpoint for router freshness and can return 503 during router
+outages while the exporter is correctly serving its failure metrics. Do not use it as a process probe.
 
 ```bash
-# Port-forward for testing
+kubectl rollout status deployment/mikrotik-exporter -n monitoring
+kubectl logs -n monitoring -l app=mikrotik-exporter
 kubectl port-forward -n monitoring svc/mikrotik-exporter 9090:9090
-
-# Check endpoints
-curl http://localhost:9090/health
-curl http://localhost:9090/metrics | grep mikrotik_system_info
 ```
 
-### Update Configuration
+From another terminal:
 
 ```bash
-# Edit Secret
-kubectl edit secret mikrotik-exporter-secret -n monitoring
+curl --fail http://localhost:9090/live
+curl --fail http://localhost:9090/ready
+curl http://localhost:9090/health
+curl --fail http://localhost:9090/metrics
+```
 
-# Or apply modified file
-kubectl apply -f k8s/secret.yaml
+Configuration is loaded at startup. After updating the Secret, environment, or CA mount:
 
-# Restart to apply changes
+```bash
 kubectl rollout restart deployment/mikrotik-exporter -n monitoring
 kubectl rollout status deployment/mikrotik-exporter -n monitoring
 ```
 
-### Update Image
-
-```bash
-# Rolling update to new version
-kubectl set image deployment/mikrotik-exporter \
-  mikrotik-exporter=ghcr.io/jesof/mikrotik-exporter:v0.2.1 \
-  -n monitoring
-
-# Check status
-kubectl rollout status deployment/mikrotik-exporter -n monitoring
-
-# Rollback if issues occur
-kubectl rollout undo deployment/mikrotik-exporter -n monitoring
-```
-
-### Helm Chart (optional)
-
-Create a basic chart:
-
-```bash
-mkdir -p helm/mikrotik-exporter
-cd helm/mikrotik-exporter
-
-cat > Chart.yaml <<EOF
-apiVersion: v2
-name: mikrotik-exporter
-version: 0.1.0
-appVersion: "0.1.0"
-description: MikroTik Prometheus Exporter
-type: application
-EOF
-
-cat > values.yaml <<EOF
-image:
-  repository: ghcr.io/jesof/mikrotik-exporter
-  tag: latest
-  pullPolicy: Always
-
-resources:
-  requests:
-    cpu: 50m
-    memory: 64Mi
-  limits:
-    cpu: 200m
-    memory: 256Mi
-
-routers:
-  - name: main-router
-    address: "192.168.88.1:8728"
-    username: admin
-    password: changeme
-
-collectionInterval: 30
-EOF
-
-# Install
-helm install mikrotik-exporter . -n monitoring --create-namespace
-```
-
-### Uninstall
-
-```bash
-# Via kubectl
-kubectl delete -k k8s/
-
-# Via Helm
-helm uninstall mikrotik-exporter -n monitoring
-```
-
----
+Update image digests through your overlay/deployment pipeline. Check the rollout and freshness
+metrics after each update. Keep the previous compatible image/configuration available for rollback.
 
 ## Prometheus
 
-### Prometheus Operator (recommended)
+### ServiceMonitor
 
-ServiceMonitor automatically discovers the exporter:
+The endpoint port must match **the Service port name `metrics`**. Match the ServiceMonitor's
+labels and namespace to your Prometheus resource's selection policy:
 
 ```yaml
-# k8s/servicemonitor.yaml
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: mikrotik-exporter
   namespace: monitoring
   labels:
-    release: prometheus # Must match the label selector in Prometheus
+    release: prometheus
 spec:
   selector:
     matchLabels:
       app: mikrotik-exporter
   endpoints:
-    - port: http
+    - port: metrics
       interval: 30s
+      scrapeTimeout: 10s
       path: /metrics
-```
-
-Verify:
-
-```bash
-kubectl get servicemonitor -n monitoring mikrotik-exporter
 ```
 
 ### Static Configuration
 
-For standard Prometheus, add to `prometheus.yml`:
-
 ```yaml
 scrape_configs:
-  - job_name: "mikrotik-exporter"
+  - job_name: mikrotik-exporter
     static_configs:
       - targets: ["mikrotik-exporter.monitoring.svc.cluster.local:9090"]
     scrape_interval: 30s
     scrape_timeout: 10s
-    honor_labels: true
-```
-
-### Verify in Prometheus UI
-
-```promql
-# Check availability
-up{job="mikrotik-exporter"}
-
-# Check metrics
-mikrotik_system_info
-mikrotik_system_cpu_load
-rate(mikrotik_interface_rx_bytes_total[5m])
 ```
 
 ### Alerts
 
+Use freshness timestamps, including their zero/never-success state, rather than testing a lifetime
+success counter for zero. The example uses a 120-second freshness threshold for the default
+30-second collection interval; adjust it for your interval and expected router latency. The
+`for` duration is additional to that threshold. Match the PrometheusRule's labels to your operator
+selection policy; the `job` label below assumes the static configuration above (adapt for discovery).
+
 ```yaml
-# PrometheusRule for alerts
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -297,7 +158,6 @@ metadata:
 spec:
   groups:
     - name: mikrotik-exporter
-      interval: 30s
       rules:
         - alert: MikroTikExporterDown
           expr: up{job="mikrotik-exporter"} == 0
@@ -305,133 +165,81 @@ spec:
           labels:
             severity: critical
           annotations:
-            summary: "MikroTik Exporter is unavailable"
-            description: "Exporter has not responded for more than 5 minutes"
-
-        - alert: MikroTikRouterDown
-          expr: mikrotik_scrape_success_total == 0
+            summary: "MikroTik exporter is unavailable"
+        - alert: MikroTikRouterCollectionStale
+          expr: >-
+            (mikrotik_scrape_last_success_timestamp_seconds == 0)
+            or (time() - mikrotik_scrape_last_success_timestamp_seconds > 120)
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: "Router {{ $labels.router }} is unavailable"
-            description: "Metrics collection from router {{ $labels.router }} has failed for more than 5 minutes"
-
+            summary: "No recent complete collection from {{ $labels.router }}"
+        - alert: MikroTikGroupCollectionStale
+          expr: >-
+            (mikrotik_group_last_success_timestamp_seconds == 0)
+            or (time() - mikrotik_group_last_success_timestamp_seconds > 120)
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Group {{ $labels.group }} is stale on {{ $labels.router }}"
+        - alert: MikroTikConntrackSeriesOmitted
+          expr: mikrotik_conntrack_dropped_series > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Conntrack series cap reached on {{ $labels.router }}"
         - alert: MikroTikHighCPU
-          expr: mikrotik_system_cpu_load > 80
+          expr: mikrotik_system_cpu_load_ratio > 0.8
           for: 10m
           labels:
             severity: warning
           annotations:
-            summary: "High CPU usage on {{ $labels.router }}"
-            description: "CPU load = {{ $value }}% on router {{ $labels.router }}"
-
+            summary: "High CPU load on {{ $labels.router }}"
+            description: "CPU utilization ratio is {{ $value }} (0–1)."
         - alert: MikroTikLowMemory
-          expr: (mikrotik_system_free_memory_bytes / mikrotik_system_total_memory_bytes) * 100 < 10
+          expr: mikrotik_system_free_memory_bytes / mikrotik_system_total_memory_bytes < 0.1
           for: 10m
           labels:
             severity: warning
           annotations:
-            summary: "Low memory on {{ $labels.router }}"
-            description: "Less than 10% memory available on router {{ $labels.router }}"
+            summary: "Less than 10% memory free on {{ $labels.router }}"
 ```
 
----
+Freshness alerts detect router/group collection problems; `up` detects scrape failures. If a target
+is removed from discovery entirely, an inventory-based absent-target alert is also needed.
+Resource values can remain stale during failures; interpret resource alerts together with freshness.
 
 ## Grafana
 
-### Official Dashboard
+Import `grafana/dashboard.json` from the same revision as the exporter and select your Prometheus
+datasource. For unreleased versions, use this file rather than assuming the
+[catalog dashboard 24875](https://grafana.com/grafana/dashboards/24875-mikrotik-router-monitoring/)
+already has the new metric names and units. CPU is a ratio, durations are seconds, and metadata
+joins should select current info (`== 1`).
 
-The dashboard is available in the official Grafana catalog:
-- **ID:** `24875`
-- **URL:** [https://grafana.com/grafana/dashboards/24875](https://grafana.com/grafana/dashboards/24875-mikrotik-router-monitoring/)
-
-### Import Dashboard
-
-#### Via UI
-
-1. Grafana → Dashboards → Import
-2. Upload `grafana/dashboard.json`
-3. Select Prometheus datasource
-4. Import
-
-#### Via ConfigMap (Kubernetes)
+For a Grafana dashboard sidecar configured to watch `grafana_dashboard=1` in `monitoring`:
 
 ```bash
-# Create ConfigMap
 kubectl create configmap mikrotik-dashboard \
-  --from-file=dashboard.json=grafana/dashboard.json \
-  -n monitoring
-
-# Add label for auto-discovery
-kubectl label configmap mikrotik-dashboard \
-  grafana_dashboard=1 \
-  -n monitoring
+  --from-file=dashboard.json=grafana/dashboard.json -n monitoring
+kubectl label configmap mikrotik-dashboard grafana_dashboard=1 -n monitoring
 ```
-
-Grafana Helm chart configuration:
-
-```yaml
-# values.yaml
-sidecar:
-  dashboards:
-    enabled: true
-    label: grafana_dashboard
-    labelValue: "1"
-    folder: /tmp/dashboards
-    searchNamespace: monitoring
-```
-
-#### Via Grafana API
-
-```bash
-GRAFANA_URL="http://grafana.monitoring.svc.cluster.local"
-API_KEY="your-api-key"
-
-curl -X POST \
-  -H "Authorization: Bearer ${API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d @grafana/dashboard.json \
-  "${GRAFANA_URL}/api/dashboards/db"
-```
-
-### Dashboard Includes
-
-- **System Info**: RouterOS version, device model, uptime
-- **Resource Usage**: CPU load, memory usage
-- **Network Traffic**: RX/TX per interface
-- **Metrics Health**: Scrape duration, success rate, connection errors
-- **Interface Status**: Table with status of all interfaces
-
----
 
 ## Security
 
-### RouterOS User with Minimal Permissions
+- Use verified RouterOS TLS, a dedicated `read,api` user, and an exporter source `/32` restriction
+  on both the user/service and router firewall. Plaintext API exposes credentials.
+- Keep `/metrics`, `/health`, `/live`, and `/ready` on a private network. Use an authenticated TLS
+  reverse proxy when access crosses a trust boundary; the exporter has no HTTP auth or TLS listener.
+- Use a secret manager or protected configuration files. Do not paste secrets in shell commands,
+  issue reports, or Git. Review metric labels and logs for private topology before sharing.
+- Run non-root with a read-only root filesystem and dropped capabilities, as the Deployment does.
 
-```bash
-# On MikroTik router
-/user group add name=monitoring policy=api,read
-/user add name=prometheus group=monitoring password=secure-random-password
-```
-
-### Kubernetes Secret
-
-```bash
-# Create Secret from command line
-kubectl create secret generic mikrotik-exporter-secret \
-  --from-literal=ROUTERS_CONFIG='[{...}]' \
-  -n monitoring
-
-# Or from file
-kubectl create secret generic mikrotik-exporter-secret \
-  --from-file=ROUTERS_CONFIG=routers.json \
-  -n monitoring
-```
-
-### Network Policies
-
-Restrict network access:
+Example NetworkPolicy for one TLS router at `192.0.2.1` (replace addresses and selectors). Your CNI
+must enforce NetworkPolicy; confirm source NAT, DNS, and monitoring namespace behavior in your cluster:
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -443,124 +251,54 @@ spec:
   podSelector:
     matchLabels:
       app: mikrotik-exporter
-  policyTypes:
-    - Ingress
-    - Egress
+  policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - namespaceSelector:
             matchLabels:
-              name: monitoring
+              kubernetes.io/metadata.name: monitoring
       ports:
         - protocol: TCP
           port: 9090
   egress:
     - to:
-        - namespaceSelector: {}
+        - ipBlock:
+            cidr: 192.0.2.1/32
       ports:
         - protocol: TCP
-          port: 8728 # RouterOS API
+          port: 8729
     - to:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
       ports:
-        - protocol: TCP
-          port: 53 # DNS
         - protocol: UDP
+          port: 53
+        - protocol: TCP
           port: 53
 ```
 
-### TLS for RouterOS API (port 8729)
-
-> ⚠️ Not yet implemented in the project (in roadmap)
-
----
+Node-local DNS may require a different DNS egress rule. Prefer a Prometheus pod selector as well as
+the namespace selector when its labels are known. See [SECURITY.md](SECURITY.md) for reporting.
 
 ## Troubleshooting
 
-### Pod Won't Start
+- **Startup exits:** validate JSON, duplicate names, integer ranges, IP bind address, and strict-mode
+  requirements. Invalid configuration is an error, not a fallback to another router.
+- **TLS connection fails:** verify the configured `tls` object, certificate identity, chain, clock,
+  CA mount path/permissions, and API-SSL certificate. Do not disable verification to work around it.
+- **Ready but degraded:** inspect group success/completeness and freshness, RouterOS permissions,
+  feature availability, and logs. `/health` does not actively probe the router.
+- **Unexpected stale/zero values:** required malformed numeric fields fail the fetch; inspect debug
+  logs and group status. Review logs for sensitive topology before sharing them.
+- **Prometheus has no target:** check ServiceMonitor selection, the `metrics` Service port name,
+  Endpoints/EndpointSlices, NetworkPolicy, and Prometheus Targets.
+- **Grafana has no data:** check datasource, router selection, metric migration, and matching dashboard
+  revision. WireGuard bytes are gauges and conntrack may be capped.
 
-```bash
-kubectl describe pod -n monitoring -l app=mikrotik-exporter
-kubectl logs -n monitoring -l app=mikrotik-exporter --previous
-```
-
-### No Metrics in Prometheus
-
-```bash
-# Check ServiceMonitor
-kubectl get servicemonitor -n monitoring -o yaml
-
-# Check endpoints
-kubectl get endpoints -n monitoring mikrotik-exporter
-
-# Check in Prometheus UI: Status → Targets
-```
-
-### Router Connection Errors
-
-```bash
-# Logs with details
-kubectl logs -n monitoring -l app=mikrotik-exporter -f
-
-# Check network connectivity from pod
-kubectl exec -it -n monitoring deployment/mikrotik-exporter -- sh
-# In container only busybox (wget available, curl/jq not) — for curl/jq use sidecar
-```
-
-### Dashboard Shows No Data
-
-1. Check that Prometheus datasource is configured
-2. Check metrics in Prometheus UI
-3. Check dashboard variables (Settings → Variables)
-4. Make sure the correct router is selected in dropdown
-
----
-
-## Additional Configuration
-
-### Ingress for External Access
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: mikrotik-exporter
-  namespace: monitoring
-spec:
-  ingressClassName: nginx
-  rules:
-    - host: mikrotik-exporter.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: mikrotik-exporter
-                port:
-                  number: 9090
-```
-
-### HPA (Horizontal Pod Autoscaler)
-
-```yaml
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: mikrotik-exporter
-  namespace: monitoring
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: mikrotik-exporter
-  minReplicas: 1
-  maxReplicas: 3
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
-```
+Use `kubectl describe pod` and `kubectl logs --previous` for startup failures. Ordinary local tests
+use loopback fixtures; contact real routers only with the explicit ignored-test command in
+[CONTRIBUTING.md](CONTRIBUTING.md#testing).

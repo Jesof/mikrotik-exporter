@@ -11,15 +11,119 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added configurable gap reset threshold via `GAP_RESET_THRESHOLD_SECONDS` environment variable
 - Enhanced connection pool backoff strategy for faster recovery after network outages
+- Optional verified RouterOS API-SSL per router via `tls`, with system trust roots, an optional
+  `server_name`, and a custom PEM `ca_file`; legacy single-router TLS via `ROUTEROS_TLS`.
+- `/live` and `/ready` process probes, separate from cached `/health` router diagnostics.
+- Per-group success, completeness, and last-complete-success timestamp gauges for
+  `system_interfaces`, `conntrack`, `wireguard`, `certificates`, and `firewall`.
+- `mikrotik_conntrack_dropped_series` gauge reporting latest usable snapshot series omitted by
+  the 1024 retained-series-per-router cap, including partial snapshots.
+- Configuration-independent `--version` / `-V`; deterministic fixture/loopback integration tests
+  and explicitly ignored real-device connectivity testing.
 
 ### Changed
 - Improved gap detection mechanism to be more responsive to connection issues
 - Optimized counter reset logic after connection restoration
 - Enhanced error tracking for different metric groups
+- **Breaking:** standardized CPU utilization to a ratio and three duration metrics to seconds;
+  clarified WireGuard handshake timestamp naming. See the migration table below.
+- **Breaking:** configuration loading returns `Result<Config>` and fails on malformed JSON,
+  unknown router/TLS fields, invalid values, invalid routers, and duplicate names. Invalid
+  `ROUTERS_CONFIG` no longer falls back to legacy settings or filters out invalid entries.
+- **Breaking:** complete collection is now required for router success/freshness; partial data
+  updates usable groups while recording a scrape error. Required malformed numeric data fails
+  its fetch; invalid snapshots no longer update metrics with fabricated zeroes.
+- **Breaking:** collector startup returns a supervised `JoinHandle<Result<()>>`; the framing
+  helper `encode_length` is private. Public configuration, errors, and metric input types reflect
+  strict validation and explicit complete/partial/failed collection status.
+- **Breaking:** Rust 1.98.0 is the MSRV and pinned compiler, synchronized with Clippy and Docker.
+- Independent non-overlapping router schedules skip missed ticks, so slow routers do not block
+  others. The aggregate cycle duration measures progress across all configured routers.
+- Supervised startup/HTTP/collector tasks, readiness transitions, and bounded shutdown with task joins.
+- `build-docker.sh` is build-only. Deployment guidance uses process probes, verified TLS,
+  freshness-based alerts, the correct ServiceMonitor port, and actual Kubernetes manifests.
+- Full CI on pushes, PRs, schedules, and manual runs; required `Check` aggregates Rust, coverage,
+  workflow, and native multi-architecture Docker validation. Actions are SHA-pinned.
+- Releases verify exact tag/Cargo version, main ancestry, and successful main CI for the same SHA,
+  rerun quality checks, natively test/build release targets, and attest binaries/checksums and images.
+- Updated public contribution/security policies and issue/PR guidance.
 
 ### Fixed
+- Accept RouterOS interface snapshots that omit `rx-error` or `tx-error` for
+  interface types or versions where those counters are unavailable.
+- Query only the required certificate properties so RouterOS detailed certificate
+  output cannot produce duplicate response attributes.
+- Upgrade Alpine runtime packages during image builds to include security fixes, including
+  OpenSSL CVE-2026-14456 in `libcrypto3` and `libssl3`.
+- Use IPv4 loopback for Docker's healthcheck to match the default HTTP listener and avoid
+  false unhealthy status when `localhost` resolves to `::1`.
+- Read count-only values from terminal `!done` attributes so valid empty firewall/WireGuard
+  tables do not fail collection; encode property-list/detail requests as RouterOS attributes.
+- Isolate pooled connections by password as well as username/TLS; successful authentication
+  alone no longer resets consecutive command failures and defeats group backoff.
+- Remove interface series on complete empty registry snapshots and remove superseded metadata
+  immediately when a router is removed. Docker's built-in healthcheck uses `/live`.
+- Track rules first observed in partial firewall snapshots for subsequent cleanup, and supersede
+  changed metadata during partial updates without removing unobserved rules.
+- Reject WireGuard byte counts outside the signed gauge range instead of exporting negative values.
 - Fixed issue with missing metrics after connection restoration by implementing more aggressive baseline reset
 - Resolved problems with stale metrics persistence after prolonged network outages
+- Bounded and fallible protocol framing, typed transport/protocol errors, and safe handling of
+  malformed, oversized, truncated, or timed-out router responses.
+- Cancellation-safe transport reuse, group-aware pool state/backoff, and credential/TLS-aware
+  connection identity; failed or interrupted commands cannot return a dirty stream to the pool.
+- Conntrack cardinality remains bounded across retained partial data; removed routers and stale
+  dynamic metadata, including superseded `system_info`, are cleaned up.
+- Initialize router/group freshness and conntrack observability at zero so never-success states
+  remain visible before collection and after failures.
+
+### Breaking Migration
+
+These changes are unreleased; no package version or release tag is changed here. Upgrade exporter,
+dashboards, recording rules, alerts, and library callers together. Old metric names are not aliases:
+
+| Old metric | New metric | Value conversion |
+| --- | --- | --- |
+| `mikrotik_scrape_duration_milliseconds` | `mikrotik_scrape_duration_seconds` | Divide old values/thresholds by 1000; new gauge is floating-point seconds |
+| `mikrotik_collection_cycle_duration_milliseconds` | `mikrotik_collection_cycle_duration_seconds` | Divide by 1000; remains an unlabeled aggregate gauge |
+| `mikrotik_conntrack_update_duration_milliseconds` | `mikrotik_conntrack_update_duration_seconds` | Divide by 1000; floating-point seconds |
+| `mikrotik_system_cpu_load` | `mikrotik_system_cpu_load_ratio` | Divide by 100; e.g. threshold 80 becomes 0.8 |
+| `mikrotik_wireguard_peer_latest_handshake` | `mikrotik_wireguard_peer_latest_handshake_timestamp_seconds` | Rename only; Unix seconds, 0 when absent |
+
+- Remove obsolete milliseconds/CPU percentage conversions from queries and use the matching
+  dashboard revision. WireGuard RX/TX byte metrics remain gauges; interface/firewall totals remain
+  counters. Pool size/active and collection-cycle metrics have no `router` label.
+- Replace lifetime-counter availability alerts with router/group last-success timestamps:
+  `timestamp == 0` covers never-success, and `time() - timestamp > threshold` covers stale data.
+  A partial collection no longer increments `mikrotik_scrape_success_total` or advances router
+  freshness. Group success can be 1 while completeness is 0; group freshness advances only on
+  complete results. Unsupported/denied commands may keep a group incomplete.
+  A critical system/interfaces failure or invalid numeric snapshot rejects the overall production
+  collection; registry update methods require validated input from direct library callers.
+- Conntrack exports at most 1024 retained series per router, ordered deterministically by
+  `(ip_version, src_address, protocol)`; totals over those series may undercount the router.
+  Alert on `mikrotik_conntrack_dropped_series > 0`. This gauge counts omitted distinct series,
+  not dropped packets or a lifetime total. Select `mikrotik_system_info == 1` for current metadata;
+  superseded entries become 0 and expire with the 30-minute dynamic-label TTL.
+- Fix invalid configuration before rollout: integer ranges are collection 1–86400 seconds,
+  gap reset 1–604800 seconds, and startup timeout 1–300 seconds; booleans are exactly `true`/`false`.
+  `SERVER_ADDR` must be an IP socket address. Strict startup requires enabled connectivity tests
+  and at least one router. Router names must be unique. Remove unknown JSON fields.
+- Update Rust callers to `let config = Config::from_env()?;`, validate programmatic configs,
+  and add `tls: None` or `Some(RouterTlsConfig { ... })` to `RouterConfig` literals. Retain,
+  supervise, signal, and await collector handles, handling both `JoinError` and the inner `Result`.
+  Use supported public APIs instead of `encode_length`; private framing tests now live beside
+  the implementation. Handle typed error variants and propagate fallible metric encoding.
+- TLS is opt-in: omitted/null per-router `tls` and unset legacy `ROUTEROS_TLS` preserve plaintext.
+  An empty TLS object enables system roots. `ca_file` replaces system roots; `server_name`
+  overrides the identity derived from the address host. Legacy TLS must be an object, not `null`.
+  Port 8729 alone does not enable TLS. Mount the CA file, configure the RouterOS server certificate,
+  restrict the exporter source address, and restart to apply configuration changes.
+- Point process probes to `/live` and `/ready`. `/health` remains cached router diagnostics and
+  may return 503 while the exporter is live and ready. Custom HTTP embeddings should manage
+  readiness through `AppState::router_with_readiness`; `create_router` assumes already initialized.
+- Build with Rust 1.98.0. Explicitly run the ignored real-device test only with authorization;
+  ordinary test runs no longer discover and contact devices from local credentials.
 
 ## [0.3.3] - 2026-02-23
 

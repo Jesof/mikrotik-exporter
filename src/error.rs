@@ -20,6 +20,34 @@ pub enum AppError {
     #[error("RouterOS error: {0}")]
     RouterOs(String),
 
+    #[error("Invalid router snapshot: {0}")]
+    InvalidSnapshot(String),
+
+    #[error("RouterOS protocol error: {0}")]
+    Protocol(String),
+
+    #[error("RouterOS transport error during {operation}: {source}")]
+    Transport {
+        operation: &'static str,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("RouterOS timeout during {0}")]
+    Timeout(&'static str),
+
+    #[error("RouterOS command rejected (category {category:?})")]
+    RouterOsTrap {
+        category: Option<u8>,
+        message: String,
+    },
+
+    #[error("RouterOS terminated the connection")]
+    RouterOsFatal,
+
+    #[error("RouterOS authentication failed: {0}")]
+    Authentication(String),
+
     /// Metrics encoding error
     #[error("Metrics error: {0}")]
     Metrics(String),

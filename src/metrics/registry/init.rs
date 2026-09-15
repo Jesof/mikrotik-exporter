@@ -4,7 +4,7 @@
 //! Registry initialization and metric registration
 
 use crate::metrics::labels::{
-    CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels, FirewallRuleLabels,
+    CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels, FirewallRuleLabels, GroupLabels,
     InterfaceInfoLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardPeerInfoLabels,
     WireGuardPeerLabels,
 };
@@ -16,7 +16,7 @@ use prometheus_client::registry::Registry;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use super::MetricsRegistry;
+use super::{FloatGauge, MetricsRegistry};
 
 type InterfaceMetrics = (
     Family<InterfaceLabels, Counter>,
@@ -36,7 +36,7 @@ type FirewallMetrics = (
 );
 
 type SystemMetrics = (
-    Family<RouterLabels, Gauge>,
+    Family<RouterLabels, FloatGauge>,
     Family<RouterLabels, Gauge>,
     Family<RouterLabels, Gauge>,
     Family<SystemInfoLabels, Gauge>,
@@ -46,7 +46,7 @@ type SystemMetrics = (
 type ScrapeMetrics = (
     Family<RouterLabels, Counter>,
     Family<RouterLabels, Counter>,
-    Family<RouterLabels, Gauge>,
+    Family<RouterLabels, FloatGauge>,
     Family<RouterLabels, Gauge>,
     Family<RouterLabels, Gauge>,
 );
@@ -54,7 +54,7 @@ type ScrapeMetrics = (
 type ConntrackMetrics = (
     Family<ConntrackLabels, Gauge>,
     Family<RouterLabels, Gauge>,
-    Family<RouterLabels, Gauge>,
+    Family<RouterLabels, FloatGauge>,
 );
 
 type WireGuardMetrics = (
@@ -159,10 +159,10 @@ impl MetricsRegistry {
     }
 
     fn register_system_metrics(registry: &mut Registry) -> SystemMetrics {
-        let system_cpu_load = Family::<RouterLabels, Gauge>::default();
+        let system_cpu_load = Family::<RouterLabels, FloatGauge>::default();
         registry.register(
-            "mikrotik_system_cpu_load",
-            "CPU load percentage",
+            "mikrotik_system_cpu_load_ratio",
+            "CPU load ratio (0 to 1)",
             system_cpu_load.clone(),
         );
         let system_free_memory = Family::<RouterLabels, Gauge>::default();
@@ -212,11 +212,11 @@ impl MetricsRegistry {
             "Failed scrape cycles per router",
             scrape_errors.clone(),
         );
-        let scrape_duration_milliseconds = Family::<RouterLabels, Gauge>::default();
+        let scrape_duration_seconds = Family::<RouterLabels, FloatGauge>::default();
         registry.register(
-            "mikrotik_scrape_duration_milliseconds",
-            "Duration of last scrape in milliseconds",
-            scrape_duration_milliseconds.clone(),
+            "mikrotik_scrape_duration_seconds",
+            "Duration of last scrape in seconds",
+            scrape_duration_seconds.clone(),
         );
         let scrape_last_success_timestamp_seconds = Family::<RouterLabels, Gauge>::default();
         registry.register(
@@ -234,20 +234,20 @@ impl MetricsRegistry {
         (
             scrape_success,
             scrape_errors,
-            scrape_duration_milliseconds,
+            scrape_duration_seconds,
             scrape_last_success_timestamp_seconds,
             connection_consecutive_errors,
         )
     }
 
-    fn register_collection_metrics(registry: &mut Registry) -> Gauge {
-        let collection_cycle_duration_milliseconds = Gauge::default();
+    fn register_collection_metrics(registry: &mut Registry) -> FloatGauge {
+        let collection_cycle_duration_seconds = FloatGauge::default();
         registry.register(
-            "mikrotik_collection_cycle_duration_milliseconds",
-            "Duration of full collection cycle in milliseconds",
-            collection_cycle_duration_milliseconds.clone(),
+            "mikrotik_collection_cycle_duration_seconds",
+            "Duration of full collection cycle in seconds",
+            collection_cycle_duration_seconds.clone(),
         );
-        collection_cycle_duration_milliseconds
+        collection_cycle_duration_seconds
     }
 
     fn register_pool_metrics(registry: &mut Registry) -> (Gauge, Gauge) {
@@ -279,17 +279,17 @@ impl MetricsRegistry {
             "Number of active conntrack label series per router",
             conntrack_active_series.clone(),
         );
-        let conntrack_update_duration_milliseconds = Family::<RouterLabels, Gauge>::default();
+        let conntrack_update_duration_seconds = Family::<RouterLabels, FloatGauge>::default();
         registry.register(
-            "mikrotik_conntrack_update_duration_milliseconds",
-            "Duration of conntrack metrics update in milliseconds",
-            conntrack_update_duration_milliseconds.clone(),
+            "mikrotik_conntrack_update_duration_seconds",
+            "Duration of conntrack metrics update in seconds",
+            conntrack_update_duration_seconds.clone(),
         );
 
         (
             connection_tracking_count,
             conntrack_active_series,
-            conntrack_update_duration_milliseconds,
+            conntrack_update_duration_seconds,
         )
     }
 
@@ -311,7 +311,7 @@ impl MetricsRegistry {
 
         let wireguard_peer_latest_handshake = Family::<WireGuardPeerLabels, Gauge>::default();
         registry.register(
-            "mikrotik_wireguard_peer_latest_handshake",
+            "mikrotik_wireguard_peer_latest_handshake_timestamp_seconds",
             "Unix timestamp of last handshake with WireGuard peer",
             wireguard_peer_latest_handshake.clone(),
         );
@@ -374,25 +374,21 @@ impl MetricsRegistry {
         let (
             scrape_success,
             scrape_errors,
-            scrape_duration_milliseconds,
+            scrape_duration_seconds,
             scrape_last_success_timestamp_seconds,
             connection_consecutive_errors,
         ) = Self::register_scrape_metrics(&mut registry);
 
         // Register collection metrics
-        let collection_cycle_duration_milliseconds =
-            Self::register_collection_metrics(&mut registry);
+        let collection_cycle_duration_seconds = Self::register_collection_metrics(&mut registry);
 
         // Register connection pool metrics
         let (connection_pool_size, connection_pool_active) =
             Self::register_pool_metrics(&mut registry);
 
         // Register connection tracking metrics
-        let (
-            connection_tracking_count,
-            conntrack_active_series,
-            conntrack_update_duration_milliseconds,
-        ) = Self::register_conntrack_metrics(&mut registry);
+        let (connection_tracking_count, conntrack_active_series, conntrack_update_duration_seconds) =
+            Self::register_conntrack_metrics(&mut registry);
 
         // Register WireGuard metrics
         let (
@@ -404,6 +400,31 @@ impl MetricsRegistry {
 
         // Register certificate metrics
         let certificate_days_until_expiry = Self::register_certificate_metrics(&mut registry);
+
+        let group_collection_success = Family::<GroupLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_group_collection_success",
+            "Last collection returned usable group data (1=yes, 0=no)",
+            group_collection_success.clone(),
+        );
+        let group_collection_complete = Family::<GroupLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_group_collection_complete",
+            "Last collection returned a complete group snapshot (1=yes, 0=no)",
+            group_collection_complete.clone(),
+        );
+        let group_last_success_timestamp_seconds = Family::<GroupLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_group_last_success_timestamp_seconds",
+            "Unix timestamp of last complete group collection (0=never)",
+            group_last_success_timestamp_seconds.clone(),
+        );
+        let conntrack_dropped_series = Family::<RouterLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_conntrack_dropped_series",
+            "Conntrack series omitted from latest snapshot by the 1024 series per router limit",
+            conntrack_dropped_series.clone(),
+        );
 
         Self {
             registry: Arc::new(Mutex::new(registry)),
@@ -423,15 +444,20 @@ impl MetricsRegistry {
             system_uptime_seconds,
             scrape_success,
             scrape_errors,
-            scrape_duration_milliseconds,
+            scrape_duration_seconds,
             scrape_last_success_timestamp_seconds,
             connection_consecutive_errors,
-            collection_cycle_duration_milliseconds,
+            collection_cycle_duration_seconds,
+            group_collection_success,
+            group_collection_complete,
+            group_last_success_timestamp_seconds,
+            conntrack_dropped_series,
+            known_routers: Arc::new(DashMap::new()),
             connection_pool_size,
             connection_pool_active,
             connection_tracking_count,
             conntrack_active_series,
-            conntrack_update_duration_milliseconds,
+            conntrack_update_duration_seconds,
             wireguard_peer_rx_bytes,
             wireguard_peer_tx_bytes,
             wireguard_peer_latest_handshake,
@@ -456,6 +482,7 @@ impl MetricsRegistry {
             wireguard_peer_info_last_seen: Arc::new(DashMap::new()),
             certificate_last_seen: Arc::new(DashMap::new()),
             interface_info_last_seen: Arc::new(DashMap::new()),
+            system_info_last_seen: Arc::new(DashMap::new()),
             last_scrape_success: Arc::new(DashMap::new()),
             consecutive_scrape_errors: Arc::new(DashMap::new()),
         }

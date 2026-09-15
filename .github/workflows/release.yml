@@ -2,137 +2,236 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    tags: ['v*.*.*']
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag version (e.g., v0.3.0)'
+        description: Existing release tag on main (vX.Y.Z)
         required: true
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  verify:
+    name: Verify release source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      tag: ${{ steps.source.outputs.tag }}
+    steps:
+      - name: Require main for manual dispatch
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+            [[ "$GITHUB_REF" == refs/heads/main ]]
+          fi
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve tag and verify version and main ancestry
+        id: source
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          sha=$(git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}")
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          if [[ "$EVENT_NAME" == push ]]; then
+            [[ "$sha" == "$GITHUB_SHA" ]]
+          fi
+          git merge-base --is-ancestor "$sha" refs/remotes/origin/main
+          git checkout --detach "$sha"
+          python3 - "$RELEASE_TAG" <<'PY'
+          import pathlib
+          import sys
+          import tomllib
+          manifest = tomllib.loads(pathlib.Path("Cargo.toml").read_text())
+          toolchain = tomllib.loads(pathlib.Path("rust-toolchain.toml").read_text())
+          assert manifest["package"]["version"] == sys.argv[1][1:], "Tag/Cargo version mismatch"
+          assert manifest["package"]["rust-version"] == "1.98.0", "MSRV mismatch"
+          assert toolchain["toolchain"]["channel"] == "1.98.0", "Toolchain mismatch"
+          PY
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+      - name: Require successful main CI for the exact commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+            -f head_sha="$SOURCE_SHA" -f branch=main -f event=push -f per_page=100 > "$RUNNER_TEMP/runs.json"
+          run_id=$(jq -er --arg sha "$SOURCE_SHA" '
+            [.workflow_runs[] | select(.head_sha == $sha and .head_branch == "main" and .event == "push")]
+            | max_by(.run_number)
+            | select(.status == "completed" and .conclusion == "success") | .id
+          ' "$RUNNER_TEMP/runs.json")
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100&filter=latest" \
+            --jq '.jobs[] | {name, conclusion, status, head_sha}' | jq -s . > "$RUNNER_TEMP/jobs.json"
+          jq -e --arg sha "$SOURCE_SHA" '
+            . as $jobs | ["Check", "Test Suite", "Rustfmt", "Clippy", "Cargo Deny", "Security Audit"]
+            | all(.[]; . as $name | any($jobs[];
+                .name == $name and .head_sha == $sha and .status == "completed" and .conclusion == "success"))
+          ' "$RUNNER_TEMP/jobs.json"
+
+  quality:
+    name: Release Quality
+    needs: verify
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    uses: ./.github/workflows/ci.yml
+    with:
+      source_sha: ${{ needs.verify.outputs.sha }}
+
   build:
     name: Build ${{ matrix.target }}
+    needs: [verify, quality]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-            artifact_name: mikrotik-exporter
-            asset_name: mikrotik-exporter-linux-amd64
-          - os: ubuntu-latest
+            binary: mikrotik-exporter
+            asset: mikrotik-exporter-linux-amd64
+          - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            artifact_name: mikrotik-exporter
-            asset_name: mikrotik-exporter-linux-arm64
-          - os: macos-latest
+            binary: mikrotik-exporter
+            asset: mikrotik-exporter-linux-arm64
+          - os: macos-15-intel
             target: x86_64-apple-darwin
-            artifact_name: mikrotik-exporter
-            asset_name: mikrotik-exporter-macos-amd64
-          - os: macos-latest
+            binary: mikrotik-exporter
+            asset: mikrotik-exporter-macos-amd64
+          - os: macos-15
             target: aarch64-apple-darwin
-            artifact_name: mikrotik-exporter
-            asset_name: mikrotik-exporter-macos-arm64
-          - os: windows-latest
+            binary: mikrotik-exporter
+            asset: mikrotik-exporter-macos-arm64
+          - os: windows-2025
             target: x86_64-pc-windows-msvc
-            artifact_name: mikrotik-exporter.exe
-            asset_name: mikrotik-exporter-windows-amd64.exe
-
+            binary: mikrotik-exporter.exe
+            asset: mikrotik-exporter-windows-amd64.exe
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Checkout verified release source
+        env:
+          SOURCE_SHA: ${{ needs.verify.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$SOURCE_SHA"
+          git checkout --detach "$SOURCE_SHA"
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
         with:
           targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-          shared-key: release
-
-      - name: Install cross-compilation tools
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user-static
-
-      - name: Configure Cargo for cross-compilation
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          mkdir -p ~/.cargo
-          echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config.toml
-          echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config.toml
-          
-      - name: Install cross for better cross-compilation
-        if: runner.os == 'Linux'
-        run: |
-          cargo install cross --version 0.2.5 || true
-          
-      - name: Build with cross or cargo
+      - name: Build and test natively
         shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: cc
         run: |
-          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ] && command -v cross &> /dev/null; then
-            cross build --release --locked --target ${{ matrix.target }}
+          cargo test --all-features --locked --target "$TARGET"
+          cargo build --release --all-features --locked --bin mikrotik-exporter --target "$TARGET"
+      - name: Package binary and checksum
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          BINARY: ${{ matrix.binary }}
+          ASSET: ${{ matrix.asset }}
+        run: |
+          cp "target/$TARGET/release/$BINARY" "$ASSET"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$ASSET" > "$ASSET.sha256"
           else
-            cargo build --release --locked --target ${{ matrix.target }}
+            shasum -a 256 "$ASSET" > "$ASSET.sha256"
           fi
-
-      - name: Rename artifact
-        shell: bash
-        run: |
-          cp ./target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ./${{ matrix.asset_name }}
-
-      - name: Generate checksum
-        shell: bash
-        run: |
-          if command -v sha256sum &> /dev/null; then
-            sha256sum ./${{ matrix.asset_name }} > ./${{ matrix.asset_name }}.sha256
-          else
-            shasum -a 256 ./${{ matrix.asset_name }} > ./${{ matrix.asset_name }}.sha256
-          fi
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: ${{ matrix.asset_name }}
+          name: ${{ matrix.asset }}
           path: |
-            ./${{ matrix.asset_name }}
-            ./${{ matrix.asset_name }}.sha256
-          retention-days: 1
+            ${{ matrix.asset }}
+            ${{ matrix.asset }}.sha256
+          if-no-files-found: error
+          retention-days: 7
 
   release:
-    name: Create Release
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: Publish attested binaries
+    needs: [verify, quality, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: write
-
+      attestations: write
+      id-token: write
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v8
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ needs.verify.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: mikrotik-exporter-*
           path: artifacts
           merge-multiple: true
-
-      - name: List artifacts
-        run: ls -la artifacts/
-
-      - name: Upload Release Assets
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify artifact checksums and count
+        working-directory: artifacts
+        run: |
+          set -- *.sha256
+          [[ $# -eq 5 ]]
+          sha256sum --check --strict -- *.sha256
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          fail_on_unmatched_files: false
-          files: artifacts/*
+          subject-path: artifacts/*
+      - name: Create release for the verified existing tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          SOURCE_SHA: ${{ needs.verify.outputs.sha }}
+        run: |
+          set -euo pipefail
+          remote_sha=$(git ls-remote origin "refs/tags/$RELEASE_TAG" "refs/tags/$RELEASE_TAG^{}" | sort -k2 | tail -n 1 | cut -f1)
+          [[ "$remote_sha" == "$SOURCE_SHA" ]]
+          gh release create "$RELEASE_TAG" --verify-tag --target "$SOURCE_SHA" \
+            --title "$RELEASE_TAG" --generate-notes -- artifacts/*
+
+  docker:
+    name: Publish release image
+    needs: [verify, quality, build, release]
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      source_sha: ${{ needs.verify.outputs.sha }}
+      release_tag: ${{ needs.verify.outputs.tag }}
+      platforms: linux/amd64,linux/arm64
+      push: true
+      cache_scope: release-v2

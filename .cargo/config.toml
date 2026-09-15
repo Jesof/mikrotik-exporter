@@ -4,10 +4,6 @@
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
 
-# Target for musl (used in Docker builds)
-[target.aarch64-unknown-linux-musl]
-linker = "aarch64-linux-gnu-gcc"
-
 # Build optimization for cross-compilation
 [build]
 # Enable incremental compilation to improve rebuild performance

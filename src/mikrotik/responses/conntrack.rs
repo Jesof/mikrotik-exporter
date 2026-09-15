@@ -4,27 +4,26 @@
 //! Connection tracking parsing
 
 use crate::mikrotik::types::ConnectionTrackingStats;
+use crate::prelude::{AppError, Result};
 use std::collections::HashMap;
 
 pub(crate) fn parse_connection_tracking(
     sentences: &[HashMap<String, String>],
     ip_version: &str,
-) -> Vec<ConnectionTrackingStats> {
+) -> Result<Vec<ConnectionTrackingStats>> {
     let mut aggregated: HashMap<(String, String), u64> = HashMap::new();
 
     for s in sentences {
-        if let Some(src) = s.get("src-address") {
-            let src_ip = extract_src_ip(src);
-            let protocol = s
-                .get("protocol")
-                .cloned()
-                .unwrap_or_else(|| "unknown".to_string());
+        {
+            let src = super::common::required_field(s, "src-address")?;
+            let src_ip = extract_src_ip(src)?;
+            let protocol = super::common::required_field(s, "protocol")?.to_string();
             let key = (src_ip, protocol);
             *aggregated.entry(key).or_insert(0) += 1;
         }
     }
 
-    aggregated
+    Ok(aggregated
         .into_iter()
         .map(|((src_address, protocol), count)| ConnectionTrackingStats {
             src_address,
@@ -32,30 +31,26 @@ pub(crate) fn parse_connection_tracking(
             connection_count: count,
             ip_version: ip_version.to_string(),
         })
-        .collect()
+        .collect())
 }
 
-fn extract_src_ip(src: &str) -> String {
+fn extract_src_ip(src: &str) -> Result<String> {
+    if let Ok(ip) = src.parse::<std::net::IpAddr>() {
+        return Ok(ip.to_string());
+    }
     if let Ok(socket) = src.parse::<std::net::SocketAddr>() {
-        return socket.ip().to_string();
+        return Ok(socket.ip().to_string());
     }
 
-    if let Some(stripped) = src.strip_prefix('[') {
-        if let Some((ip, _port)) = stripped.split_once(":]") {
-            return ip.to_string();
-        }
-        if let Some((ip, _rest)) = stripped.split_once(']') {
-            return ip.to_string();
-        }
+    if let Some(ip) = src.strip_prefix('[').and_then(|v| v.strip_suffix(']')) {
+        return ip
+            .parse::<std::net::Ipv6Addr>()
+            .map(|ip| ip.to_string())
+            .map_err(|_| AppError::InvalidSnapshot("invalid conntrack source address".into()));
     }
-
-    if let Some((ip, _port)) = src.rsplit_once(':') {
-        if ip.parse::<std::net::IpAddr>().is_ok() || ip.contains('.') {
-            return ip.to_string();
-        }
-    }
-
-    src.to_string()
+    Err(AppError::InvalidSnapshot(
+        "invalid conntrack source address".into(),
+    ))
 }
 
 #[cfg(test)]
@@ -63,8 +58,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_bare_ipv6_address_keeps_final_segment() {
+        for src in [
+            "2001:db8::1",
+            "2001:db8::1234",
+            "::1",
+            "2001:db8:0:1:2:3:4:5",
+        ] {
+            assert_eq!(
+                extract_src_ip(src).unwrap(),
+                src.parse::<std::net::IpAddr>().unwrap().to_string()
+            );
+        }
+        assert_eq!(extract_src_ip("[2001:db8::1]:1234").unwrap(), "2001:db8::1");
+        assert_eq!(extract_src_ip("192.0.2.1:1234").unwrap(), "192.0.2.1");
+        for invalid in [
+            "invalid",
+            "192.0.2.1:no-port",
+            "[::1]garbage",
+            "[::1]:65536",
+        ] {
+            assert!(extract_src_ip(invalid).is_err());
+        }
+    }
+
+    #[test]
     fn test_parse_connection_tracking_empty() {
-        let result = parse_connection_tracking(&[], "ipv4");
+        let result = parse_connection_tracking(&[], "ipv4").unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -75,7 +95,7 @@ mod tests {
         conn.insert("dst-address".to_string(), "8.8.8.8:53".to_string());
         conn.insert("protocol".to_string(), "udp".to_string());
 
-        let result = parse_connection_tracking(&[conn], "ipv4");
+        let result = parse_connection_tracking(&[conn], "ipv4").unwrap();
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].src_address, "192.168.1.100");
@@ -94,7 +114,7 @@ mod tests {
         conn2.insert("src-address".to_string(), "192.168.1.100:12346".to_string());
         conn2.insert("protocol".to_string(), "tcp".to_string());
 
-        let result = parse_connection_tracking(&[conn1, conn2], "ipv4");
+        let result = parse_connection_tracking(&[conn1, conn2], "ipv4").unwrap();
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].src_address, "192.168.1.100");
@@ -112,7 +132,7 @@ mod tests {
         udp_conn.insert("src-address".to_string(), "192.168.1.100:12346".to_string());
         udp_conn.insert("protocol".to_string(), "udp".to_string());
 
-        let result = parse_connection_tracking(&[tcp_conn, udp_conn], "ipv4");
+        let result = parse_connection_tracking(&[tcp_conn, udp_conn], "ipv4").unwrap();
 
         assert_eq!(result.len(), 2);
         let tcp = result.iter().find(|r| r.protocol == "tcp").unwrap();
@@ -128,7 +148,7 @@ mod tests {
 
         let result = parse_connection_tracking(&[conn], "ipv4");
 
-        assert_eq!(result.len(), 0);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -138,11 +158,7 @@ mod tests {
 
         let result = parse_connection_tracking(&[conn], "ipv4");
 
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].src_address, "192.168.1.100");
-        assert_eq!(result[0].protocol, "unknown");
-        assert_eq!(result[0].connection_count, 1);
-        assert_eq!(result[0].ip_version, "ipv4");
+        assert!(result.is_err());
     }
 
     #[test]
@@ -151,7 +167,7 @@ mod tests {
         conn.insert("src-address".to_string(), "[::1]:12345".to_string());
         conn.insert("protocol".to_string(), "tcp".to_string());
 
-        let result = parse_connection_tracking(&[conn], "ipv6");
+        let result = parse_connection_tracking(&[conn], "ipv6").unwrap();
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].src_address, "::1");

@@ -19,6 +19,19 @@ impl MetricsRegistry {
     pub fn cleanup_expired_dynamic_labels(&self, ttl: Duration) {
         let now = Instant::now();
 
+        let stale_system_info: Vec<_> = self
+            .system_info_last_seen
+            .iter()
+            .filter(|entry| now.duration_since(*entry.value()) > ttl)
+            .map(|entry| entry.key().clone())
+            .collect();
+        for labels in stale_system_info {
+            self.system_info.remove(&labels);
+            self.system_info_last_seen.remove(&labels);
+            self.prev_system_info
+                .remove_if(&labels.router, |_, current| current == &labels);
+        }
+
         // 1. Conntrack
         let stale_conntrack: Vec<ConntrackLabels> = {
             let stale: Vec<_> = self
@@ -42,6 +55,13 @@ impl MetricsRegistry {
                 self.connection_tracking_count.remove(label);
             }
             tracing::debug!("Expired {} conntrack labels via TTL cleanup", count);
+            for entry in self.prev_conntrack.iter() {
+                self.conntrack_active_series
+                    .get_or_create(&RouterLabels {
+                        router: entry.key().clone(),
+                    })
+                    .set(i64::try_from(entry.value().len()).unwrap_or(i64::MAX));
+            }
         }
 
         // 2. WireGuard Peers
@@ -69,11 +89,11 @@ impl MetricsRegistry {
                 self.wireguard_peer_latest_handshake.remove(label);
 
                 // Clean up info
-                if let Some(mut map) = self.prev_wireguard_peer_info.get_mut(&label.router) {
-                    if let Some(info_label) = map.remove(label) {
-                        self.wireguard_peer_info.remove(&info_label);
-                        self.wireguard_peer_info_last_seen.remove(&info_label);
-                    }
+                if let Some(mut map) = self.prev_wireguard_peer_info.get_mut(&label.router)
+                    && let Some(info_label) = map.remove(label)
+                {
+                    self.wireguard_peer_info.remove(&info_label);
+                    self.wireguard_peer_info_last_seen.remove(&info_label);
                 }
             }
             tracing::debug!("Expired {} wireguard peer labels via TTL cleanup", count);
@@ -129,11 +149,11 @@ impl MetricsRegistry {
                 self.firewall_rule_packets.remove(label);
 
                 // Clean up info
-                if let Some(mut map) = self.prev_firewall_rule_info.get_mut(&label.router) {
-                    if let Some(info_label) = map.remove(label) {
-                        self.firewall_rule_info.remove(&info_label);
-                        self.firewall_rule_info_last_seen.remove(&info_label);
-                    }
+                if let Some(mut map) = self.prev_firewall_rule_info.get_mut(&label.router)
+                    && let Some(info_label) = map.remove(label)
+                {
+                    self.firewall_rule_info.remove(&info_label);
+                    self.firewall_rule_info_last_seen.remove(&info_label);
                 }
             }
             tracing::debug!("Expired {} firewall rule labels via TTL cleanup", count);
@@ -198,7 +218,45 @@ impl MetricsRegistry {
 
     /// Clean up cached state for routers that are no longer configured
     pub fn cleanup_stale_routers(&self, active_routers: &HashSet<String>) {
-        let mut stale_routers = HashSet::new();
+        let mut stale_routers: HashSet<_> = self
+            .known_routers
+            .iter()
+            .filter(|entry| !active_routers.contains(entry.key()))
+            .map(|entry| entry.key().clone())
+            .collect();
+        self.system_info_last_seen.retain(|labels, _| {
+            if active_routers.contains(&labels.router) {
+                true
+            } else {
+                self.system_info.remove(labels);
+                false
+            }
+        });
+        // Superseded metadata is no longer in the current per-router maps.
+        self.interface_info_last_seen.retain(|labels, _| {
+            if active_routers.contains(&labels.router) {
+                true
+            } else {
+                self.interface_info.remove(labels);
+                false
+            }
+        });
+        self.wireguard_peer_info_last_seen.retain(|labels, _| {
+            if active_routers.contains(&labels.router) {
+                true
+            } else {
+                self.wireguard_peer_info.remove(labels);
+                false
+            }
+        });
+        self.firewall_rule_info_last_seen.retain(|labels, _| {
+            if active_routers.contains(&labels.router) {
+                true
+            } else {
+                self.firewall_rule_info.remove(labels);
+                false
+            }
+        });
 
         // Interfaces
         let stale_interfaces: Vec<InterfaceLabels> = self
@@ -331,13 +389,24 @@ impl MetricsRegistry {
             self.system_uptime_seconds.remove(&router_labels);
             self.scrape_success.remove(&router_labels);
             self.scrape_errors.remove(&router_labels);
-            self.scrape_duration_milliseconds.remove(&router_labels);
+            self.scrape_duration_seconds.remove(&router_labels);
             self.scrape_last_success_timestamp_seconds
                 .remove(&router_labels);
             self.connection_consecutive_errors.remove(&router_labels);
             self.conntrack_active_series.remove(&router_labels);
-            self.conntrack_update_duration_milliseconds
+            self.conntrack_update_duration_seconds
                 .remove(&router_labels);
+            self.conntrack_dropped_series.remove(&router_labels);
+            for (group, _) in crate::mikrotik::CollectionStatus::default().group_states() {
+                let labels = crate::metrics::labels::GroupLabels {
+                    router: router.clone(),
+                    group,
+                };
+                self.group_collection_success.remove(&labels);
+                self.group_collection_complete.remove(&labels);
+                self.group_last_success_timestamp_seconds.remove(&labels);
+            }
+            self.known_routers.remove(router);
             self.last_scrape_success.remove(router);
             self.consecutive_scrape_errors.remove(router);
         }

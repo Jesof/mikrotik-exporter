@@ -1,4 +1,4 @@
-# Rustfmt configuration for best practices 2025
+# Rustfmt configuration for best practices 2026
 edition = "2024"
 
 # Line width and wrapping

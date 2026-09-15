@@ -9,7 +9,7 @@ pub(crate) fn enforce_startup_connectivity_policy(
     failed_routers: &[String],
     strict_mode: bool,
 ) -> Result<()> {
-    if strict_mode {
+    if strict_mode && !failed_routers.is_empty() {
         return Err(AppError::Config(format_strict_mode_error(failed_routers)));
     }
 
@@ -50,5 +50,10 @@ mod tests {
         let failed = vec!["router-a".to_string()];
         let result = enforce_startup_connectivity_policy(&failed, false);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_strict_policy_accepts_no_failures() {
+        assert!(enforce_startup_connectivity_policy(&[], true).is_ok());
     }
 }

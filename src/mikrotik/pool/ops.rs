@@ -21,13 +21,15 @@ impl ConnectionPool {
         username: &str,
         password: &str,
         group: Option<&str>,
+        tls: Option<&crate::config::RouterTlsConfig>,
     ) -> Result<PooledConnectionGuard> {
-        let key = match group {
-            Some(g) => format!("{addr}:{username}:{g}"),
-            None => format!("{addr}:{username}"),
+        let key = super::types::ConnectionKey {
+            address: addr.into(),
+            username: username.into(),
+            credential: password.into(),
+            group: group.map(str::to_string),
+            tls: tls.cloned(),
         };
-
-        tracing::trace!("Requesting connection for key: {}", key);
 
         {
             let mut states = self.connection_states.lock().await;
@@ -53,7 +55,9 @@ impl ConnectionPool {
         let conn = {
             let mut pool = self.connections.lock().await;
             if let Some(mut pooled) = pool.remove(&key) {
-                if pooled.last_used.elapsed() < self.max_idle_time {
+                if pooled.last_used.elapsed() < self.max_idle_time
+                    && pooled.connection.is_reusable()
+                {
                     tracing::debug!("Reusing connection from pool for {}", addr);
                     tracing::trace!("Connection last used: {:?} ago", pooled.last_used.elapsed());
                     pooled.last_used = tokio::time::Instant::now();
@@ -76,20 +80,15 @@ impl ConnectionPool {
             c
         } else {
             tracing::debug!("Creating new connection for {}", addr);
-            tracing::trace!("Pool key: {}", key);
 
-            match RouterOsConnection::connect(addr).await {
+            match RouterOsConnection::connect(addr, tls).await {
                 Ok(mut conn) => {
                     tracing::trace!("Connection established, attempting login");
                     match conn.login(username, password).await {
                         Ok(()) => {
                             tracing::trace!("Login successful, connection ready");
-                            let mut states = self.connection_states.lock().await;
-                            let state = states
-                                .entry(key.clone())
-                                .or_insert_with(ConnectionState::new);
-                            state.record_success();
-                            tracing::trace!("Connection state reset after successful login");
+                            // A successful login does not prove the subsequent group command works.
+                            // Reset backoff only when the caller records a successful operation.
                             conn
                         }
                         Err(error) => {
@@ -135,15 +134,19 @@ impl ConnectionPool {
     }
 
     /// Record successful operation.
+    #[cfg(test)]
     pub(in crate::mikrotik) async fn record_success(
         &self,
         addr: &str,
         username: &str,
         group: Option<&str>,
     ) {
-        let key = match group {
-            Some(g) => format!("{addr}:{username}:{g}"),
-            None => format!("{addr}:{username}"),
+        let key = super::types::ConnectionKey {
+            address: addr.into(),
+            username: username.into(),
+            credential: "".into(),
+            group: group.map(str::to_string),
+            tls: None,
         };
         let mut states = self.connection_states.lock().await;
         let state = states.entry(key).or_insert_with(ConnectionState::new);
@@ -151,15 +154,19 @@ impl ConnectionPool {
     }
 
     /// Record failed operation.
+    #[cfg(test)]
     pub(in crate::mikrotik) async fn record_error(
         &self,
         addr: &str,
         username: &str,
         group: Option<&str>,
     ) {
-        let key = match group {
-            Some(g) => format!("{addr}:{username}:{g}"),
-            None => format!("{addr}:{username}"),
+        let key = super::types::ConnectionKey {
+            address: addr.into(),
+            username: username.into(),
+            credential: "".into(),
+            group: group.map(str::to_string),
+            tls: None,
         };
         let mut states = self.connection_states.lock().await;
         let state = states.entry(key).or_insert_with(ConnectionState::new);
@@ -175,21 +182,15 @@ impl ConnectionPool {
     ) -> Option<(u32, bool)> {
         let states = self.connection_states.lock().await;
 
-        if let Some(g) = group {
-            let key = format!("{addr}:{username}:{g}");
-            return states
-                .get(&key)
-                .map(|state| (state.consecutive_errors, state.last_success_time.is_some()));
-        }
-
-        let base_key = format!("{addr}:{username}");
-        let grouped_prefix = format!("{base_key}:");
         let mut max_errors: u32 = 0;
         let mut has_success = false;
         let mut found = false;
 
         for (key, state) in states.iter() {
-            if key == &base_key || key.starts_with(&grouped_prefix) {
+            if key.address == addr
+                && key.username == username
+                && group.is_none_or(|group| key.group.as_deref() == Some(group))
+            {
                 found = true;
                 max_errors = max_errors.max(state.consecutive_errors);
                 has_success |= state.last_success_time.is_some();
@@ -229,11 +230,7 @@ impl ConnectionPool {
     pub async fn cleanup_states(&self, active_keys: &HashSet<String>) {
         let mut states = self.connection_states.lock().await;
         let before_count = states.len();
-        states.retain(|key, _| {
-            active_keys
-                .iter()
-                .any(|base_key| key == base_key || key.starts_with(&format!("{base_key}:")))
-        });
+        states.retain(|key, _| active_keys.contains(&format!("{}:{}", key.address, key.username)));
         let removed = before_count - states.len();
         if removed > 0 {
             tracing::debug!("Removed {} stale connection state entries", removed);

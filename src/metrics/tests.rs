@@ -11,37 +11,37 @@ mod test {
     #[test]
     fn test_parse_uptime_hhmmss() {
         let uptime = parse_uptime_to_seconds("12:30:45");
-        assert_eq!(uptime, 12 * 3600 + 30 * 60 + 45);
+        assert_eq!(uptime, Some(12 * 3600 + 30 * 60 + 45));
     }
 
     #[test]
     fn test_parse_uptime_mmss() {
         let uptime = parse_uptime_to_seconds("30:45");
-        assert_eq!(uptime, 30 * 60 + 45);
+        assert_eq!(uptime, Some(30 * 60 + 45));
     }
 
     #[test]
     fn test_parse_uptime_dhms() {
         let uptime = parse_uptime_to_seconds("2d5h30m15s");
-        assert_eq!(uptime, 2 * 86400 + 5 * 3600 + 30 * 60 + 15);
+        assert_eq!(uptime, Some(2 * 86400 + 5 * 3600 + 30 * 60 + 15));
     }
 
     #[test]
     fn test_parse_uptime_weeks() {
         let uptime = parse_uptime_to_seconds("1w2d");
-        assert_eq!(uptime, 7 * 86400 + 2 * 86400);
+        assert_eq!(uptime, Some(7 * 86400 + 2 * 86400));
     }
 
     #[test]
     fn test_parse_uptime_seconds_only() {
         let uptime = parse_uptime_to_seconds("300s");
-        assert_eq!(uptime, 300);
+        assert_eq!(uptime, Some(300));
     }
 
     #[test]
     fn test_parse_uptime_empty() {
         let uptime = parse_uptime_to_seconds("");
-        assert_eq!(uptime, 0);
+        assert_eq!(uptime, None);
     }
 
     #[test]

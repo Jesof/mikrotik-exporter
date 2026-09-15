@@ -218,7 +218,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_system_cpu_load{router=\"$router\"}",
+          "expr": "100 * mikrotik_system_cpu_load_ratio{router=\"$router\"}",
           "legendFormat": "CPU Load",
           "range": true,
           "refId": "A"
@@ -560,7 +560,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_system_cpu_load{router=\"$router\"}[$__rate_interval]",
+          "expr": "100 * mikrotik_system_cpu_load_ratio{router=\"$router\"}",
           "legendFormat": "{{router}}",
           "range": true,
           "refId": "A"
@@ -1675,7 +1675,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "(mikrotik_wireguard_peer_latest_handshake{router=\"$router\"} * 1000) * on (router, id) group_left(comment, interface, name, exported_endpoint) (mikrotik_wireguard_peer_info == 1)",
+          "expr": "(mikrotik_wireguard_peer_latest_handshake_timestamp_seconds{router=\"$router\"} * 1000) * on (router, id) group_left(comment, interface, name, exported_endpoint) (mikrotik_wireguard_peer_info == 1)",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -3333,7 +3333,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_scrape_duration_milliseconds{router=\"$router\"}[$__rate_interval]",
+          "expr": "1000 * mikrotik_scrape_duration_seconds{router=\"$router\"}",
           "legendFormat": "{{router}}",
           "range": true,
           "refId": "A"
@@ -3682,6 +3682,36 @@
       ],
       "title": "Connection Errors",
       "type": "stat"
+    },
+    {
+      "id": 159,
+      "title": "Collection Group Completeness",
+      "description": "1 means the latest group snapshot is complete; 0 means failed or partial.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 156 },
+      "fieldConfig": { "defaults": { "min": 0, "max": 1, "unit": "none" }, "overrides": [] },
+      "targets": [{ "expr": "mikrotik_group_collection_complete{router=\"$router\"}", "legendFormat": "{{group}}", "refId": "A", "range": true }]
+    },
+    {
+      "id": 160,
+      "title": "Collection Group Data Age",
+      "description": "Age since the last complete group snapshot. Groups without a successful snapshot are absent.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 156 },
+      "fieldConfig": { "defaults": { "min": 0, "unit": "s" }, "overrides": [] },
+      "targets": [{ "expr": "time() - (mikrotik_group_last_success_timestamp_seconds{router=\"$router\"} > 0)", "legendFormat": "{{group}}", "refId": "A", "range": true }]
+    },
+    {
+      "id": 161,
+      "title": "Conntrack Omitted Series",
+      "description": "At most 1024 conntrack series are retained per router, ordered lexicographically by IP version, source address, and protocol. Omitted series are not included in connection totals.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 164 },
+      "fieldConfig": { "defaults": { "min": 0, "unit": "short" }, "overrides": [] },
+      "targets": [{ "expr": "mikrotik_conntrack_dropped_series{router=\"$router\"}", "legendFormat": "{{router}}", "refId": "A", "range": true }]
     }
   ],
   "preload": true,
@@ -3792,7 +3822,7 @@
   "timezone": "browser",
   "title": "MikroTik Router Monitoring",
   "uid": "mikrotik-exporter",
-  "version": 6,
+  "version": 7,
   "weekStart": "",
   "id": null
 }

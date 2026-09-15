@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Jesof
+
+name: Feature request
+description: Propose new functionality or a new metric
+title: "feat: "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to monitor or automate that is currently not possible?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: >
+        If this adds or changes a metric, list the proposed metric name, type (counter/gauge),
+        units, and labels. Names, units, types, labels, configuration, and public APIs are contracts.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: checkboxes
+    id: compatibility
+    attributes:
+      label: Compatibility
+      options:
+        - label: This change affects existing metric names, units, types, or labels (including added labels).
+        - label: This change adds a new configuration variable.
+        - label: This change affects configuration defaults, the wire protocol, or public Rust APIs.

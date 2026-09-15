@@ -1,78 +1,68 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! System resource parsing
-
+use super::common::{parse_u64_field, required_field};
+use crate::metrics::parsers::parse_uptime_to_seconds;
 use crate::mikrotik::types::SystemResource;
+use crate::prelude::{AppError, Result};
 use std::collections::HashMap;
 
-use super::common::parse_u64_field;
-
-pub(crate) fn parse_system(sentences: &[HashMap<String, String>]) -> SystemResource {
-    let first_opt = sentences.iter().find(|s| s.contains_key("version"));
-    let empty = HashMap::new();
-    let first = first_opt.unwrap_or(&empty);
-    SystemResource {
-        uptime: first
-            .get("uptime")
-            .cloned()
-            .unwrap_or_else(|| "0s".to_string()),
-        cpu_load: parse_u64_field(first, "cpu-load", "system resources"),
-        free_memory: parse_u64_field(first, "free-memory", "system resources"),
-        total_memory: parse_u64_field(first, "total-memory", "system resources"),
-        version: first
-            .get("version")
-            .cloned()
-            .unwrap_or_else(|| "unknown".to_string()),
-        board_name: first
-            .get("board-name")
-            .cloned()
-            .unwrap_or_else(|| "unknown".to_string()),
+pub(crate) fn parse_system(sentences: &[HashMap<String, String>]) -> Result<SystemResource> {
+    let [row] = sentences else {
+        return Err(AppError::InvalidSnapshot(
+            "expected one system resource row".into(),
+        ));
+    };
+    let system = SystemResource {
+        uptime: required_field(row, "uptime")?.into(),
+        cpu_load: parse_u64_field(row, "cpu-load", "system")?,
+        free_memory: parse_u64_field(row, "free-memory", "system")?,
+        total_memory: parse_u64_field(row, "total-memory", "system")?,
+        version: required_field(row, "version")?.into(),
+        board_name: required_field(row, "board-name")?.into(),
+    };
+    if parse_uptime_to_seconds(&system.uptime).is_none_or(|n| n > i64::MAX as u64)
+        || system.cpu_load > 100
+        || system.free_memory > system.total_memory
+        || system.total_memory > i64::MAX as u64
+    {
+        return Err(AppError::InvalidSnapshot(
+            "invalid system resource bounds or uptime".into(),
+        ));
     }
+    Ok(system)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn test_parse_system_complete() {
-        let mut data = HashMap::new();
-        data.insert("version".to_string(), "7.10".to_string());
-        data.insert("uptime".to_string(), "1w2d3h4m5s".to_string());
-        data.insert("cpu-load".to_string(), "25".to_string());
-        data.insert("free-memory".to_string(), "524288000".to_string());
-        data.insert("total-memory".to_string(), "1073741824".to_string());
-        data.insert("board-name".to_string(), "RB750Gr3".to_string());
-
-        let result = parse_system(&[data]);
-
-        assert_eq!(result.version, "7.10");
-        assert_eq!(result.uptime, "1w2d3h4m5s");
-        assert_eq!(result.cpu_load, 25);
-        assert_eq!(result.free_memory, 524_288_000);
-        assert_eq!(result.total_memory, 1_073_741_824);
-        assert_eq!(result.board_name, "RB750Gr3");
-    }
-
-    #[test]
-    fn test_parse_system_empty() {
-        let result = parse_system(&[]);
-        assert_eq!(result.version, "unknown");
-        assert_eq!(result.uptime, "0s");
-        assert_eq!(result.cpu_load, 0);
-        assert_eq!(result.board_name, "unknown");
-    }
-
-    #[test]
-    fn test_parse_system_partial() {
-        let mut data = HashMap::new();
-        data.insert("version".to_string(), "7.10".to_string());
-
-        let result = parse_system(&[data]);
-
-        assert_eq!(result.version, "7.10");
-        assert_eq!(result.uptime, "0s");
-        assert_eq!(result.cpu_load, 0);
+    fn test_system_rejects_missing_invalid_and_out_of_range_fields() {
+        let row: HashMap<String, String> = [
+            ("uptime", "1d"),
+            ("cpu-load", "25"),
+            ("free-memory", "512"),
+            ("total-memory", "1024"),
+            ("version", "7.10"),
+            ("board-name", "test"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.into(), v.into()))
+        .collect();
+        assert_eq!(
+            parse_system(std::slice::from_ref(&row)).unwrap().cpu_load,
+            25
+        );
+        assert!(parse_system(&[]).is_err());
+        for (field, value) in [
+            ("uptime", "garbage"),
+            ("cpu-load", "101"),
+            ("free-memory", "2048"),
+            ("total-memory", "invalid"),
+        ] {
+            let mut invalid = row.clone();
+            invalid.insert(field.into(), value.into());
+            assert!(parse_system(&[invalid]).is_err());
+        }
     }
 }

@@ -2,384 +2,281 @@
 
 [![Crates.io](https://img.shields.io/crates/v/mikrotik-exporter.svg)](https://crates.io/crates/mikrotik-exporter)
 [![GitHub release](https://img.shields.io/github/v/release/jesof/mikrotik-exporter.svg)](https://github.com/jesof/mikrotik-exporter/releases)
-[![Grafana](https://img.shields.io/badge/Grafana-24875-orange.svg?logo=grafana)](https://grafana.com/grafana/dashboards/24875-mikrotik-router-monitoring/)
 [![Docs.rs](https://docs.rs/mikrotik-exporter/badge.svg)](https://docs.rs/mikrotik-exporter)
-[![Rust](https://github.com/jesof/mikrotik-exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/jesof/mikrotik-exporter/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust CI](https://github.com/jesof/mikrotik-exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/jesof/mikrotik-exporter/actions/workflows/ci.yml)
 
-Prometheus exporter for MikroTik RouterOS API with multi-router support and async architecture.
+Prometheus exporter for MikroTik RouterOS, with independent per-router collection schedules,
+connection pooling, optional verified TLS, and OpenMetrics output.
+
+This README describes the current source tree, including **unreleased breaking changes**.
+For upgrades from 0.3.3, follow the [migration guide](CHANGELOG.md#unreleased). Published 0.3.3
+packages do not include these changes.
 
 ## Quick Start
 
+Build the current source with the pinned Rust **1.98.0** toolchain (also the MSRV; edition 2024):
+
 ```bash
-# Cargo
-cargo install mikrotik-exporter
-
-# Docker
-docker run -p 9090:9090 \
-  -e ROUTERS_CONFIG='[{"name":"router1","address":"192.168.88.1:8728","username":"admin","password":"pass"}]' \
-  ghcr.io/jesof/mikrotik-exporter:latest
-
-# Binary
-ROUTERS_CONFIG='[...]' ./mikrotik-exporter
-
-# Kubernetes
-kubectl apply -k k8s/
+cargo build --release --locked
 ```
 
-## Metrics
+Create a private `.env` from [`.env.example`](.env.example), configure a dedicated RouterOS
+user and TLS as described below, then run:
 
-| Metric                                   | Type    | Description                       |
-| ---------------------------------------  | ------- | --------------------------------- |
-| `mikrotik_interface_rx_bytes_total`      | counter | Received bytes                    |
-| `mikrotik_interface_tx_bytes_total`      | counter | Transmitted bytes                 |
-| `mikrotik_interface_info`                | gauge   | Interface metadata (name, comment)|
-| `mikrotik_system_cpu_load`               | gauge   | CPU load (%)                      |
-| `mikrotik_system_free_memory_bytes`      | gauge   | Free memory                       |
-| `mikrotik_wireguard_peer_rx_bytes`       | gauge   | WireGuard RX bytes                |
-| `mikrotik_wireguard_peer_info`           | gauge   | WireGuard metadata                |
-| `mikrotik_firewall_rule_bytes_total`     | counter | Firewall traffic                  |
+```bash
+./target/release/mikrotik-exporter
+```
 
-[Full metrics list →](#full-metrics-list)
+The binary loads `.env` from the working directory. `--version` (or `-V`) prints the version
+without loading configuration or contacting routers; other command-line arguments are rejected.
+To install the latest *published* version, use `cargo install mikrotik-exporter --locked`.
+
+For Docker and Kubernetes, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Configuration
 
-### Environment Variables
+| Variable | Default | Meaning / accepted values |
+| --- | --- | --- |
+| `SERVER_ADDR` | `0.0.0.0:9090` | HTTP bind IP socket address, e.g. `127.0.0.1:9090` or `[::]:9090` |
+| `ROUTERS_CONFIG` | unset | JSON array of routers; takes precedence over legacy router variables |
+| `COLLECTION_INTERVAL_SECONDS` | `30` | Per-router interval, integer 1–86400 seconds |
+| `GAP_RESET_THRESHOLD_SECONDS` | `60` | Counter baseline reset threshold, integer 1–604800 seconds |
+| `STARTUP_CONNECTIVITY_TEST` | `false` | `true` / `false`: test connections before becoming ready |
+| `STARTUP_CONNECTIVITY_TIMEOUT_SECS` | `10` | Per-router startup test timeout, integer 1–300 seconds |
+| `STRICT_STARTUP_MODE` | `false` | `true` / `false`: fail startup if a configured router fails its test |
+| `RUST_LOG` | `info` | Tracing filter |
+| `ROUTEROS_ADDRESS` | unset | Legacy single router `host:port`, named `default` |
+| `ROUTEROS_USERNAME` | `admin` | Legacy username; use a dedicated monitoring user |
+| `ROUTEROS_PASSWORD` | empty | Legacy password; set a strong secret |
+| `ROUTEROS_TLS` | unset | Legacy TLS JSON object, e.g. `{"server_name":"router.example.net"}` |
 
-```bash
-SERVER_ADDR=0.0.0.0:9090                    # HTTP server bind address
-ROUTERS_CONFIG=[{...}]                      # JSON array of routers (recommended)
-COLLECTION_INTERVAL_SECONDS=30              # Metrics collection interval
-GAP_RESET_THRESHOLD_SECONDS=60              # Threshold for resetting counter baselines after scrape gaps
-STARTUP_CONNECTIVITY_TEST=false             # Check router availability at startup
-STARTUP_CONNECTIVITY_TIMEOUT_SECS=10        # Connectivity test timeout (seconds)
-STRICT_STARTUP_MODE=false                   # Exit if routers are unavailable
-RUST_LOG=info                               # Logging level
-ROUTEROS_ADDRESS=192.168.88.1:8728          # Legacy: RouterOS API address (single router)
-ROUTEROS_USERNAME=admin                     # Legacy: username (default: admin)
-ROUTEROS_PASSWORD=                          # Legacy: password (default: empty)
-```
+Configuration loading is fallible: malformed JSON, unknown router/TLS fields, invalid numbers
+or booleans, invalid addresses, and duplicate router names fail startup. An invalid
+`ROUTERS_CONFIG` **never falls back** to legacy variables. Defaults apply only to unset variables.
+An empty router list is allowed outside strict mode, but `/health` reports degraded.
+`STRICT_STARTUP_MODE=true` requires `STARTUP_CONNECTIVITY_TEST=true` and at least one router.
 
-If `ROUTERS_CONFIG` is not set, legacy configuration
-`ROUTEROS_ADDRESS/ROUTEROS_USERNAME/ROUTEROS_PASSWORD` is used with router name `default`.
-If `ROUTERS_CONFIG` is present but cannot be parsed, the exporter logs an error and also
-falls back to the legacy single-router variables.
+### Router JSON and TLS
 
-### Router Connectivity Check at Startup
-
-New options allow checking availability of all configured routers at service startup:
-
-- `STARTUP_CONNECTIVITY_TEST=true` - enables router availability check at startup
-- `STARTUP_CONNECTIVITY_TIMEOUT_SECS=10` - timeout for each check (default: 10 seconds)
-- `STRICT_STARTUP_MODE=true` - exits the service with error code if any router is unavailable
-
-Usage example:
-
-```bash
-# Check router availability at startup, but continue even if some are unavailable
-STARTUP_CONNECTIVITY_TEST=true ./mikrotik-exporter
-
-# Check router availability and exit if any router is unavailable
-STARTUP_CONNECTIVITY_TEST=true STRICT_STARTUP_MODE=true ./mikrotik-exporter
-```
-
-### ROUTERS_CONFIG Format
+Store this JSON in a protected configuration/secret, replacing the example password:
 
 ```json
 [
   {
-    "name": "router-name",
-    "address": "192.168.88.1:8728",
-    "username": "admin",
-    "password": "password"
+    "name": "edge-router",
+    "address": "192.0.2.1:8729",
+    "username": "prometheus",
+    "password": "REPLACE_WITH_A_STRONG_SECRET",
+    "tls": {
+      "server_name": "router.example.net",
+      "ca_file": "/etc/mikrotik-exporter/router-ca.pem"
+    }
   }
 ]
 ```
 
-## Endpoints
+- Router names must be unique, 1–128 ASCII alphanumeric, underscore, or hyphen characters.
+- Addresses require an explicit port 1–65535; IPv6 uses `[address]:port`. DNS hosts are supported.
+- Usernames must be nonblank and at most 64 bytes. Passwords are stored as `SecretString`;
+  empty passwords are accepted for compatibility, not recommended for deployment.
+- `"tls": {}` enables TLS with system trust roots and the address host as the verified identity.
+- `server_name` overrides the verified DNS name or IP address (useful when connecting by IP).
+- `ca_file` selects a PEM trust bundle **instead of** system roots; mount it read-only and make it
+  readable by the exporter. Invalid/empty bundles and certificate validation failures fail connections.
+- Omitting `tls`, or setting it to `null`, selects **plaintext**, regardless of port. Setting port
+  8729 alone does not enable TLS. There is no insecure verification bypass or client-certificate option.
+- Legacy `ROUTEROS_TLS` accepts an object (`{}` enables system roots); leave it unset for plaintext.
+  The string `null` is not a valid legacy TLS object.
 
-| Path       | Description                                  | Response Code                |
-| ---------- | -------------------------------------------- | ---------------------------- |
-| `/metrics` | Prometheus metrics                           | 200                          |
-| `/health`  | Health check with router connectivity test   | 200 (OK) / 503 (unavailable) |
-
-Health status policy:
-
-- `healthy`: router has recent successful scrapes and is below the consecutive error threshold.
-- `degraded`: router has stale scrapes, scrape errors, too many consecutive connection errors, or has not yet had a successful scrape.
-- empty router configuration also returns `degraded` with HTTP `503` so deployments fail loudly.
-
-Observability notes:
-
-- invalid numeric fields returned by `RouterOS` are ignored as `0` and logged at `debug` level.
-- use `RUST_LOG=debug` when troubleshooting unexpected zero values in exported metrics.
-
-## Deployment
-
-- [Kubernetes](DEPLOYMENT.md#kubernetes)
-- [Docker & Docker Compose](EXAMPLES.md#docker-compose---production-stack)
-- [Prometheus integration](DEPLOYMENT.md#prometheus)
-- [Grafana Dashboard (ID: 24875)](https://grafana.com/grafana/dashboards/24875-mikrotik-router-monitoring/)
+TLS is configured on each connection. Trust files must be available when connecting; changing
+configuration, credentials, or trust material should be followed by an exporter restart.
 
 ## RouterOS Requirements
 
-```bash
-# Enable API
-/ip service set api address=0.0.0.0/0 disabled=no port=8728
+Use an installed server certificate with a matching subject alternative name and a chain trusted
+by the exporter. Replace `router-api-cert` with its RouterOS certificate name and `192.0.2.10/32`
+with the exporter's source address **as seen by the router**, including any NAT:
 
-# Create user
-/user group add name=monitoring policy=api,read
-/user add name=prometheus group=monitoring password=secure-password
+```routeros
+/user group add name=monitoring policy=read,api
+/user add name=prometheus group=monitoring address=192.0.2.10/32 password="REPLACE_WITH_A_STRONG_SECRET"
+/ip service set api-ssl disabled=no port=8729 certificate=router-api-cert address=192.0.2.10/32
 ```
 
-## Development
+Restrict firewall access to that source too. Disable the plaintext `api` service when no other
+client needs it. The exporter requires certificate-based API-SSL; certificate-less anonymous TLS
+is unsupported. Start with `read,api` permissions and investigate denied commands before granting
+more access. RouterOS features absent or inaccessible on a device may produce incomplete groups.
 
-```bash
-# Run
-cargo run
+**Plaintext API exposes credentials and metrics to network observers.** Use verified TLS or an
+independently encrypted, isolated management path. HTTP endpoints also expose topology and have
+no built-in authentication or server-side TLS; keep them private. See [SECURITY.md](SECURITY.md).
 
-# Tests
-cargo test
+## Endpoints
 
-# Lint (pedantic warnings)
-cargo clippy --all-targets --all-features --locked
+| Path | Purpose | Status |
+| --- | --- | --- |
+| `/metrics` | Cached OpenMetrics exposition; does not initiate router collection | 200; 500 on encoding failure |
+| `/live` | Process HTTP liveness, independent of routers | 200 while serving |
+| `/ready` | Binary initialization and shutdown readiness, independent of router freshness | 200 ready; 503 initializing/stopping |
+| `/health` | Cached per-router diagnostics; no active connectivity test | 200 healthy; 503 degraded |
 
-# Lint (CI strict mode)
-cargo clippy --all-targets --all-features --locked -- -D warnings
+Use `/live` for startup/liveness and `/ready` for readiness probes. Router outages should produce
+alerts, not restart loops or prevent scraping the failure metrics. The binary serves HTTP during
+optional startup checks, becomes ready after initialization, and clears readiness on shutdown.
+It supervises HTTP, startup, and collector tasks and exits on unexpected task termination.
 
-# Integration tests (require configured MikroTik device)
-cargo test --test integration_tests
+`/health` is healthy only when every router has a complete successful collection no older than
+`max(3 × collection interval, gap reset threshold)` and fewer than three consecutive errors in
+the default pool connection state. Empty configuration or no complete success is degraded.
+Use the group metrics for detailed collection failures; `/health` is not a replacement for them.
 
-# Build
-cargo build --release
-```
+## Collection Semantics
 
-### Commit Message Template
+Each router has a non-overlapping schedule with missed ticks skipped. A slow router does not
+block another router's schedule. The metric groups are `system_interfaces`, `conntrack`,
+`wireguard`, `certificates`, and `firewall`.
 
-This repo follows Conventional Commits style used in recent history:
+Only a **complete** collection advances router success/freshness. Partial snapshots increment
+scrape errors while usable groups can still update. Group success means usable data; group
+completeness means the entire group succeeded (including a valid empty result). Invalid required
+numeric fields fail the affected fetch; invalid snapshots are rejected before updating metrics,
+rather than converted to plausible zeroes. Previously collected values can remain during failures,
+so always assess freshness alongside data.
 
-- `feat:` new feature
-- `fix:` bug fix
-- `refactor:` structural/code cleanup
-- `test:` test changes
+A critical system/interfaces failure or an invalid numeric snapshot rejects the overall production
+collection, marking all groups failed for that attempt. The public registry update methods expect
+already validated input; library callers must uphold that contract when supplying snapshots directly.
 
-Use the repository template from `.gitmessage`:
+Interface and firewall counters accumulate router deltas and handle router resets. The initial
+sample seeds the counter; after collection errors or a long gap the baseline is reset to avoid a
+recovery spike. WireGuard byte metrics remain gauges of router totals, not Prometheus counters.
 
-```bash
-git config commit.template .gitmessage
-```
-
-Example:
-
-```text
-refactor: split modules and refresh architecture docs
-
-Refactor monolithic modules into focused submodules while preserving
-runtime behavior and public API.
-
-- split config loading into config/*.rs submodules
-- split mikrotik client into client/groups modules
-- split pool into ops/guard/types modules
-- split startup into check/policy modules
-- update README architecture tree
-
-No functional behavior changes; tests and lints remain passing.
-```
-
-To run integration tests, configure connection to a real MikroTik device via environment variables in `.env` file:
-
-```bash
-# Example .env file for integration tests
-ROUTEROS_ADDRESS=192.168.88.1:8728
-ROUTEROS_USERNAME=admin
-ROUTEROS_PASSWORD=your_password
-```
-
-Integration tests are automatically skipped if environment variables are not configured.
-
-[Architecture & API →](#project-architecture)
-
-## License
-
-MIT - see [LICENSE](LICENSE)
-
----
+Dynamic labels are cleaned periodically with a 30-minute TTL. Replaced `system_info` labels are
+set to zero and later expire; use `mikrotik_system_info == 1` in metadata joins. Conntrack retains
+at most **1024 series per router**, including retained partial-snapshot series, in deterministic
+`(ip_version, src_address, protocol)` order. `mikrotik_conntrack_dropped_series` counts distinct
+series from the latest usable snapshot omitted by that cap; it is a gauge, not a lifetime counter.
 
 ## Full Metrics List
 
-### Interfaces (Labels: router, id)
+### Interfaces
 
-| Metric                                | Type    | Description                   |
-| ------------------------------------- | ------- | ----------------------------- |
-| `mikrotik_interface_rx_bytes_total`   | counter | Received bytes                |
-| `mikrotik_interface_tx_bytes_total`   | counter | Transmitted bytes             |
-| `mikrotik_interface_rx_packets_total` | counter | Received packets              |
-| `mikrotik_interface_tx_packets_total` | counter | Transmitted packets           |
-| `mikrotik_interface_rx_errors_total`  | counter | Receive errors                |
-| `mikrotik_interface_tx_errors_total`  | counter | Transmit errors               |
-| `mikrotik_interface_running`          | gauge   | Status (1=running, 0=stopped) |
-| `mikrotik_interface_info`             | gauge   | Metadata (name, comment)      |
+Labels: `router,id`; `mikrotik_interface_info` additionally has `name,comment`.
 
-### System (Labels: router, version, board)
+| Metric | Type | Meaning |
+| --- | --- | --- |
+| `mikrotik_interface_rx_bytes_total`, `mikrotik_interface_tx_bytes_total` | counter | Traffic bytes |
+| `mikrotik_interface_rx_packets_total`, `mikrotik_interface_tx_packets_total` | counter | Packets |
+| `mikrotik_interface_rx_errors_total`, `mikrotik_interface_tx_errors_total` | counter | Errors |
+| `mikrotik_interface_running` | gauge | 1 running, 0 stopped |
+| `mikrotik_interface_info` | gauge | Metadata, 1 current |
 
-| Metric                               | Type   | Description                                      |
-| ------------------------------------ | ------ | ------------------------------------------------ |
-| `mikrotik_system_cpu_load`           | gauge  | CPU load (%)                                     |
-| `mikrotik_system_free_memory_bytes`  | gauge  | Free memory                                      |
-| `mikrotik_system_total_memory_bytes` | gauge  | Total memory                                     |
-| `mikrotik_system_uptime_seconds`     | gauge  | System uptime                                    |
-| `mikrotik_system_info`               | gauge  | System info (value=1, labels: version, board)    |
+### System
 
-### Service Metrics (Labels: router)
+Labels: `router`; only `mikrotik_system_info` additionally has `version,board`.
 
-| Metric                                            | Type    | Description                               |
-| ------------------------------------------------- | ------- | ----------------------------------------- |
-| `mikrotik_scrape_success_total`                   | counter | Successful scrapes                        |
-| `mikrotik_scrape_errors_total`                    | counter | Scrape errors                             |
-| `mikrotik_scrape_duration_milliseconds`           | gauge   | Last scrape duration                      |
-| `mikrotik_scrape_last_success_timestamp_seconds`  | gauge   | Unix timestamp of last successful scrape  |
-| `mikrotik_connection_consecutive_errors`          | gauge   | Consecutive connection errors             |
-| `mikrotik_collection_cycle_duration_milliseconds` | gauge   | Full collection cycle duration            |
-| `mikrotik_connection_pool_size`                   | gauge   | Connection pool size                      |
-| `mikrotik_connection_pool_active`                 | gauge   | Active connections in pool                |
+| Metric | Type | Meaning |
+| --- | --- | --- |
+| `mikrotik_system_cpu_load_ratio` | gauge | CPU utilization 0–1; multiply by 100 for percent |
+| `mikrotik_system_free_memory_bytes`, `mikrotik_system_total_memory_bytes` | gauge | Memory bytes |
+| `mikrotik_system_uptime_seconds` | gauge | Uptime seconds |
+| `mikrotik_system_info` | gauge | Metadata, 1 current, 0 superseded |
 
-### Connection Tracking (Labels: router, src_address, protocol, ip_version)
+### Collection and Pool
 
-| Metric                                | Type   | Description                               |
-| --------------------------------------| ------ | ----------------------------------------- |
-| `mikrotik_connection_tracking_count`  | gauge  | Connection count by src/protocol/ip       |
+| Metric | Type | Labels | Meaning |
+| --- | --- | --- | --- |
+| `mikrotik_scrape_success_total` | counter | `router` | Complete successful collections |
+| `mikrotik_scrape_errors_total` | counter | `router` | Failed or incomplete collections |
+| `mikrotik_scrape_duration_seconds` | gauge | `router` | Last collection duration |
+| `mikrotik_scrape_last_success_timestamp_seconds` | gauge | `router` | Last complete success Unix time; 0 never |
+| `mikrotik_connection_consecutive_errors` | gauge | `router` | Maximum consecutive errors across router pool groups |
+| `mikrotik_group_collection_success` | gauge | `router,group` | Last group fetch has usable data, 1/0 |
+| `mikrotik_group_collection_complete` | gauge | `router,group` | Last group fetch is complete, 1/0 |
+| `mikrotik_group_last_success_timestamp_seconds` | gauge | `router,group` | Last complete group Unix time; 0 never |
+| `mikrotik_collection_cycle_duration_seconds` | gauge | none | Time for every router to finish at least once since the previous aggregate cycle |
+| `mikrotik_connection_pool_size` | gauge | none | Total pooled connections |
+| `mikrotik_connection_pool_active` | gauge | none | Active connections |
 
-### Connection Tracking Observability (Labels: router)
+Configured router service/group/conntrack-observability families are initialized at zero before
+the first collection. Entity data families appear when data is available.
 
-| Metric                                            | Type  | Description                                       |
-| ------------------------------------------------- | ----- | ------------------------------------------------- |
-| `mikrotik_conntrack_active_series`                | gauge | Active conntrack series for the router            |
-| `mikrotik_conntrack_update_duration_milliseconds` | gauge | Last conntrack update duration in milliseconds    |
+### Connection Tracking
 
-### WireGuard Peers (Labels: router, id)
+| Metric | Type | Labels | Meaning |
+| --- | --- | --- | --- |
+| `mikrotik_connection_tracking_count` | gauge | `router,src_address,protocol,ip_version` | Connections per source/protocol/IP version |
+| `mikrotik_conntrack_active_series` | gauge | `router` | Retained series |
+| `mikrotik_conntrack_dropped_series` | gauge | `router` | Latest usable snapshot series omitted by the cap |
+| `mikrotik_conntrack_update_duration_seconds` | gauge | `router` | Last registry conntrack update duration |
 
-| Metric                                     | Type   | Description                                   |
-| ------------------------------------------ | ------ | --------------------------------------------- |
-| `mikrotik_wireguard_peer_rx_bytes`         | gauge  | Received bytes from peer                      |
-| `mikrotik_wireguard_peer_tx_bytes`         | gauge  | Transmitted bytes to peer                     |
-| `mikrotik_wireguard_peer_latest_handshake` | gauge  | Unix timestamp of last handshake              |
-| `mikrotik_wireguard_peer_info`             | gauge  | Metadata (name, endpoint, comment, etc.)      |
+### WireGuard and Certificates
 
-### Certificates (Labels: router, id, name)
+WireGuard data labels: `router,id`. Peer info additionally has
+`interface,name,allowed_address,endpoint,comment`. Certificate labels: `router,id,name`.
 
-| Metric                                      | Type   | Description                               |
-| ------------------------------------------- | ------ | ----------------------------------------- |
-| `mikrotik_certificate_days_until_expiry`    | gauge  | Days until certificate expiry             |
+| Metric | Type | Meaning |
+| --- | --- | --- |
+| `mikrotik_wireguard_peer_rx_bytes`, `mikrotik_wireguard_peer_tx_bytes` | gauge | Router byte totals |
+| `mikrotik_wireguard_peer_latest_handshake_timestamp_seconds` | gauge | Last handshake Unix time; 0 when absent |
+| `mikrotik_wireguard_peer_info` | gauge | Peer metadata |
+| `mikrotik_certificate_days_until_expiry` | gauge | Days until expiry; negative means expired |
 
-The `mikrotik_certificate_days_until_expiry` metric tracks the number of days until certificate expiration on the router.
-Both RouterOS certificate expiration date formats are supported:
+### Firewall
 
-- ISO format (YYYY-MM-DD) - modern format
-- Legacy format (MMM/DD/YYYY) - classic format
+Counter labels: `router,id,chain,action,ip_version,section`.
+Info labels: `router,id,ip_version,section,comment`.
 
-Metric values:
+| Metric | Type | Meaning |
+| --- | --- | --- |
+| `mikrotik_firewall_rule_bytes_total`, `mikrotik_firewall_rule_packets_total` | counter | Rule traffic |
+| `mikrotik_firewall_rule_info` | gauge | Rule metadata |
 
-- Positive values: number of days until expiration
-- Negative values: number of days since expiration (expired certificates)
-- Zero value: certificate expires today
+## Development
 
-For monitoring, you can use alerts, for example:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete local gate, commit conventions, and releases.
+Ordinary tests use fixtures and loopback servers; they never opt into real-device tests just
+because credentials exist in the environment.
 
-- Warning when `mikrotik_certificate_days_until_expiry < 30` (certificate expires in less than 30 days)
-- Critical when `mikrotik_certificate_days_until_expiry < 0` (certificate already expired)
+```bash
+cargo test --all-features --locked
+cargo test --doc --all-features --locked
+```
 
-### Firewall Rules (Labels: router, id, chain, action, ip_version, section)
+Only with explicit permission and a configured test router:
 
-| Metric                                 | Type    | Description                          |
-| -------------------------------------- | ------- | ------------------------------------ |
-| `mikrotik_firewall_rule_bytes_total`   | counter | Bytes matching firewall rules        |
-| `mikrotik_firewall_rule_packets_total` | counter | Packets matching firewall rules      |
-| `mikrotik_firewall_rule_info`          | gauge   | Metadata (comment)                   |
+```bash
+cargo test --all-features --locked --test integration_tests test_real_router_connectivity -- --ignored --exact
+```
 
 ## Project Architecture
 
-```tree
-src/
-├── lib.rs                  # Public library
-├── main.rs                 # Entry point
-├── prelude.rs              # Re-exports
-├── startup/                # Startup connectivity policy
-│   ├── check.rs            # Router connectivity checks
-│   └── policy.rs           # Startup mode policy handling
-├── api/                    # HTTP handlers
-│   ├── health.rs           # Health domain policy
-│   └── handlers/           # HTTP endpoint handlers
-├── collector/              # Background metrics collection
-│   ├── router_task.rs      # Per-router collection task
-│   └── cleanup.rs          # Periodic cleanup task
-├── config/                 # Configuration loading
-│   ├── defaults.rs         # Default values
-│   ├── env_vars.rs         # Environment variable names
-│   ├── loader.rs           # Env parsing and bootstrap helpers
-│   ├── router.rs           # RouterConfig model + validation
-│   ├── tests.rs            # Config unit tests
-│   └── mod.rs
-├── error.rs                # Error types
-├── metrics/                # Prometheus metrics
-│   ├── labels.rs           # Label definitions
-│   ├── parsers.rs          # Response parsers
-│   ├── registry/           # Metrics registry (init/update/cleanup/scrape)
-│   └── tests.rs            # Metric tests
-└── mikrotik/               # RouterOS API client
-    ├── client/              # Client implementation split by metric groups
-    │   ├── mod.rs           # Client module exports
-    │   └── groups/          # Metric group implementations
-    │       ├── common.rs    # Shared parsing helpers
-    │       ├── conntrack.rs # Connection tracking collection
-    │       ├── firewall.rs  # Firewall-related collection
-    │       ├── mod.rs       # Group orchestration
-    │       ├── system.rs    # System/resource collection
-    │       └── vpn.rs       # WireGuard/certificates collection
-    ├── connection/         # Connection handling (auth/protocol)
-    ├── pool/               # Connection pool
-    │   ├── guard.rs         # RAII guard
-    │   ├── ops.rs           # Pool operations
-    │   ├── types.rs         # Internal state
-    │   └── mod.rs
-    ├── responses/          # Response parsers
-    ├── types.rs            # Type definitions
-    └── mod.rs              # Module exports
-```
+- `src/config/`: fallible environment/JSON loading and validation.
+- `src/mikrotik/connection/`: bounded RouterOS framing, authentication, and TLS transport.
+- `src/mikrotik/pool/`: group-aware connection reuse, backoff, and cancellation safety.
+- `src/mikrotik/client/groups/` and `src/mikrotik/responses/`: fetch and parse metric groups.
+- `src/collector/`: independent schedules, snapshot application, cleanup, and worker supervision.
+- `src/metrics/registry/`: registration, deltas, freshness, cardinality limits, and cleanup.
+- `src/api/`: cached metrics and process/router status endpoints.
+- `src/main.rs`: startup, task supervision, readiness, and bounded shutdown.
 
 ### Using as a Library
 
-Add to your `Cargo.toml`:
+The [crate documentation](https://docs.rs/mikrotik-exporter) documents published versions;
+`cargo doc --no-deps --open` renders the current source. `Config::from_env()` returns `Result<Config>`.
+`start_collection_loop` returns `JoinHandle<Result<()>>`: retain and supervise it, signal shutdown,
+and await it to observe both collection and task errors. The compile-checked example in
+[`src/lib.rs`](src/lib.rs) shows this lifecycle without running a network doctest.
 
-```toml
-[dependencies]
-mikrotik-exporter = "0.3.3"
-```
+`create_router` assumes initialization is already complete and uses fixed ready status. For
+lifecycle-aware embedding, use `Arc<AppState>::router_with_readiness` with a watch receiver.
+See `src/main.rs` for HTTP serving, startup checks, and shutdown integration.
 
-```rust
-use std::sync::Arc;
+## Grafana and License
 
-use mikrotik_exporter::{
-    AppState, Config, ConnectionPool, MetricsRegistry, Result, create_router,
-    start_collection_loop,
-};
+Import [`grafana/dashboard.json`](grafana/dashboard.json) matching this source tree. The
+[catalog dashboard 24875](https://grafana.com/grafana/dashboards/24875-mikrotik-router-monitoring/)
+may lag unreleased metric migrations.
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let config = Config::from_env();
-    let metrics = MetricsRegistry::new();
-    let pool = Arc::new(ConnectionPool::new());
-    let state = Arc::new(AppState {
-        config: config.clone(),
-        metrics: metrics.clone(),
-        pool: pool.clone(),
-    });
-
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
-    start_collection_loop(shutdown_rx, Arc::new(config), metrics, pool);
-
-    let app = create_router(state);
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:9090").await?;
-    axum::serve(listener, app.into_make_service()).await?;
-    Ok(())
-}
-```
+MIT — see [LICENSE](LICENSE).

@@ -9,7 +9,7 @@ mod scrape;
 mod update;
 
 use crate::metrics::labels::{
-    CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels, FirewallRuleLabels,
+    CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels, FirewallRuleLabels, GroupLabels,
     InterfaceInfoLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardPeerInfoLabels,
     WireGuardPeerLabels,
 };
@@ -22,6 +22,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
+
+type FloatGauge = Gauge<f64, std::sync::atomic::AtomicU64>;
+const CONNTRACK_SERIES_LIMIT_PER_ROUTER: usize = 1024;
 
 #[derive(Clone, Copy)]
 struct InterfaceSnapshot {
@@ -48,7 +51,7 @@ pub struct MetricsRegistry {
     firewall_rule_packets: Family<FirewallRuleLabels, Counter>,
     // gauges
     interface_running: Family<InterfaceLabels, Gauge>,
-    system_cpu_load: Family<RouterLabels, Gauge>,
+    system_cpu_load: Family<RouterLabels, FloatGauge>,
     system_free_memory: Family<RouterLabels, Gauge>,
     system_total_memory: Family<RouterLabels, Gauge>,
     system_info: Family<SystemInfoLabels, Gauge>,
@@ -57,17 +60,22 @@ pub struct MetricsRegistry {
     scrape_success: Family<RouterLabels, Counter>,
     scrape_errors: Family<RouterLabels, Counter>,
     // scrape timing metrics
-    scrape_duration_milliseconds: Family<RouterLabels, Gauge>,
+    scrape_duration_seconds: Family<RouterLabels, FloatGauge>,
     scrape_last_success_timestamp_seconds: Family<RouterLabels, Gauge>,
     connection_consecutive_errors: Family<RouterLabels, Gauge>,
-    collection_cycle_duration_milliseconds: Gauge,
+    collection_cycle_duration_seconds: FloatGauge,
+    group_collection_success: Family<GroupLabels, Gauge>,
+    group_collection_complete: Family<GroupLabels, Gauge>,
+    group_last_success_timestamp_seconds: Family<GroupLabels, Gauge>,
+    conntrack_dropped_series: Family<RouterLabels, Gauge>,
+    known_routers: Arc<DashMap<String, ()>>,
     // connection pool metrics
     connection_pool_size: Gauge,
     connection_pool_active: Gauge,
     // connection tracking metrics
     connection_tracking_count: Family<ConntrackLabels, Gauge>,
     conntrack_active_series: Family<RouterLabels, Gauge>,
-    conntrack_update_duration_milliseconds: Family<RouterLabels, Gauge>,
+    conntrack_update_duration_seconds: Family<RouterLabels, FloatGauge>,
     // WireGuard metrics
     wireguard_peer_rx_bytes: Family<WireGuardPeerLabels, Gauge>,
     wireguard_peer_tx_bytes: Family<WireGuardPeerLabels, Gauge>,
@@ -99,6 +107,7 @@ pub struct MetricsRegistry {
     wireguard_peer_info_last_seen: Arc<DashMap<WireGuardPeerInfoLabels, Instant>>,
     certificate_last_seen: Arc<DashMap<CertificateLabels, Instant>>,
     interface_info_last_seen: Arc<DashMap<InterfaceInfoLabels, Instant>>,
+    system_info_last_seen: Arc<DashMap<SystemInfoLabels, Instant>>,
     last_scrape_success: Arc<DashMap<String, Instant>>,
     consecutive_scrape_errors: Arc<DashMap<String, u32>>,
 }
@@ -225,6 +234,197 @@ mod tests {
     }
 
     #[test]
+    fn test_partial_group_status_does_not_advance_freshness() {
+        let registry = MetricsRegistry::new();
+        let labels = RouterLabels {
+            router: "router1".into(),
+        };
+        registry.record_group_status(&labels, &CollectionStatus::default());
+        let group = GroupLabels {
+            router: labels.router.clone(),
+            group: "conntrack",
+        };
+        registry
+            .group_last_success_timestamp_seconds
+            .get_or_create(&group)
+            .set(123);
+        let status = CollectionStatus::from_parts(CollectionStatusParts {
+            conntrack: FetchState::Partial,
+            ..Default::default()
+        });
+        registry.record_group_status(&labels, &status);
+        assert_eq!(
+            registry
+                .group_collection_success
+                .get_or_create(&group)
+                .get(),
+            1
+        );
+        assert_eq!(
+            registry
+                .group_collection_complete
+                .get_or_create(&group)
+                .get(),
+            0
+        );
+        assert_eq!(
+            registry
+                .group_last_success_timestamp_seconds
+                .get_or_create(&group)
+                .get(),
+            123
+        );
+        assert!(!status.all_ok());
+        registry.record_scrape_error(&labels);
+        assert_eq!(
+            registry
+                .group_collection_success
+                .get_or_create(&group)
+                .get(),
+            0
+        );
+        assert_eq!(
+            registry
+                .group_last_success_timestamp_seconds
+                .get_or_create(&group)
+                .get(),
+            123
+        );
+    }
+
+    #[tokio::test]
+    async fn test_conntrack_limit_is_deterministic_under_churn_and_partial_updates() {
+        let registry = MetricsRegistry::new();
+        let mut snapshot =
+            make_router_metrics("router1", Vec::new(), make_system("7.10", "board", "1d"));
+        snapshot.connection_tracking = (0..1100)
+            .map(|i| make_conntrack(&format!("10.0.{}.{}", i / 256, i % 256), "tcp", 1, "ipv4"))
+            .collect();
+        registry.update_metrics(&snapshot);
+        let first = registry.prev_conntrack.get("router1").unwrap().clone();
+        assert_eq!(first.len(), CONNTRACK_SERIES_LIMIT_PER_ROUTER);
+        snapshot.connection_tracking.reverse();
+        registry.update_metrics(&snapshot);
+        assert_eq!(*registry.prev_conntrack.get("router1").unwrap(), first);
+        let labels = RouterLabels {
+            router: "router1".into(),
+        };
+        assert_eq!(
+            registry
+                .conntrack_dropped_series
+                .get_or_create(&labels)
+                .get(),
+            76
+        );
+        for prefix in ["192.0", "172.16", "10.1"] {
+            snapshot.connection_tracking = (0..1100)
+                .map(|i| {
+                    make_conntrack(
+                        &format!("{prefix}.{}.{}", i / 256, i % 256),
+                        "tcp",
+                        1,
+                        "ipv4",
+                    )
+                })
+                .collect();
+            registry.update_metrics(&snapshot);
+            assert_eq!(
+                registry.conntrack_last_seen.len(),
+                CONNTRACK_SERIES_LIMIT_PER_ROUTER
+            );
+            let encoded = registry.encode_metrics().await.unwrap();
+            assert_eq!(
+                encoded
+                    .lines()
+                    .filter(|line| line.starts_with("mikrotik_connection_tracking_count{"))
+                    .count(),
+                CONNTRACK_SERIES_LIMIT_PER_ROUTER
+            );
+            snapshot.collection_status = CollectionStatus::from_parts(CollectionStatusParts {
+                conntrack: FetchState::Partial,
+                ..Default::default()
+            });
+        }
+        registry.cleanup_stale_routers(&HashSet::new());
+        assert!(!registry.encode_metrics().await.unwrap().contains("router1"));
+    }
+
+    #[tokio::test]
+    async fn test_system_info_ttl_removes_obsolete_metadata_only() {
+        let registry = MetricsRegistry::new();
+        let mut snapshot =
+            make_router_metrics("router1", Vec::new(), make_system("7.10", "board", "1d"));
+        registry.update_metrics(&snapshot);
+        let old = registry.prev_system_info.get("router1").unwrap().clone();
+        registry.system_info_last_seen.insert(
+            old.clone(),
+            Instant::now() - std::time::Duration::from_secs(100),
+        );
+        snapshot.system.version = "7.11".into();
+        registry.update_metrics(&snapshot);
+        registry.cleanup_expired_dynamic_labels(std::time::Duration::from_secs(60));
+        assert!(!registry.system_info_last_seen.contains_key(&old));
+        let encoded = registry.encode_metrics().await.unwrap();
+        assert!(!encoded.contains("version=\"7.10\""));
+        assert!(encoded.contains("version=\"7.11\""));
+        registry.cleanup_stale_routers(&HashSet::new());
+        assert!(!registry.encode_metrics().await.unwrap().contains("router1"));
+    }
+
+    #[test]
+    fn test_partial_conntrack_does_not_refresh_missing_series_ttl() {
+        let registry = MetricsRegistry::new();
+        let mut snapshot =
+            make_router_metrics("router1", Vec::new(), make_system("7.10", "board", "1d"));
+        snapshot.connection_tracking = vec![make_conntrack("192.0.2.1", "tcp", 1, "ipv4")];
+        registry.update_metrics(&snapshot);
+        let labels = ConntrackLabels {
+            router: "router1".into(),
+            src_address: "192.0.2.1".into(),
+            protocol: "tcp".into(),
+            ip_version: "ipv4".into(),
+        };
+        registry.conntrack_last_seen.insert(
+            labels.clone(),
+            Instant::now() - std::time::Duration::from_secs(100),
+        );
+        snapshot.collection_status = CollectionStatus::from_parts(CollectionStatusParts {
+            conntrack: FetchState::Partial,
+            ..Default::default()
+        });
+        snapshot.connection_tracking.clear();
+        registry.update_metrics(&snapshot);
+        registry.cleanup_expired_dynamic_labels(std::time::Duration::from_secs(60));
+        assert!(!registry.conntrack_last_seen.contains_key(&labels));
+        assert!(registry.prev_conntrack.get("router1").unwrap().is_empty());
+        assert_eq!(
+            registry
+                .conntrack_active_series
+                .get_or_create(&RouterLabels {
+                    router: "router1".into()
+                })
+                .get(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_removes_initialized_router_without_successful_snapshot() {
+        let registry = MetricsRegistry::new();
+        registry.initialize_router_metrics(&RouterLabels {
+            router: "never-connected".into(),
+        });
+        registry.cleanup_stale_routers(&HashSet::new());
+        assert!(
+            !registry
+                .encode_metrics()
+                .await
+                .unwrap()
+                .contains("never-connected")
+        );
+    }
+
+    #[test]
     fn test_new_registry_initializes_correctly() {
         let registry = MetricsRegistry::new();
         assert_eq!(
@@ -237,6 +437,57 @@ mod tests {
                 .get(),
             0
         );
+    }
+
+    #[tokio::test]
+    async fn test_complete_empty_interfaces_remove_previous_series() {
+        let registry = MetricsRegistry::new();
+        let mut snapshot = make_router_metrics(
+            "router1",
+            vec![make_interface(
+                "*1", "ether1", "WAN", 1, 2, 3, 4, 0, 0, true,
+            )],
+            make_system("7.10", "board", "1d"),
+        );
+        registry.update_metrics(&snapshot);
+        snapshot.interfaces.clear();
+        registry.update_metrics(&snapshot);
+        assert!(registry.prev_iface.is_empty());
+        assert!(
+            !registry
+                .encode_metrics()
+                .await
+                .unwrap()
+                .lines()
+                .any(|line| line.starts_with("mikrotik_interface_"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_router_removal_cleans_superseded_metadata() {
+        let registry = MetricsRegistry::new();
+        let mut snapshot = make_router_metrics(
+            "router1",
+            vec![make_interface(
+                "*1", "ether1", "old", 1, 2, 3, 4, 0, 0, true,
+            )],
+            make_system("7.10", "board", "1d"),
+        );
+        snapshot.wireguard_peers = vec![WireGuardPeerStats {
+            id: "*1".into(),
+            comment: "old".into(),
+            ..Default::default()
+        }];
+        registry.update_metrics(&snapshot);
+        snapshot.interfaces[0].comment = "new".into();
+        snapshot.wireguard_peers[0].comment = "new".into();
+        snapshot.firewall_rules[0].comment = "new".into();
+        registry.update_metrics(&snapshot);
+        registry.cleanup_stale_routers(&HashSet::new());
+        assert!(!registry.encode_metrics().await.unwrap().contains("router1"));
+        assert!(registry.interface_info_last_seen.is_empty());
+        assert!(registry.wireguard_peer_info_last_seen.is_empty());
+        assert!(registry.firewall_rule_info_last_seen.is_empty());
     }
 
     #[tokio::test]
@@ -378,9 +629,9 @@ mod tests {
                 .get(),
             0
         );
-        assert_eq!(
-            registry.system_cpu_load.get_or_create(&router_label).get(),
-            10
+        assert!(
+            (registry.system_cpu_load.get_or_create(&router_label).get() - 0.1).abs()
+                < f64::EPSILON
         );
         assert_eq!(
             registry
@@ -423,9 +674,9 @@ mod tests {
                 .get(),
             1
         );
-        assert_eq!(
-            registry.system_cpu_load.get_or_create(&router_label).get(),
-            55
+        assert!(
+            (registry.system_cpu_load.get_or_create(&router_label).get() - 0.55).abs()
+                < f64::EPSILON
         );
         assert_eq!(
             registry
@@ -455,9 +706,9 @@ mod tests {
                 .get(),
             1200
         );
-        assert_eq!(
-            registry.system_cpu_load.get_or_create(&router_label).get(),
-            60
+        assert!(
+            (registry.system_cpu_load.get_or_create(&router_label).get() - 0.6).abs()
+                < f64::EPSILON
         );
     }
 
@@ -610,10 +861,10 @@ mod tests {
         let registry = MetricsRegistry::new();
 
         registry.record_collection_cycle_duration(0.012);
-        assert_eq!(registry.collection_cycle_duration_milliseconds.get(), 12);
+        assert!((registry.collection_cycle_duration_seconds.get() - 0.012).abs() < f64::EPSILON);
 
         registry.record_collection_cycle_duration(1.234);
-        assert_eq!(registry.collection_cycle_duration_milliseconds.get(), 1234);
+        assert!((registry.collection_cycle_duration_seconds.get() - 1.234).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -692,9 +943,9 @@ mod tests {
             router: "router1".to_string(),
         };
 
-        assert_eq!(
-            registry.system_cpu_load.get_or_create(&router_label).get(),
-            50
+        assert!(
+            (registry.system_cpu_load.get_or_create(&router_label).get() - 0.5).abs()
+                < f64::EPSILON
         );
         assert_eq!(
             registry
@@ -852,10 +1103,10 @@ mod tests {
         );
         assert!(
             registry
-                .conntrack_update_duration_milliseconds
+                .conntrack_update_duration_seconds
                 .get_or_create(&router_labels)
                 .get()
-                >= 0
+                >= 0.0
         );
     }
 
@@ -888,10 +1139,10 @@ mod tests {
             );
             assert!(
                 registry
-                    .conntrack_update_duration_milliseconds
+                    .conntrack_update_duration_seconds
                     .get_or_create(&router_labels)
                     .get()
-                    >= 0
+                    >= 0.0
             );
         }
     }
@@ -1106,6 +1357,61 @@ mod tests {
             2000,
             "Stale firewall rule should be preserved during partial firewall snapshot"
         );
+    }
+
+    #[tokio::test]
+    async fn test_partial_firewall_tracks_new_rules_and_supersedes_metadata() {
+        for remove_router in [false, true] {
+            let registry = MetricsRegistry::new();
+            let mut snapshot =
+                make_router_metrics("router1", Vec::new(), make_system("7.10", "board", "1d"));
+            snapshot.collection_status = make_partial_status(
+                FetchState::Failed,
+                FetchState::Failed,
+                FetchState::Failed,
+                FetchState::Partial,
+            );
+            registry.update_metrics(&snapshot);
+            let old_info = registry
+                .prev_firewall_rule_info
+                .get("router1")
+                .unwrap()
+                .values()
+                .next()
+                .unwrap()
+                .clone();
+            snapshot.firewall_rules[0].comment = "updated".into();
+            registry.update_metrics(&snapshot);
+            assert_eq!(
+                registry.firewall_rule_info.get_or_create(&old_info).get(),
+                0
+            );
+            assert_eq!(
+                registry
+                    .prev_firewall_rules_by_router
+                    .get("router1")
+                    .unwrap()
+                    .len(),
+                1
+            );
+            if remove_router {
+                registry.cleanup_stale_routers(&HashSet::new());
+                assert!(!registry.encode_metrics().await.unwrap().contains("router1"));
+            } else {
+                snapshot.collection_status = CollectionStatus::default();
+                snapshot.firewall_rules.clear();
+                registry.update_metrics(&snapshot);
+                assert!(registry.prev_firewall_rules.is_empty());
+                assert!(
+                    !registry
+                        .encode_metrics()
+                        .await
+                        .unwrap()
+                        .lines()
+                        .any(|line| line.starts_with("mikrotik_firewall_rule_bytes_total{"))
+                );
+            }
+        }
     }
 
     #[tokio::test]

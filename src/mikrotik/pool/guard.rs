@@ -15,11 +15,23 @@ use super::ConnectionPool;
 pub(crate) struct PooledConnectionGuard {
     pub(super) connection: Option<RouterOsConnection>,
     pub(super) pool: ConnectionPool,
-    pub(super) key: String,
+    pub(super) key: super::types::ConnectionKey,
     pub(super) broken: bool,
 }
 
 impl PooledConnectionGuard {
+    pub(in crate::mikrotik) async fn record_result(&mut self, success: bool) {
+        let mut states = self.pool.connection_states.lock().await;
+        let state = states
+            .entry(self.key.clone())
+            .or_insert_with(super::types::ConnectionState::new);
+        if success {
+            state.record_success();
+        } else {
+            state.record_error();
+        }
+    }
+
     /// Get a mutable reference to the underlying connection.
     pub(in crate::mikrotik) fn get_mut(&mut self) -> &mut RouterOsConnection {
         self.connection.as_mut().expect("Connection already taken")
@@ -34,7 +46,7 @@ impl PooledConnectionGuard {
 impl Drop for PooledConnectionGuard {
     fn drop(&mut self) {
         if let Some(conn) = self.connection.take() {
-            if self.broken {
+            if self.broken || !conn.is_reusable() {
                 tracing::debug!("Dropping broken connection: {}", self.key);
             } else if let Ok(mut pool) = self.pool.connections.try_lock() {
                 tracing::trace!("Connection returned to pool: {}", self.key);

@@ -1,40 +1,51 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! Router connectivity checks used during startup.
-
 use crate::config::Config;
 use crate::mikrotik::{ConnectionPool, MikroTikClient};
 use std::sync::Arc;
+use tokio::task::JoinSet;
 use tokio::time::{Duration, timeout};
 
-/// Test connectivity to all configured routers.
 #[must_use]
 pub(crate) async fn test_router_connectivity(config: &Config, timeout_secs: u64) -> Vec<String> {
+    if !(1..=300).contains(&timeout_secs) {
+        return config
+            .routers
+            .iter()
+            .map(|router| router.name.clone())
+            .collect();
+    }
     let pool = Arc::new(ConnectionPool::new());
-    let mut failed_routers = Vec::new();
-
+    let mut tasks = JoinSet::new();
     for router in &config.routers {
-        let client = MikroTikClient::with_pool(router.clone(), pool.clone());
-        let timeout_duration = Duration::from_secs(timeout_secs);
-
-        match timeout(timeout_duration, client.test_connection()).await {
-            Ok(Ok(())) => {
-                tracing::info!("Successfully connected to router '{}'", router.name);
+        let router = router.clone();
+        let pool = pool.clone();
+        tasks.spawn(async move {
+            let client = MikroTikClient::with_pool(router.clone(), pool);
+            let passed = matches!(
+                timeout(Duration::from_secs(timeout_secs), client.test_connection()).await,
+                Ok(Ok(()))
+            );
+            (router.name, passed)
+        });
+    }
+    let mut passed = std::collections::HashSet::new();
+    while let Some(result) = tasks.join_next().await {
+        match result {
+            Ok((name, true)) => {
+                passed.insert(name);
             }
-            Ok(Err(error)) => {
-                tracing::warn!("Failed to connect to router '{}': {}", router.name, error);
-                failed_routers.push(router.name.clone());
+            Ok((name, false)) => {
+                tracing::warn!(router = %name, "Startup connectivity check failed");
             }
-            Err(_) => {
-                tracing::warn!(
-                    "Timeout connecting to router '{}' (> {timeout_secs}s)",
-                    router.name
-                );
-                failed_routers.push(router.name.clone());
-            }
+            Err(error) => tracing::error!(%error, "Startup connectivity task failed"),
         }
     }
-
-    failed_routers
+    config
+        .routers
+        .iter()
+        .filter(|router| !passed.contains(&router.name))
+        .map(|router| router.name.clone())
+        .collect()
 }

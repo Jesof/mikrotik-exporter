@@ -6,7 +6,6 @@
 use crate::mikrotik::client::MikroTikClient;
 use crate::prelude::Result;
 
-mod common;
 mod conntrack;
 mod firewall;
 mod system;
@@ -52,10 +51,24 @@ pub(crate) fn failed_group_names(groups: &[(&'static str, bool)]) -> Vec<&'stati
 pub(crate) fn inconsistent_snapshot_error<T>(
     group: &std::result::Result<Result<T>, tokio::time::error::Elapsed>,
 ) -> Option<&str> {
-    if let Ok(Err(crate::prelude::AppError::RouterOs(message))) = group
-        && message.contains("inconsistent snapshot")
-    {
+    if let Ok(Err(crate::prelude::AppError::InvalidSnapshot(message))) = group {
         return Some(message.as_str());
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::prelude::AppError;
+
+    #[test]
+    fn test_snapshot_error_classification_uses_variant() {
+        let invalid: std::result::Result<Result<()>, tokio::time::error::Elapsed> =
+            Ok(Err(AppError::InvalidSnapshot("bad number".into())));
+        assert_eq!(inconsistent_snapshot_error(&invalid), Some("bad number"));
+        let other: std::result::Result<Result<()>, tokio::time::error::Elapsed> =
+            Ok(Err(AppError::RouterOs("inconsistent snapshot".into())));
+        assert_eq!(inconsistent_snapshot_error(&other), None);
+    }
 }

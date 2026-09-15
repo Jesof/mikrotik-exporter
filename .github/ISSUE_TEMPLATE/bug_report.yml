@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Jesof
+
+name: Bug report
+description: Report a defect in the exporter
+title: "fix: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Remove credentials, private keys, and private topology from reports.
+        For security issues, use https://github.com/Jesof/mikrotik-exporter/security/advisories/new instead.
+  - type: input
+    id: version
+    attributes:
+      label: Exporter version
+      description: Output of `mikrotik-exporter --version`, plus source revision or image digest for unreleased builds.
+      placeholder: "0.3.3"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform / deployment
+      description: OS, architecture, and how it runs (binary, Docker, Kubernetes).
+      placeholder: "linux/amd64, Docker"
+    validations:
+      required: true
+  - type: input
+    id: routeros
+    attributes:
+      label: RouterOS version
+      placeholder: "7.16.2"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include a minimal redacted config and whether TLS is enabled; never include passwords or private keys.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Redact credentials, hostnames, and addresses. Include group success/completeness and freshness metrics if relevant; review debug logs before sharing.
+      render: shell
+    validations:
+      required: false
