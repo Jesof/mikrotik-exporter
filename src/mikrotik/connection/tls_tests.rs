@@ -106,6 +106,7 @@ async fn test_tls_wrong_name_and_untrusted_certificate_rejected_before_login() {
         };
         let pool = ConnectionPool::new();
         assert!(matches!(
+            // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
             pool.get_connection(&address, "test-user", "test-password", None, Some(&tls))
                 .await,
             Err(AppError::Transport {
@@ -174,6 +175,7 @@ async fn test_tls_never_reuses_idle_plaintext_connection() {
     });
     let pool = ConnectionPool::new();
     drop(
+        // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
         pool.get_connection(&address, "test-user", "test-password", None, None)
             .await
             .unwrap(),
@@ -183,6 +185,7 @@ async fn test_tls_never_reuses_idle_plaintext_connection() {
         ca_file: Some(ca.path().into()),
     };
     let mut guard = pool
+        // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
         .get_connection(&address, "test-user", "test-password", None, Some(&tls))
         .await
         .unwrap();
@@ -264,6 +267,7 @@ async fn test_tls_changed_name_or_ca_cannot_reuse_trusted_connection() {
         };
         let pool = ConnectionPool::new();
         drop(
+            // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
             pool.get_connection(&address, "test-user", "test-password", None, Some(&tls))
                 .await
                 .unwrap(),
@@ -276,6 +280,7 @@ async fn test_tls_changed_name_or_ca_cannot_reuse_trusted_connection() {
         }
         for _ in 0..2 {
             assert!(matches!(
+                // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
                 pool.get_connection(&address, "test-user", "test-password", None, Some(&changed))
                     .await,
                 Err(AppError::Transport {
@@ -285,6 +290,7 @@ async fn test_tls_changed_name_or_ca_cannot_reuse_trusted_connection() {
             ));
         }
         let mut guard = pool
+            // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
             .get_connection(&address, "test-user", "test-password", None, Some(&tls))
             .await
             .unwrap();

@@ -669,6 +669,7 @@ mod tests {
                 send(&mut peer, &["!done", "=ret=invalid"]).await;
             });
             assert!(matches!(
+                // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
                 client.login("admin", "secret").await,
                 Err(AppError::Authentication(_))
             ));
@@ -698,6 +699,7 @@ mod tests {
             assert_eq!(receive(&mut peer).await, "/next");
             send(&mut peer, &["!done"]).await;
         });
+        // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
         client.login("admin", "secret").await.unwrap();
         assert!(client.command("/next", &[]).await.unwrap().is_empty());
         server.await.unwrap();
@@ -714,6 +716,7 @@ mod tests {
             assert_eq!(peer.stream.read(&mut byte).await.unwrap(), 0);
         });
         assert!(matches!(
+            // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
             client.login("admin", "secret").await,
             Err(AppError::RouterOsTrap { .. })
         ));
@@ -734,6 +737,7 @@ mod tests {
                 .read_sentence(&mut ResponseBudget::default())
                 .await
                 .unwrap();
+            // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
             assert_eq!(attributes["password"], "trusted-fixture");
             send(&mut trusted, &["!done"]).await;
             let mut rejected = RouterOsConnection {
@@ -744,6 +748,7 @@ mod tests {
                 .read_sentence(&mut ResponseBudget::default())
                 .await
                 .unwrap();
+            // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
             assert_eq!(attributes["password"], "wrong-fixture");
             send(&mut rejected, &["!trap", "=message=rejected"]).await;
             send(&mut rejected, &["!done"]).await;
@@ -752,17 +757,20 @@ mod tests {
         });
         let pool = ConnectionPool::new();
         drop(
+            // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
             pool.get_connection(&address, "admin", "trusted-fixture", None, None)
                 .await
                 .unwrap(),
         );
         assert!(matches!(
+            // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
             pool.get_connection(&address, "admin", "wrong-fixture", None, None)
                 .await,
             Err(AppError::RouterOsTrap { .. })
         ));
         let mut guard = pool
-            .get_connection(&address, "admin", "trusted-fixture", None, None)
+                // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
+                .get_connection(&address, "admin", "trusted-fixture", None, None)
             .await
             .unwrap();
         guard.get_mut().command("/reused", &[]).await.unwrap();
@@ -789,6 +797,7 @@ mod tests {
         let pool = ConnectionPool::new();
         for _ in 0..2 {
             let mut guard = pool
+                // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
                 .get_connection(&address, "admin", "fixture", Some("system"), None)
                 .await
                 .unwrap();
@@ -840,6 +849,7 @@ mod tests {
         });
         let pool = ConnectionPool::new();
         let mut guard = pool
+            // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
             .get_connection(&address, "admin", "secret", None, None)
             .await
             .unwrap();
@@ -874,6 +884,7 @@ mod tests {
         drop(guard);
         assert_eq!(pool.get_pool_stats().await, (0, 0));
         let mut guard = pool
+            // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
             .get_connection(&address, "admin", "secret", None, None)
             .await
             .unwrap();
@@ -884,6 +895,7 @@ mod tests {
         drop(guard);
         assert_eq!(pool.get_pool_stats().await, (1, 0));
         let mut guard = pool
+            // lgtm[rust/hardcoded-credentials]: intentional loopback test fixture.
             .get_connection(&address, "admin", "secret", None, None)
             .await
             .unwrap();

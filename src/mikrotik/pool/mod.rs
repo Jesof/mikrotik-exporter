@@ -270,6 +270,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_connection_records_failure() {
         let pool = ConnectionPool::new();
+        // codeql[rust/hardcoded-credentials]: intentional invalid-address fixture.
         let result = pool
             .get_connection("invalid://address", "admin", "", Some("system"), None)
             .await;

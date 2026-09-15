@@ -290,29 +290,15 @@ mod tests {
                 ),
             );
             match conntrack {
-                Ok(Ok(data)) => println!(
-                    "conntrack_query=ok complete={} aggregate_records={}",
-                    data.complete_ok,
-                    data.entries.len()
-                ),
+                Ok(Ok(data)) => println!("conntrack_query=ok complete={}", data.complete_ok),
                 _ => println!("conntrack_query=failed"),
             }
             match vpn {
-                Ok(Ok(data)) => println!(
-                    "wireguard_query={} peers={} certificate_query={} certificates={}",
-                    data.wireguard_ok,
-                    data.wireguard_peers.len(),
-                    data.certificates_ok,
-                    data.certificate_stats.len()
-                ),
+                Ok(Ok(data)) => println!("wireguard_query={}", data.wireguard_ok),
                 _ => println!("vpn_cert_query=failed"),
             }
             match firewall {
-                Ok(Ok(data)) => println!(
-                    "firewall_query=ok complete={} rules={}",
-                    data.complete_ok,
-                    data.rules.len()
-                ),
+                Ok(Ok(data)) => println!("firewall_query=ok complete={}", data.complete_ok),
                 _ => println!("firewall_query=failed"),
             }
             let snapshot = client
@@ -320,36 +306,6 @@ mod tests {
                 .await
                 .map_err(|error| match error {
                     AppError::InvalidSnapshot(message) => {
-                        for field in [
-                            "rx-byte",
-                            "tx-byte",
-                            "rx-packet",
-                            "tx-packet",
-                            "rx-error",
-                            "tx-error",
-                            "cpu-load",
-                            "free-memory",
-                            "total-memory",
-                            "uptime",
-                            "handshake",
-                            "expiry",
-                            "src-address",
-                            "bytes",
-                            "packets",
-                            "running",
-                            "name",
-                            ".id",
-                            "interface",
-                            "allowed-address",
-                            "conntrack",
-                            "wireguard",
-                            "firewall",
-                            "system",
-                        ] {
-                            if message.contains(field) {
-                                println!("validation_field_or_context={field}");
-                            }
-                        }
                         println!(
                             "validation_missing_field={}",
                             message.starts_with("missing field ")
@@ -367,14 +323,6 @@ mod tests {
                 status.certificates_ok(),
                 status.firewall_complete_ok()
             );
-            println!(
-                "records interfaces={} conntrack_aggregates={} peers={} certificates={} firewall_rules={}",
-                snapshot.interfaces.len(),
-                snapshot.connection_tracking.len(),
-                snapshot.wireguard_peers.len(),
-                snapshot.certificate_stats.len(),
-                snapshot.firewall_rules.len()
-            );
             let registry = crate::metrics::MetricsRegistry::new();
             registry.update_metrics(&snapshot);
             let encoded = registry
@@ -385,10 +333,7 @@ mod tests {
             {
                 return Err("expected OpenMetrics data missing");
             }
-            println!(
-                "device_index={index} openmetrics=ok bytes={}",
-                encoded.len()
-            );
+            println!("device_index={index} openmetrics=ok");
             if !status.all_ok() {
                 return Err("incomplete collection: see group booleans above");
             }
