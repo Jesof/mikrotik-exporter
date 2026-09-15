@@ -134,11 +134,13 @@ changelog entry and maintainer sign-off.
 5. PRs are **squash-merged**, one commit per PR; the squash subject must be a valid Conventional
     Commit. Delete the branch after merge.
 
-All push, PR, scheduled, and manual CI runs execute the full quality suite. `Check` is an always-run
-aggregate gate over Cargo Check, tests, formatting, Clippy, coverage, dependency/security checks,
-workflow validation, and Docker validation. It fails when a dependency fails, is cancelled, or is
-skipped. Preserve required check names; changing them requires coordinating the repository ruleset.
-Actions are pinned to full commit SHAs. Main image publication follows the successful aggregate gate.
+Pull requests, scheduled runs, manual runs, and pushes to `main` execute the full quality suite.
+Feature-branch pushes are intentionally covered by the pull-request run instead of repeating the
+same suite before a PR exists. `Check` is an always-run aggregate gate over Cargo Check, tests,
+formatting, Clippy, coverage, dependency/security checks, workflow validation, and Docker validation.
+It fails when a dependency fails, is cancelled, or is skipped. Preserve required check names;
+changing them requires coordinating the repository ruleset. Actions are pinned to full commit SHAs.
+Main image publication follows the successful aggregate gate.
 
 Automated agents need explicit user approval before commits, pushes, PR creation, merges, tags,
 or publication. Approval to edit files is not approval to publish or rewrite history. Maintainer
