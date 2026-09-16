@@ -1364,6 +1364,170 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_firewall_partial_refreshes_retained_rule_ttl() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        let mut full = make_router_metrics("router1", vec![iface.clone()], system.clone());
+        full.firewall_rules = vec![make_firewall_rule("*f1", 1000, 10)];
+        registry.update_metrics(&full);
+
+        let rule_labels = FirewallRuleLabels {
+            router: "router1".to_string(),
+            id: "*f1".to_string(),
+            chain: "forward".to_string(),
+            action: "accept".to_string(),
+            ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
+        };
+        registry.firewall_rule_last_seen.insert(
+            rule_labels.clone(),
+            Instant::now() - std::time::Duration::from_secs(100),
+        );
+
+        let mut partial = make_router_metrics("router1", vec![iface], system);
+        partial.collection_status = make_partial_status(
+            FetchState::Failed,
+            FetchState::Failed,
+            FetchState::Failed,
+            FetchState::Partial,
+        );
+        partial.firewall_rules = Vec::new();
+        registry.update_metrics(&partial);
+        registry.cleanup_expired_dynamic_labels(std::time::Duration::from_secs(60));
+
+        assert!(
+            registry.prev_firewall_rules.contains_key(&rule_labels),
+            "retained firewall rule must survive TTL cleanup"
+        );
+        assert_eq!(
+            registry
+                .firewall_rule_bytes
+                .get_or_create(&rule_labels)
+                .get(),
+            1000
+        );
+
+        let mut recovered =
+            make_router_metrics("router1", Vec::new(), make_system("7.10", "RB750Gr3", "1d"));
+        recovered.firewall_rules = vec![make_firewall_rule("*f1", 1500, 15)];
+        registry.update_metrics(&recovered);
+        assert_eq!(
+            registry
+                .firewall_rule_bytes
+                .get_or_create(&rule_labels)
+                .get(),
+            1500,
+            "recovery must apply only the delta, not re-seed the cumulative value"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_reappearing_interface_starts_new_counter_baseline() {
+        let registry = MetricsRegistry::new();
+        let system = make_system("7.10", "RB750Gr3", "1d");
+        let labels = InterfaceLabels {
+            router: "router1".to_string(),
+            id: "*1".to_string(),
+        };
+
+        let first = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        registry.update_metrics(&make_router_metrics("router1", vec![first], system.clone()));
+        assert_eq!(
+            registry.interface_rx_bytes.get_or_create(&labels).get(),
+            1000
+        );
+
+        registry.update_metrics(&make_router_metrics("router1", Vec::new(), system.clone()));
+
+        let returned = make_interface("*1", "ether1", "", 100_000, 200_000, 1000, 2000, 0, 0, true);
+        registry.update_metrics(&make_router_metrics(
+            "router1",
+            vec![returned],
+            system.clone(),
+        ));
+        assert_eq!(
+            registry.interface_rx_bytes.get_or_create(&labels).get(),
+            0,
+            "a reappearing interface must reset, not seed the cumulative value"
+        );
+
+        let next = make_interface("*1", "ether1", "", 100_500, 200_500, 1005, 2005, 0, 0, true);
+        registry.update_metrics(&make_router_metrics("router1", vec![next], system));
+        assert_eq!(
+            registry.interface_rx_bytes.get_or_create(&labels).get(),
+            500
+        );
+    }
+
+    #[tokio::test]
+    async fn test_interface_error_counter_appearing_starts_at_baseline() {
+        let registry = MetricsRegistry::new();
+        let system = make_system("7.10", "RB750Gr3", "1d");
+        let labels = InterfaceLabels {
+            router: "router1".to_string(),
+            id: "*1".to_string(),
+        };
+
+        let mut iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        iface.rx_errors = None;
+        registry.update_metrics(&make_router_metrics(
+            "router1",
+            vec![iface.clone()],
+            system.clone(),
+        ));
+        assert_eq!(registry.interface_rx_errors.get_or_create(&labels).get(), 0);
+
+        // The router starts reporting the counter with a large lifetime value.
+        // This must establish a baseline, not add the whole value as a delta.
+        iface.rx_errors = Some(500);
+        registry.update_metrics(&make_router_metrics(
+            "router1",
+            vec![iface.clone()],
+            system.clone(),
+        ));
+        assert_eq!(registry.interface_rx_errors.get_or_create(&labels).get(), 0);
+
+        iface.rx_errors = Some(600);
+        registry.update_metrics(&make_router_metrics("router1", vec![iface], system));
+        assert_eq!(
+            registry.interface_rx_errors.get_or_create(&labels).get(),
+            100
+        );
+    }
+
+    #[tokio::test]
+    async fn test_unparseable_uptime_still_updates_other_system_metrics() {
+        let registry = MetricsRegistry::new();
+        let mut system = make_system("7.10", "RB750Gr3", "1d");
+        system.uptime = "garbage".into();
+        system.cpu_load = 42;
+        system.free_memory = 123;
+        system.total_memory = 456;
+        registry.update_metrics(&make_router_metrics("router1", Vec::new(), system));
+
+        let labels = RouterLabels {
+            router: "router1".into(),
+        };
+        assert!(
+            (registry.system_cpu_load.get_or_create(&labels).get() - 0.42).abs() < f64::EPSILON
+        );
+        assert_eq!(
+            registry.system_free_memory.get_or_create(&labels).get(),
+            123
+        );
+        assert_eq!(
+            registry.system_total_memory.get_or_create(&labels).get(),
+            456
+        );
+        assert_eq!(
+            registry.system_uptime_seconds.get_or_create(&labels).get(),
+            0
+        );
+    }
+
+    #[tokio::test]
     async fn test_partial_firewall_tracks_new_rules_and_supersedes_metadata() {
         for remove_router in [false, true] {
             let registry = MetricsRegistry::new();

@@ -454,12 +454,16 @@ async fn health_returns_degraded_on_errors_without_success() {
 }
 
 #[tokio::test]
-async fn health_returns_degraded_with_multiple_errors() {
+async fn health_ignores_scrape_errors_when_pool_connection_is_healthy() {
+    // `/health` classifies routers by pool connection state and last complete
+    // success, not by the scrape-error counter, so query-level failures do not
+    // degrade a router whose connection is healthy.
     let state = make_state(vec![test_router("r1")]);
 
     let label = RouterLabels {
         router: "r1".to_string(),
     };
+    state.metrics.record_scrape_success(&label);
     state.metrics.record_scrape_error(&label);
     state.metrics.record_scrape_error(&label);
     state.metrics.record_scrape_error(&label);
@@ -470,7 +474,7 @@ async fn health_returns_degraded_with_multiple_errors() {
         .await
         .unwrap();
 
-    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(resp.status(), StatusCode::OK);
     let body = String::from_utf8(
         resp.into_body()
             .collect()
@@ -482,7 +486,7 @@ async fn health_returns_degraded_with_multiple_errors() {
     .unwrap();
 
     let health: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(health["routers"][0]["status"], "degraded");
+    assert_eq!(health["routers"][0]["status"], "healthy");
 }
 
 #[tokio::test]

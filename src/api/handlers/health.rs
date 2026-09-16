@@ -53,9 +53,7 @@ mod tests {
         });
 
         let response = health_check(State(app_state)).await.into_response();
-        assert!(
-            response.status() == StatusCode::OK
-                || response.status() == StatusCode::SERVICE_UNAVAILABLE
-        );
+        // A configured router with no successful scrape is degraded.
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }
