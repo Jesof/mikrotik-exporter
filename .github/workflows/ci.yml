@@ -81,9 +81,11 @@ jobs:
           echo "Changed paths:"
           printf '%s\n' "$files"
           echo "rust=$rust workflows=$workflows docker=$docker"
-          echo "rust=$rust" >> "$GITHUB_OUTPUT"
-          echo "workflows=$workflows" >> "$GITHUB_OUTPUT"
-          echo "docker=$docker" >> "$GITHUB_OUTPUT"
+          {
+            echo "rust=$rust"
+            echo "workflows=$workflows"
+            echo "docker=$docker"
+          } >> "$GITHUB_OUTPUT"
 
   cargo-check:
     name: Cargo Check
