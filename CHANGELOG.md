@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-17
+
 ### Fixed
 - Treat per-query failures (an unsupported or denied firewall, WireGuard, or
   conntrack table) as group-level results instead of connection errors: a
