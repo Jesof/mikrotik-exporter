@@ -10,16 +10,16 @@
 //!
 //! ## Installation
 //!
-//! To use the published 0.4 line, add it to your `Cargo.toml`:
+//! To use the published 0.5 line, add it to your `Cargo.toml`:
 //!
 //! ```toml
 //! [dependencies]
-//! mikrotik-exporter = "0.4"
+//! mikrotik-exporter = "0.5"
 //! ```
 //!
 //! Documentation built from the current checkout may include unreleased changes. The collector
-//! lifecycle below targets this checkout; consult the changelog when migrating from published
-//! 0.3.3. Use a path dependency for local development against this source tree.
+//! lifecycle below targets this checkout; consult the changelog when migrating from an earlier
+//! released version. Use a path dependency for local development against this source tree.
 //!
 //! To install the exporter as a binary, use cargo:
 //!

@@ -8,9 +8,8 @@
 Prometheus exporter for MikroTik RouterOS, with independent per-router collection schedules,
 connection pooling, optional verified TLS, and OpenMetrics output.
 
-This README describes the current source tree, including unreleased changes. For upgrades from
-0.3.3, follow the [0.4.0 migration guide](CHANGELOG.md#040---2026-09-15). Published 0.3.3 packages
-do not include those changes.
+This README describes the current source tree. Upgrade notes and breaking migrations are documented
+in the [changelog](CHANGELOG.md); packages older than the current release do not include them.
 
 ## Quick Start
 

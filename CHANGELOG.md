@@ -51,6 +51,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release tags must be annotated and cryptographically signed; Dependabot auto-merge excludes CI,
   release, Docker, and dependency configuration files.
 
+### Breaking Migration
+
+`0.5.0` compatibility changes. Metric names, units, types, and labels are unchanged.
+
+- **Rust API:** `InterfaceStats::rx_errors` and `tx_errors` are now `Option<u64>`. Library callers
+  that construct `InterfaceStats` or read these fields must handle `None`. `None` means RouterOS
+  did not report the counter, so `mikrotik_interface_rx_errors_total` /
+  `mikrotik_interface_tx_errors_total` keep their previous value (or stay absent) instead of being
+  reset to zero.
+- **`/health` freshness:** healthy requires a complete success no older than
+  `3 × COLLECTION_INTERVAL_SECONDS`, independent of `GAP_RESET_THRESHOLD_SECONDS`. Alerts or probes
+  that relied on the previous `max(3 × interval, gap reset threshold)` window must be updated.
+- **Certificate completeness:** the `certificates` group can report success with completeness `0`
+  when rows are returned without a usable expiry. Alerting that treats
+  `mikrotik_group_collection_success == 1` as data-present should also check
+  `mikrotik_group_collection_complete` for the `certificates` group.
+
 ## [0.4.0] - 2026-09-15
 
 ### Added

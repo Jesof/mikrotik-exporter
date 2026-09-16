@@ -1,6 +1,6 @@
 # MikroTik Exporter Deployment
 
-This guide describes the current source tree. Review the [breaking migration](CHANGELOG.md#040---2026-09-15)
+This guide describes the current source tree. Review the [breaking migrations](CHANGELOG.md)
 before upgrading a published deployment. Configure RouterOS API-SSL with a dedicated `read,api`
 user and source restrictions as shown in [README.md](README.md#routeros-requirements).
 
