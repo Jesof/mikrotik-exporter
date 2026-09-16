@@ -92,7 +92,7 @@ jobs:
           gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100&filter=latest" \
             --jq '.jobs[] | {name, conclusion, status, head_sha}' | jq -s . > "$RUNNER_TEMP/jobs.json"
           jq -e --arg sha "$SOURCE_SHA" '
-            . as $jobs | ["Check", "Test Suite", "Rustfmt", "Clippy", "Cargo Deny", "Security Audit", "Publish main image"]
+            . as $jobs | ["Check", "Test Suite", "Rustfmt", "Clippy", "Cargo Deny", "Security Audit", "Publish main image / publish"]
             | all(.[]; . as $name | any($jobs[];
                 .name == $name and .head_sha == $sha and .status == "completed" and .conclusion == "success"))
           ' "$RUNNER_TEMP/jobs.json"
