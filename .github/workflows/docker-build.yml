@@ -16,9 +16,6 @@ on:
       cache_scope:
         type: string
         required: true
-      release_tag:
-        type: string
-        default: ''
   workflow_dispatch:
     inputs:
       platforms:
@@ -44,7 +41,6 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           PUSH: ${{ inputs.push }}
           SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           case "$PLATFORMS" in
             linux/amd64|linux/arm64|linux/amd64,linux/arm64) ;;
@@ -52,7 +48,7 @@ jobs:
           esac
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           if [[ "$PUSH" == true ]]; then
-            [[ "$GITHUB_EVENT_NAME" != workflow_dispatch || -n "$RELEASE_TAG" ]]
+            [[ "$GITHUB_EVENT_NAME" != workflow_dispatch ]]
           fi
           matrix=$(jq -cn --arg platforms "$PLATFORMS" '{include: ($platforms | split(",") | map({platform: ., arch: split("/")[1], runner: (if . == "linux/arm64" then "ubuntu-24.04-arm" else "ubuntu-24.04" end)}))}')
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
@@ -183,7 +179,6 @@ jobs:
         env:
           IMAGE: ${{ needs.prepare.outputs.image }}
           SOURCE_SHA: ${{ inputs.source_sha }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
           PLATFORMS: ${{ inputs.platforms }}
         run: |
           set -euo pipefail
@@ -196,23 +191,14 @@ jobs:
           expected=1
           [[ "$PLATFORMS" != *,* ]] || expected=2
           [[ ${#sources[@]} -eq "$expected" ]]
-          tags=(--tag "$IMAGE:sha-$SOURCE_SHA")
-          if [[ -n "$RELEASE_TAG" ]]; then
-            [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
-            version=${RELEASE_TAG#v}
-            minor=${version%.*}
-            major=${version%%.*}
-            tags+=(
-              --tag "$IMAGE:$RELEASE_TAG"
-              --tag "$IMAGE:$version"
-              --tag "$IMAGE:$minor"
-              --tag "$IMAGE:$major"
-            )
-          else
-            [[ "$GITHUB_REF" == refs/heads/main && "$GITHUB_EVENT_NAME" == push ]]
-            tags+=(--tag "$IMAGE:main" --tag "$IMAGE:latest")
-          fi
-          docker buildx imagetools create "${tags[@]}" "${sources[@]}"
+          # Main pushes publish the immutable source-SHA tag and the rolling
+          # `main` tag only. `latest` tracks the newest stable release and is
+          # re-pointed by the release workflow from this same manifest.
+          [[ "$GITHUB_REF" == refs/heads/main && "$GITHUB_EVENT_NAME" == push ]]
+          docker buildx imagetools create \
+            --tag "$IMAGE:sha-$SOURCE_SHA" \
+            --tag "$IMAGE:main" \
+            "${sources[@]}"
           digest=$(docker buildx imagetools inspect "$IMAGE:sha-$SOURCE_SHA" --format '{{.Manifest.Digest}}')
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
           echo "digest=$digest" >> "$GITHUB_OUTPUT"

@@ -24,7 +24,7 @@ version: "3.8"
 
 services:
   mikrotik-exporter:
-    image: ghcr.io/jesof/mikrotik-exporter:0.4
+    image: ghcr.io/jesof/mikrotik-exporter:0.5
     container_name: mikrotik-exporter
     restart: unless-stopped
     ports:
@@ -312,7 +312,7 @@ docker run -d \
   -e ROUTERS_CONFIG='[{"name":"main","address":"192.168.88.1:8728","username":"admin","password":"admin"}]' \
   -e COLLECTION_INTERVAL_SECONDS=30 \
   -e RUST_LOG=info \
-  ghcr.io/jesof/mikrotik-exporter:0.4
+  ghcr.io/jesof/mikrotik-exporter:0.5
 ```
 
 If `ROUTERS_CONFIG` is not set, use the legacy configuration
@@ -347,7 +347,7 @@ docker run -d \
   -e SERVER_ADDR=0.0.0.0:9090 \
   -e ROUTERS_CONFIG="$(cat routers.json)" \
   -e RUST_LOG=info \
-  ghcr.io/jesof/mikrotik-exporter:0.4
+  ghcr.io/jesof/mikrotik-exporter:0.5
 ```
 
 ### With Healthcheck
@@ -363,7 +363,7 @@ docker run -d \
   --health-timeout=10s \
   --health-retries=3 \
   --health-start-period=10s \
-  ghcr.io/jesof/mikrotik-exporter:0.4
+  ghcr.io/jesof/mikrotik-exporter:0.5
 ```
 
 ---
@@ -431,7 +431,7 @@ spec:
     spec:
       containers:
         - name: mikrotik-exporter
-          image: ghcr.io/jesof/mikrotik-exporter:0.4
+          image: ghcr.io/jesof/mikrotik-exporter:0.5
           imagePullPolicy: Always
           ports:
             - containerPort: 9090
