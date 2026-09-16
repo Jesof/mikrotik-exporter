@@ -2,8 +2,8 @@ name: Cleanup Caches
 
 on:
   schedule:
-    - cron: '0 0 * * 1'  # Запуск каждый понедельник в 00:00 UTC
-  workflow_dispatch:  # Возможность ручного запуска
+    - cron: '0 0 * * 1'  # Run every Monday at 00:00 UTC
+  workflow_dispatch:  # Allow manual runs
 
 permissions:
   actions: write
@@ -18,15 +18,15 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
-            // Порог размера кеша (8 ГБ в байтах)
-            const SIZE_THRESHOLD = 8 * 1024 * 1024 * 1024; // 8 ГБ
+            // Cache size threshold (8 GB in bytes)
+            const SIZE_THRESHOLD = 8 * 1024 * 1024 * 1024; // 8 GB
             
             console.log(`Size threshold: ${SIZE_THRESHOLD} bytes (${SIZE_THRESHOLD / (1024 * 1024 * 1024)} GB)`);
             
-            // Получаем все кеши с обработкой пагинации
+            // Fetch all caches with pagination handling
             let allCaches = [];
             let page = 1;
-            let perPage = 100; // Максимальное количество элементов на странице
+            let perPage = 100; // Maximum items per page
             let hasNext = true;
             
             while (hasNext) {
@@ -48,7 +48,7 @@ jobs:
                 page++;
               }
               
-              // Ограничиваем количество страниц для предотвращения бесконечного цикла
+              // Cap the page count to prevent an infinite loop
               if (page > 100) {
                 console.log("Reached maximum page limit, stopping pagination");
                 break;
@@ -57,7 +57,7 @@ jobs:
             
             console.log(`Total caches fetched: ${allCaches.length}`);
             
-            // Вычисляем общий размер кеша
+            // Compute the total cache size
             let totalSize = 0;
             for (const cache of allCaches) {
               totalSize += cache.size_in_bytes;
@@ -65,22 +65,22 @@ jobs:
             
             console.log(`Total cache size: ${totalSize} bytes (${(totalSize / (1024 * 1024 * 1024)).toFixed(2)} GB)`);
             
-            // Если общий размер меньше порогового значения, ничего не удаляем
+            // If the total size is below the threshold, delete nothing
             if (totalSize <= SIZE_THRESHOLD) {
               console.log("Total cache size is below threshold, no caches will be deleted");
               console.log(`Total caches deleted: 0`);
               return;
             }
             
-            // Сортируем кеши по дате создания (от самых старых к самым новым)
+            // Sort caches by creation date (oldest first)
             allCaches.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
             
-            // Удаляем кеши, начиная с самых старых, пока общий размер не станет меньше порогового значения
+            // Delete caches starting with the oldest until the total size is below the threshold
             let deletedCount = 0;
             let freedSize = 0;
             
             for (const cache of allCaches) {
-              // Проверяем, нужно ли еще удалять кеши
+              // Check whether more caches still need to be deleted
               if (totalSize - freedSize <= SIZE_THRESHOLD) {
                 break;
               }

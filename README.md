@@ -8,9 +8,9 @@
 Prometheus exporter for MikroTik RouterOS, with independent per-router collection schedules,
 connection pooling, optional verified TLS, and OpenMetrics output.
 
-This README describes the current source tree, including **unreleased breaking changes**.
-For upgrades from 0.3.3, follow the [migration guide](CHANGELOG.md#unreleased). Published 0.3.3
-packages do not include these changes.
+This README describes the current source tree, including unreleased changes. For upgrades from
+0.3.3, follow the [0.4.0 migration guide](CHANGELOG.md#040---2026-09-15). Published 0.3.3 packages
+do not include those changes.
 
 ## Quick Start
 
@@ -119,7 +119,7 @@ no built-in authentication or server-side TLS; keep them private. See [SECURITY.
 | `/metrics` | Cached OpenMetrics exposition; does not initiate router collection | 200; 500 on encoding failure |
 | `/live` | Process HTTP liveness, independent of routers | 200 while serving |
 | `/ready` | Binary initialization and shutdown readiness, independent of router freshness | 200 ready; 503 initializing/stopping |
-| `/health` | Cached per-router diagnostics; no active connectivity test | 200 healthy; 503 degraded |
+| `/health` | Per-router diagnostics from the latest collection state; no active connectivity test | 200 healthy; 503 degraded |
 
 Use `/live` for startup/liveness and `/ready` for readiness probes. Router outages should produce
 alerts, not restart loops or prevent scraping the failure metrics. The binary serves HTTP during
@@ -127,9 +127,12 @@ optional startup checks, becomes ready after initialization, and clears readines
 It supervises HTTP, startup, and collector tasks and exits on unexpected task termination.
 
 `/health` is healthy only when every router has a complete successful collection no older than
-`max(3 × collection interval, gap reset threshold)` and fewer than three consecutive errors in
-the default pool connection state. Empty configuration or no complete success is degraded.
-Use the group metrics for detailed collection failures; `/health` is not a replacement for them.
+`3 × collection interval` and fewer than three consecutive errors for that router's exact
+connection identity (address, username, password, and TLS settings). The freshness window is
+independent of `GAP_RESET_THRESHOLD_SECONDS`, which only controls counter-baseline resets, so a
+large gap-reset value cannot mask a stale router. Empty configuration or no complete success is
+degraded. Use the group metrics for detailed collection failures; `/health` is not a replacement
+for them.
 
 ## Collection Semantics
 
@@ -148,15 +151,19 @@ A critical system/interfaces failure or an invalid numeric snapshot rejects the 
 collection, marking all groups failed for that attempt. The public registry update methods expect
 already validated input; library callers must uphold that contract when supplying snapshots directly.
 
-Interface and firewall counters accumulate router deltas and handle router resets. The initial
-sample seeds the counter; after collection errors or a long gap the baseline is reset to avoid a
-recovery spike. WireGuard byte metrics remain gauges of router totals, not Prometheus counters.
+Interface and firewall counters accumulate router deltas and handle router resets. The first
+sample after startup seeds the counter with the router's cumulative value; a label that appears
+later (new or returning) starts at zero and accumulates deltas, and after collection errors or a
+long gap the baseline is reset, so recovery never produces a spike. Firewall baselines retained
+during partial snapshots keep their TTL refreshed. WireGuard byte metrics remain gauges of router
+totals, not Prometheus counters.
 
 Dynamic labels are cleaned periodically with a 30-minute TTL. Replaced `system_info` labels are
 set to zero and later expire; use `mikrotik_system_info == 1` in metadata joins. Conntrack retains
 at most **1024 series per router**, including retained partial-snapshot series, in deterministic
 `(ip_version, src_address, protocol)` order. `mikrotik_conntrack_dropped_series` counts distinct
-series from the latest usable snapshot omitted by that cap; it is a gauge, not a lifetime counter.
+series observed in the latest usable snapshot that the cap omitted; it excludes retained series
+carried over from earlier partial snapshots and is a gauge, not a lifetime counter.
 
 ## Full Metrics List
 
@@ -171,6 +178,10 @@ Labels: `router,id`; `mikrotik_interface_info` additionally has `name,comment`.
 | `mikrotik_interface_rx_errors_total`, `mikrotik_interface_tx_errors_total` | counter | Errors |
 | `mikrotik_interface_running` | gauge | 1 running, 0 stopped |
 | `mikrotik_interface_info` | gauge | Metadata, 1 current |
+
+RouterOS omits `rx-error`/`tx-error` for some interface types. When they are absent the error
+counters are left unchanged rather than forced to zero, so their series may be absent until the
+router first reports them. `InterfaceStats::rx_errors` and `tx_errors` are `Option<u64>`.
 
 ### System
 

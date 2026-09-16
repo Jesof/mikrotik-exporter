@@ -33,6 +33,9 @@ impl PooledConnectionGuard {
     }
 
     /// Get a mutable reference to the underlying connection.
+    ///
+    /// `connection` is taken only in `Drop`, so a caller always holds a live
+    /// connection until the guard is destroyed.
     pub(in crate::mikrotik) fn get_mut(&mut self) -> &mut RouterOsConnection {
         self.connection.as_mut().expect("Connection already taken")
     }

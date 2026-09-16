@@ -6,7 +6,9 @@
 //! Provides REST API endpoints for health checks and Prometheus metrics export.
 //!
 //! # Endpoints
-//! - `GET /health` — health check
+//! - `GET /live` — process liveness probe
+//! - `GET /ready` — process readiness probe (independent of router availability)
+//! - `GET /health` — per-router diagnostics
 //! - `GET /metrics` — Prometheus metrics
 
 mod handlers;
