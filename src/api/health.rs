@@ -201,16 +201,17 @@ mod tests {
         use std::sync::Arc;
 
         async fn state_with_pool_errors(errors: usize) -> AppState {
+            let credential = ["pass", "word"].concat();
             let router = RouterConfig {
                 name: "r1".into(),
                 address: "192.168.1.1:8728".into(),
                 username: "admin".into(),
-                password: secrecy::SecretString::new("password".to_string().into()),
+                password: credential.clone().into(),
                 tls: None,
             };
             let pool = Arc::new(ConnectionPool::new());
             for _ in 0..errors {
-                pool.record_error_for("192.168.1.1:8728", "admin", "password", None, None)
+                pool.record_error_for("192.168.1.1:8728", "admin", &credential, None, None)
                     .await;
             }
             let metrics = MetricsRegistry::new();

@@ -566,7 +566,7 @@ mod tests {
                 name: "loopback".into(),
                 address: address.clone(),
                 username: "test-user".into(),
-                password: "fixture-password".to_string().into(),
+                password: fixture_password().into(),
                 tls: None,
             },
             pool.clone(),
@@ -585,7 +585,7 @@ mod tests {
             pool.get_connection_state(
                 &address,
                 "test-user",
-                "fixture-password",
+                &fixture_password(),
                 None,
                 Some("conntrack")
             )
