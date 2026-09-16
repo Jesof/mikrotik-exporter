@@ -279,9 +279,6 @@ impl MetricsRegistry {
         let router_label = RouterLabels {
             router: metrics.router_name.clone(),
         };
-        let Some(uptime_secs) = parse_uptime_to_seconds(&metrics.system.uptime) else {
-            return;
-        };
         #[allow(clippy::cast_possible_wrap)]
         {
             self.system_cpu_load
@@ -293,6 +290,11 @@ impl MetricsRegistry {
             self.system_total_memory
                 .get_or_create(&router_label)
                 .set(metrics.system.total_memory as i64);
+        }
+        // Uptime is independent of the other system fields: an unparseable value
+        // must not suppress CPU, memory, or metadata updates.
+        if let Some(uptime_secs) = parse_uptime_to_seconds(&metrics.system.uptime) {
+            #[allow(clippy::cast_possible_wrap)]
             self.system_uptime_seconds
                 .get_or_create(&router_label)
                 .set(uptime_secs as i64);
