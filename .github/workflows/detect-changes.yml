@@ -64,7 +64,7 @@ jobs:
               fi ;;
           esac
           # Paths that cannot affect the compiled Rust crate or its checks.
-          non_rust='(\.md$|^docs/|^grafana/|^k8s/|^scripts/|^\.github/|^LICENSE$|^NOTICE$|^\.gitignore$|^\.gitmessage$|^\.env\.example$|^\.dockerignore$|^\.cursorrules$|^Dockerfile$|^build-docker\.sh$)'
+          non_rust='(\.md$|^docs/|^grafana/|^k8s/|^scripts/|^\.github/|^LICENSE$|^NOTICE$|^\.gitignore$|^\.gitmessage$|^\.env\.example$|^\.dockerignore$|^\.cursorrules$|^Dockerfile$|^build-docker\.sh$|^\.markdownlint-cli2\.jsonc$|^lychee\.toml$)'
           if [[ -z "$files" ]]; then
             # Schedule, manual dispatch, or an undeterminable diff: full validation.
             rust=true; workflows=true; docker=true; docs=true
@@ -76,7 +76,7 @@ jobs:
             docker=false
             if [[ "$rust" == "true" ]] || grep -qE '^(Dockerfile|build-docker\.sh|\.dockerignore)$|^\.github/workflows/docker-build\.yml$' <<<"$files"; then docker=true; fi
             docs=false
-            if grep -qE '(\.md$|^docs/)' <<<"$files"; then docs=true; fi
+            if grep -qE '(\.md$|^docs/|^\.markdownlint-cli2\.jsonc$|^lychee\.toml$)' <<<"$files"; then docs=true; fi
           fi
           echo "Changed paths:"
           printf '%s\n' "$files"
