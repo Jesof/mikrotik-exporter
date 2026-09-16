@@ -134,12 +134,15 @@ changelog entry and maintainer sign-off.
 5. PRs are **squash-merged**, one commit per PR; the squash subject must be a valid Conventional
     Commit. Delete the branch after merge.
 
-Pull requests, scheduled runs, manual runs, and pushes to `main` execute the full quality suite.
-Feature-branch pushes are intentionally covered by the pull-request run instead of repeating the
-same suite before a PR exists. `Check` is an always-run aggregate gate over Cargo Check, tests,
-formatting, Clippy, coverage, dependency/security checks, workflow validation, and Docker validation.
-It fails when a dependency fails, is cancelled, or is skipped. Preserve required check names;
-changing them requires coordinating the repository ruleset. Actions are pinned to full commit SHAs.
+Pull requests, scheduled runs, manual runs, and pushes to `main` run the quality suite with
+path-aware job selection. A `changes` job classifies the diff: when no Rust-related path changed,
+the heavy Rust steps are skipped while the required jobs still report success, and workflow and
+Docker validation run only for the files they cover. Schedules and manual runs always execute the
+full suite. Feature-branch pushes are intentionally covered by the pull-request run instead of
+repeating the same suite before a PR exists. `Check` is an always-run aggregate gate: it fails when
+any job fails or is cancelled, and it requires the Rust jobs to have run and succeeded whenever a
+Rust-related path changed. Preserve required check names; changing them requires coordinating the
+repository ruleset. Actions are pinned to full commit SHAs.
 Main image publication follows the successful aggregate gate.
 
 Automated agents need explicit user approval before commits, pushes, PR creation, merges, tags,

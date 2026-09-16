@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- CI selects jobs by changed paths: documentation and CI-only changes skip the Rust build, test,
+  and coverage steps while the required branch checks still report success. Schedules and manual
+  runs execute the full suite; a Rust-related change always runs the Rust jobs.
+
 ## [0.5.0] - 2026-09-17
 
 ### Fixed
