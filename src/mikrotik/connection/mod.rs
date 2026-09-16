@@ -50,16 +50,18 @@ impl RouterOsConnection {
         addr: &str,
         tls_config: Option<&crate::config::RouterTlsConfig>,
     ) -> Result<Self> {
+        // Resolve trust/identity before the deadline so slow trust-store loading
+        // cannot be reported as a connection timeout.
+        let connector = match tls_config {
+            Some(config) => Some((
+                tls::connector(config).await?,
+                config
+                    .server_name_for_address(addr)
+                    .map_err(AppError::Config)?,
+            )),
+            None => None,
+        };
         timeout(CONNECTION_TIMEOUT, async {
-            let connector = match tls_config {
-                Some(config) => Some((
-                    tls::connector(config).await?,
-                    config
-                        .server_name_for_address(addr)
-                        .map_err(AppError::Config)?,
-                )),
-                None => None,
-            };
             let stream = TcpStream::connect(addr)
                 .await
                 .map_err(|source| AppError::Transport {
