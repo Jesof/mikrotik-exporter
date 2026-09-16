@@ -155,8 +155,11 @@ CodeQL runs per language: the Rust analysis only for Rust changes and the Action
 workflow changes, with both running on schedules. Its query configuration lives in
 `.github/codeql/codeql-config.yml`.
 
-Main image publication follows the successful aggregate gate and runs only when a container-affecting
-path changed. A `main` push publishes the immutable `sha-<full-sha>` and rolling `main` tags. A
+Main image publication runs only when a container-affecting path changed, after the required Rust
+jobs and the pin check have succeeded. It depends on those jobs directly (rather than on `Check`)
+because a job that calls a reusable workflow is skipped whenever any job in its transitive `needs`
+chain is skipped; `Check` transitively needs the Docker validation that is deliberately skipped on
+`main`. A `main` push publishes the immutable `sha-<full-sha>` and rolling `main` tags. A
 release promotes that verified digest to `X.Y.Z`, `X.Y`, and `latest`; it never rebuilds the image,
 and `latest` moves only on a release, so it always points at the newest stable release. The
 repository must define a `RELEASE_TOKEN` secret with `contents: write` for the workflow to create the
