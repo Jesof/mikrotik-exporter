@@ -586,6 +586,7 @@ impl MetricsRegistry {
 
         let mut current_firewall_rules = HashSet::new();
         let mut current_firewall_info = HashMap::new();
+        let seed_cumulative = !self.collected_routers.contains_key(&metrics.router_name);
 
         for rule in &metrics.firewall_rules {
             let labels = FirewallRuleLabels {
@@ -611,12 +612,14 @@ impl MetricsRegistry {
                 let is_first_collection = !self.prev_firewall_rules.contains_key(&labels);
 
                 if is_first_collection {
-                    self.firewall_rule_bytes
-                        .get_or_create(&labels)
-                        .inc_by(rule.bytes);
-                    self.firewall_rule_packets
-                        .get_or_create(&labels)
-                        .inc_by(rule.packets);
+                    let bytes = self.firewall_rule_bytes.get_or_create(&labels);
+                    let packets = self.firewall_rule_packets.get_or_create(&labels);
+                    // Seed cumulative values only on the router's first
+                    // snapshot; later labels start at zero to avoid a spike.
+                    if seed_cumulative {
+                        bytes.inc_by(rule.bytes);
+                        packets.inc_by(rule.packets);
+                    }
                 } else if let Some(prev_entry) = self.prev_firewall_rules.get(&labels) {
                     let (prev_bytes, prev_packets) = *prev_entry.value();
 
@@ -648,7 +651,12 @@ impl MetricsRegistry {
         let prev_labels = prev_rules_entry.value_mut();
         if !metrics.collection_status.firewall_complete_ok() {
             // Retain missing rules, but remember newly observed rules for later cleanup.
-            current_firewall_rules.extend(prev_labels.iter().cloned());
+            // Refresh their TTL so an extended partial outage cannot expire a baseline
+            // that would otherwise be re-seeded from the full cumulative value.
+            for labels in prev_labels.iter() {
+                current_firewall_rules.insert(labels.clone());
+                self.firewall_rule_last_seen.insert(labels.clone(), now);
+            }
         }
         for stale in prev_labels.difference(&current_firewall_rules) {
             self.firewall_rule_bytes.remove(stale);
@@ -668,6 +676,8 @@ impl MetricsRegistry {
                 current_firewall_info
                     .entry(labels.clone())
                     .or_insert_with(|| info_labels.clone());
+                self.firewall_rule_info_last_seen
+                    .insert(info_labels.clone(), now);
             }
         }
         for (labels, info_labels) in prev_map.iter() {
