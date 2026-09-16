@@ -407,6 +407,7 @@ impl MetricsRegistry {
                 self.group_last_success_timestamp_seconds.remove(&labels);
             }
             self.known_routers.remove(router);
+            self.collected_routers.remove(router);
             self.last_scrape_success.remove(router);
             self.consecutive_scrape_errors.remove(router);
         }

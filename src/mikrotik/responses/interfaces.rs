@@ -26,16 +26,16 @@ pub(crate) fn parse_interfaces(
                 rx_packets: parse_u64_field(s, "rx-packet", "interface")?,
                 tx_packets: parse_u64_field(s, "tx-packet", "interface")?,
                 // RouterOS omits these counters for some interface types and versions.
+                // `None` preserves the distinction from a genuine zero so the registry
+                // does not add a full lifetime value as a delta when the field returns.
                 rx_errors: s
                     .get("rx-error")
                     .map(|_| parse_u64_field(s, "rx-error", "interface"))
-                    .transpose()?
-                    .unwrap_or_default(),
+                    .transpose()?,
                 tx_errors: s
                     .get("tx-error")
                     .map(|_| parse_u64_field(s, "tx-error", "interface"))
-                    .transpose()?
-                    .unwrap_or_default(),
+                    .transpose()?,
                 running: match required_field(s, "running")? {
                     "true" => true,
                     "false" => false,
@@ -148,8 +148,6 @@ mod tests {
             "tx-byte",
             "rx-packet",
             "tx-packet",
-            "rx-error",
-            "tx-error",
         ] {
             let mut invalid = valid.clone();
             invalid.remove(field);
@@ -173,7 +171,7 @@ mod tests {
 
         let interface = parse_interfaces(&[row]).unwrap().pop().unwrap();
 
-        assert_eq!(interface.rx_errors, 0);
-        assert_eq!(interface.tx_errors, 0);
+        assert_eq!(interface.rx_errors, None);
+        assert_eq!(interface.tx_errors, None);
     }
 }

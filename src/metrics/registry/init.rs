@@ -453,6 +453,7 @@ impl MetricsRegistry {
             group_last_success_timestamp_seconds,
             conntrack_dropped_series,
             known_routers: Arc::new(DashMap::new()),
+            collected_routers: Arc::new(DashMap::new()),
             connection_pool_size,
             connection_pool_active,
             connection_tracking_count,

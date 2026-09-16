@@ -116,8 +116,8 @@ async fn metrics_contains_router_data_after_update() {
         tx_bytes: 2000,
         rx_packets: 10,
         tx_packets: 20,
-        rx_errors: 1,
-        tx_errors: 2,
+        rx_errors: Some(1),
+        tx_errors: Some(2),
         running: true,
     };
 
@@ -187,8 +187,8 @@ async fn metrics_correctly_calculates_interface_counters() {
         tx_bytes: 2000,
         rx_packets: 10,
         tx_packets: 20,
-        rx_errors: 1,
-        tx_errors: 2,
+        rx_errors: Some(1),
+        tx_errors: Some(2),
         running: true,
     };
     let system = SystemResource {
@@ -225,12 +225,12 @@ async fn metrics_correctly_calculates_interface_counters() {
         id: "*1".to_string(),
         name: "ether1".to_string(),
         comment: "WAN".to_string(),
-        rx_bytes: 3000, // +2000
-        tx_bytes: 5000, // +3000
-        rx_packets: 25, // +15
-        tx_packets: 35, // +15
-        rx_errors: 1,   // +0
-        tx_errors: 4,   // +2
+        rx_bytes: 3000,     // +2000
+        tx_bytes: 5000,     // +3000
+        rx_packets: 25,     // +15
+        tx_packets: 35,     // +15
+        rx_errors: Some(1), // +0
+        tx_errors: Some(4), // +2
         running: true,
     };
     let metrics2 = RouterMetrics {

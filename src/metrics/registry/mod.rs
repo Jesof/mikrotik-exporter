@@ -32,8 +32,8 @@ struct InterfaceSnapshot {
     tx_bytes: u64,
     rx_packets: u64,
     tx_packets: u64,
-    rx_errors: u64,
-    tx_errors: u64,
+    rx_errors: Option<u64>,
+    tx_errors: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -69,6 +69,10 @@ pub struct MetricsRegistry {
     group_last_success_timestamp_seconds: Family<GroupLabels, Gauge>,
     conntrack_dropped_series: Family<RouterLabels, Gauge>,
     known_routers: Arc<DashMap<String, ()>>,
+    // Routers that have completed at least one metrics update. Used to seed a
+    // cumulative counter for the very first snapshot but reset (baseline) any
+    // label that appears later, avoiding a rate spike when a series returns.
+    collected_routers: Arc<DashMap<String, ()>>,
     // connection pool metrics
     connection_pool_size: Gauge,
     connection_pool_active: Gauge,
@@ -188,8 +192,8 @@ mod tests {
             tx_bytes,
             rx_packets,
             tx_packets,
-            rx_errors,
-            tx_errors,
+            rx_errors: Some(rx_errors),
+            tx_errors: Some(tx_errors),
             running,
         }
     }
