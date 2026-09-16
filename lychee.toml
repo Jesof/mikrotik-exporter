@@ -1,0 +1,13 @@
+# lychee link-checking configuration.
+# External documentation links are checked in CI; keep retries generous and
+# accept rate-limiting responses so transient provider behaviour does not fail
+# an otherwise valid change.
+max_retries = 3
+retry_wait_time = 2
+timeout = 20
+accept = [200, 206, 429]
+cache = true
+exclude = [
+  '^https?://127\.0\.0\.1',
+  '^https?://localhost',
+]

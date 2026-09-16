@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- CI selects jobs from a single reusable `Detect Changes` workflow: documentation changes run docs
+  lint (markdownlint and link checking), workflow changes run actionlint and shellcheck, container
+  or crate changes run Docker validation, and coverage runs on `main` and schedules only. Main image
+  publication runs only for container-affecting changes.
+
 ## [0.5.0] - 2026-09-17
 
 ### Fixed

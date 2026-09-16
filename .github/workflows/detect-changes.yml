@@ -1,0 +1,89 @@
+name: Detect Changes
+
+# Single source of truth for path-aware CI. Every workflow that needs to skip
+# heavy jobs uses these outputs instead of its own path filters.
+#
+# Fail-safe policy: any path that is not on the known non-Rust allowlist is
+# treated as a Rust change, so an unrecognized file still runs the full suite.
+on:
+  workflow_call:
+    outputs:
+      rust:
+        description: Paths that can affect the compiled crate or its checks
+        value: ${{ jobs.changes.outputs.rust }}
+      workflows:
+        description: CI workflow or build-script changes
+        value: ${{ jobs.changes.outputs.workflows }}
+      docker:
+        description: Container definition or crate changes
+        value: ${{ jobs.changes.outputs.docker }}
+      docs:
+        description: Markdown or documentation changes
+        value: ${{ jobs.changes.outputs.docs }}
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      rust: ${{ steps.classify.outputs.rust }}
+      workflows: ${{ steps.classify.outputs.workflows }}
+      docker: ${{ steps.classify.outputs.docker }}
+      docs: ${{ steps.classify.outputs.docs }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify changed paths
+        id: classify
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          files=""
+          case "$EVENT_NAME" in
+            pull_request)
+              # Fail-safe: if the base ref cannot be resolved, leave the list empty so the
+              # callers run the full suite instead of failing the whole workflow.
+              if git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" 2>/dev/null; then
+                files=$(git diff --name-only "origin/${BASE_REF}...HEAD" || true)
+              fi ;;
+            push)
+              if [[ "$BEFORE_SHA" =~ ^0+$ ]] || ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+                files=$(git show --name-only --pretty=format: HEAD)
+              else
+                files=$(git diff --name-only "$BEFORE_SHA" HEAD)
+              fi ;;
+          esac
+          # Paths that cannot affect the compiled Rust crate or its checks.
+          non_rust='(\.md$|^docs/|^grafana/|^k8s/|^scripts/|^\.github/|^LICENSE$|^NOTICE$|^\.gitignore$|^\.gitmessage$|^\.env\.example$|^\.dockerignore$|^\.cursorrules$|^Dockerfile$|^build-docker\.sh$)'
+          if [[ -z "$files" ]]; then
+            # Schedule, manual dispatch, or an undeterminable diff: full validation.
+            rust=true; workflows=true; docker=true; docs=true
+          else
+            rust=false
+            if grep -vE "$non_rust" <<<"$files" | grep -q .; then rust=true; fi
+            workflows=false
+            if grep -qE '^\.github/(workflows|actions|codeql)/|^build-docker\.sh$' <<<"$files"; then workflows=true; fi
+            docker=false
+            if [[ "$rust" == "true" ]] || grep -qE '^(Dockerfile|build-docker\.sh|\.dockerignore)$|^\.github/workflows/docker-build\.yml$' <<<"$files"; then docker=true; fi
+            docs=false
+            if grep -qE '(\.md$|^docs/)' <<<"$files"; then docs=true; fi
+          fi
+          echo "Changed paths:"
+          printf '%s\n' "$files"
+          echo "rust=$rust workflows=$workflows docker=$docker docs=$docs"
+          {
+            echo "rust=$rust"
+            echo "workflows=$workflows"
+            echo "docker=$docker"
+            echo "docs=$docs"
+          } >> "$GITHUB_OUTPUT"
