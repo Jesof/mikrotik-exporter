@@ -2,6 +2,7 @@
 // Copyright (c) 2025 Jesof
 
 use axum::http::StatusCode;
+use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -58,12 +59,13 @@ fn classify_router_status(
 }
 
 fn health_stale_after(state: &AppState) -> Duration {
+    // Freshness SLO: independent of GAP_RESET_THRESHOLD_SECONDS, which controls
+    // counter-baseline resets and may be configured much larger.
     Duration::from_secs(
         state
             .config
             .collection_interval_secs
             .saturating_mul(HEALTH_STALE_AFTER_COLLECTIONS)
-            .max(state.config.gap_reset_threshold_secs)
             .max(1),
     )
 }
@@ -94,7 +96,13 @@ pub(crate) async fn build_health_response(state: &AppState) -> (StatusCode, Heal
 
         let consecutive_errors = if let Some((errors, _)) = state
             .pool
-            .get_connection_state(&router.address, &router.username, None)
+            .get_connection_state(
+                &router.address,
+                &router.username,
+                router.password.expose_secret(),
+                router.tls.as_ref(),
+                None,
+            )
             .await
         {
             errors
@@ -164,5 +172,67 @@ mod tests {
             classify_router_status(1, 0, Some(Duration::from_secs(10)), Duration::from_secs(5)),
             RouterStatus::Degraded
         ));
+    }
+
+    #[test]
+    fn test_health_stale_after_ignores_gap_reset_threshold() {
+        use crate::config::Config;
+        use crate::metrics::MetricsRegistry;
+        use crate::mikrotik::ConnectionPool;
+        use std::sync::Arc;
+
+        let state = AppState {
+            config: Config {
+                collection_interval_secs: 30,
+                gap_reset_threshold_secs: 604_800,
+                ..Config::default()
+            },
+            metrics: MetricsRegistry::new(),
+            pool: Arc::new(ConnectionPool::new()),
+        };
+        assert_eq!(health_stale_after(&state), Duration::from_secs(90));
+    }
+
+    #[tokio::test]
+    async fn test_health_reflects_pool_consecutive_errors() {
+        use crate::config::{Config, RouterConfig};
+        use crate::metrics::MetricsRegistry;
+        use crate::mikrotik::ConnectionPool;
+        use std::sync::Arc;
+
+        async fn state_with_pool_errors(errors: usize) -> AppState {
+            let router = RouterConfig {
+                name: "r1".into(),
+                address: "192.168.1.1:8728".into(),
+                username: "admin".into(),
+                password: secrecy::SecretString::new("password".to_string().into()),
+                tls: None,
+            };
+            let pool = Arc::new(ConnectionPool::new());
+            for _ in 0..errors {
+                pool.record_error_for("192.168.1.1:8728", "admin", "password", None, None)
+                    .await;
+            }
+            let metrics = MetricsRegistry::new();
+            metrics.record_scrape_success(&RouterLabels {
+                router: "r1".into(),
+            });
+            AppState {
+                config: Config {
+                    routers: vec![router],
+                    ..Config::default()
+                },
+                metrics,
+                pool,
+            }
+        }
+
+        let (code, response) = build_health_response(&state_with_pool_errors(2).await).await;
+        assert_eq!(code, StatusCode::OK);
+        assert_eq!(response.status, "healthy");
+
+        let (code, response) = build_health_response(&state_with_pool_errors(3).await).await;
+        assert_eq!(code, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.status, "degraded");
     }
 }

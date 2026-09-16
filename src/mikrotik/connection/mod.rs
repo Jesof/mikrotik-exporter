@@ -812,7 +812,7 @@ mod tests {
             guard.record_result(false).await;
         }
         assert_eq!(
-            pool.get_connection_state(&address, "admin", Some("system"))
+            pool.get_connection_state(&address, "admin", &fixture_password(), None, Some("system"))
                 .await,
             Some((2, false))
         );

@@ -4,6 +4,7 @@
 use crate::config::RouterConfig;
 use crate::metrics::{MetricsRegistry, RouterLabels};
 use crate::mikrotik::{ConnectionPool, MikroTikClient, RouterMetrics};
+use secrecy::ExposeSecret;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -27,21 +28,18 @@ pub(super) async fn collect_router(
         }
     }
     metrics.record_scrape_duration(&labels, start.elapsed().as_secs_f64());
-    let mut errors = 0;
-    for group in [
-        None,
-        Some("system"),
-        Some("conntrack"),
-        Some("vpn"),
-        Some("firewall"),
-    ] {
-        if let Some((count, _)) = pool
-            .get_connection_state(&router.address, &router.username, group)
-            .await
-        {
-            errors = errors.max(count);
-        }
-    }
+    // A `None` group matches every group for this router identity, so the max
+    // consecutive error count is already aggregated.
+    let errors = pool
+        .get_connection_state(
+            &router.address,
+            &router.username,
+            router.password.expose_secret(),
+            router.tls.as_ref(),
+            None,
+        )
+        .await
+        .map_or(0, |(count, _)| count);
     metrics.update_connection_errors(&labels, errors);
 }
 
