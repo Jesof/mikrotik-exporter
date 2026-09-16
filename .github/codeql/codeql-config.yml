@@ -1,0 +1,15 @@
+name: mikrotik-exporter CodeQL config
+
+# security-extended adds the wider security query set on top of the default
+# suite. Test code is intentionally kept in scope; fixture credentials are
+# assembled without literals so the credential queries stay meaningful.
+queries:
+  - uses: security-extended
+
+# Generated, vendored, or non-crate files are out of scope for both languages.
+paths-ignore:
+  - 'target/**'
+  - 'grafana/**'
+  - 'k8s/**'
+  - 'scripts/**'
+  - '**/*.md'

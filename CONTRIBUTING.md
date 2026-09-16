@@ -151,6 +151,10 @@ pull-request run instead of repeating the same suite before a PR exists.
 the jobs relevant to the changed paths to have run and succeeded. Preserve required check names;
 changing them requires coordinating the repository ruleset. Actions are pinned to full commit SHAs.
 
+CodeQL runs per language: the Rust analysis only for Rust changes and the Actions analysis only for
+workflow changes, with both running on schedules. Its query configuration lives in
+`.github/codeql/codeql-config.yml`.
+
 Main image publication follows the successful aggregate gate and runs only when a container-affecting
 path changed.
 
