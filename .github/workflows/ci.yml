@@ -8,15 +8,9 @@ on:
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
-  workflow_call:
-    inputs:
-      source_sha:
-        description: Exact commit to validate for a release
-        type: string
-        required: true
 
 concurrency:
-  group: rust-ci-${{ github.event_name }}-${{ inputs.source_sha || github.ref }}
+  group: rust-ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -27,14 +21,21 @@ permissions:
   contents: read
 
 jobs:
+  # Path classification lives in a reusable workflow so CodeQL and this suite
+  # agree on what counts as a Rust, workflow, Docker, or docs change.
+  changes:
+    name: Detect Changes
+    uses: ./.github/workflows/detect-changes.yml
+
   cargo-check:
     name: Cargo Check
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
@@ -42,6 +43,21 @@ jobs:
           key: check-1.98.0
           save-if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
       - run: cargo check --all-targets --all-features --locked
+
+  # Compiler/MSRV pins span Cargo.toml, rust-toolchain.toml, clippy.toml, and the
+  # Docker builder, so this cheap check also runs for Dockerfile-only changes.
+  pins:
+    name: Compiler Pins
+    needs: changes
+    if: >-
+      needs.changes.outputs.rust == 'true' ||
+      needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Require consistent compiler and MSRV pins
         run: |
           python3 - <<'PY'
@@ -58,62 +74,87 @@ jobs:
           assert builder and builder[1] == version, "Docker compiler mismatch"
           PY
 
+  # `Test Suite`, `Rustfmt`, `Clippy`, `Cargo Deny`, and `Security Audit` are required branch
+  # checks, so their jobs must always report success. When no Rust path changed they skip the
+  # heavy steps and succeed immediately; when Rust changed the heavy steps must run.
   test:
     name: Test Suite
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: needs.changes.outputs.rust == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - if: needs.changes.outputs.rust == 'true'
+        uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+      - if: needs.changes.outputs.rust == 'true'
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: test-1.98.0
           save-if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
-      - run: cargo test --all-features --locked
+      - if: needs.changes.outputs.rust == 'true'
+        run: cargo test --all-features --locked
+      - if: needs.changes.outputs.rust != 'true'
+        run: echo "No Rust-related paths changed; skipping test suite"
 
   fmt:
     name: Rustfmt
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: needs.changes.outputs.rust == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+      - if: needs.changes.outputs.rust == 'true'
+        uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
         with:
           components: rustfmt
-      - run: cargo fmt --all -- --check
+      - if: needs.changes.outputs.rust == 'true'
+        run: cargo fmt --all -- --check
+      - if: needs.changes.outputs.rust != 'true'
+        run: echo "No Rust-related paths changed; skipping rustfmt"
 
   clippy:
     name: Clippy
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: needs.changes.outputs.rust == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+      - if: needs.changes.outputs.rust == 'true'
+        uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
         with:
           components: clippy
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - if: needs.changes.outputs.rust == 'true'
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: clippy-1.98.0
           save-if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
-      - run: cargo clippy --all-targets --all-features --locked -- -D warnings
+      - if: needs.changes.outputs.rust == 'true'
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+      - if: needs.changes.outputs.rust != 'true'
+        run: echo "No Rust-related paths changed; skipping clippy"
 
+  # Coverage is a main/schedule metric, not a per-PR gate: it is the longest job and is
+  # not a required check, so pull requests skip it to keep the feedback loop short.
   coverage:
     name: Code Coverage
+    needs: changes
+    if: >-
+      needs.changes.outputs.rust == 'true' &&
+      github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
@@ -133,48 +174,89 @@ jobs:
 
   deny:
     name: Cargo Deny
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: needs.changes.outputs.rust == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
-      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
+      - if: needs.changes.outputs.rust == 'true'
+        uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+      - if: needs.changes.outputs.rust == 'true'
+        uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
         with:
           tool: cargo-deny@0.20.2
-      - run: cargo deny --locked check
+      - if: needs.changes.outputs.rust == 'true'
+        run: cargo deny --locked check
+      - if: needs.changes.outputs.rust != 'true'
+        run: echo "No Rust-related paths changed; skipping cargo-deny"
 
   security-audit:
     name: Security Audit
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: needs.changes.outputs.rust == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
-      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
+      - if: needs.changes.outputs.rust == 'true'
+        uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
         with:
           tool: cargo-audit@0.22.2
-      - run: cargo audit
+      - if: needs.changes.outputs.rust == 'true'
+        run: cargo audit
+      - if: needs.changes.outputs.rust != 'true'
+        run: echo "No Rust-related paths changed; skipping security audit"
 
   workflow-lint:
     name: Workflow Validation
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
       - name: Run actionlint
         run: docker run --rm -v "$GITHUB_WORKSPACE:/repo:ro" -w /repo rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
-      - run: shellcheck build-docker.sh
+      - name: Run shellcheck on build scripts
+        run: shellcheck build-docker.sh
 
+  docs-lint:
+    name: Docs Lint
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
+        with:
+          globs: |
+            *.md
+            .github/**/*.md
+      - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          lycheeVersion: v0.24.2
+          args: --config lychee.toml --no-progress '*.md' '.github/**/*.md'
+          fail: true
+
+  # Docker validation is a single-arch smoke test on pull requests. On main the
+  # publication job performs the one multi-arch build, so validation is skipped
+  # there to avoid building the same image twice.
   docker-validation:
     name: Docker Validation
+    needs: changes
+    if: >-
+      needs.changes.outputs.docker == 'true' &&
+      !(github.event_name == 'push' && github.ref == 'refs/heads/main')
     permissions:
       contents: read
       packages: write
@@ -182,28 +264,56 @@ jobs:
       id-token: write
     uses: ./.github/workflows/docker-build.yml
     with:
-      source_sha: ${{ inputs.source_sha || github.sha }}
-      platforms: linux/amd64,linux/arm64
+      source_sha: ${{ github.sha }}
+      platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
       push: false
       cache_scope: validation-v2
 
   check:
     name: Check
     if: always()
-    needs: [cargo-check, test, fmt, clippy, coverage, deny, security-audit, workflow-lint, docker-validation]
+    needs: [changes, cargo-check, pins, test, fmt, clippy, coverage, deny, security-audit, workflow-lint, docs-lint, docker-validation]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every quality job to succeed
+      - name: Require the relevant quality jobs to have succeeded
         env:
           RESULTS: ${{ toJSON(needs) }}
+          RUST: ${{ needs.changes.outputs.rust }}
+          WORKFLOWS: ${{ needs.changes.outputs.workflows }}
+          DOCKER: ${{ needs.changes.outputs.docker }}
+          DOCS: ${{ needs.changes.outputs.docs }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          jq -e 'all(.[]; .result == "success")' <<< "$RESULTS"
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          bad=$(jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key' <<< "$RESULTS")
+          [[ -z "$bad" ]] || fail "Failing or cancelled jobs: $bad"
+          require() {
+            result=$(jq -r --arg j "$1" '.[$j].result' <<< "$RESULTS")
+            [[ "$result" == "success" ]] || fail "Required job '$1' result is '$result'"
+          }
+          require changes
+          if [[ "$RUST" == "true" ]]; then
+            for job in cargo-check test fmt clippy deny security-audit; do require "$job"; done
+            if [[ "$EVENT_NAME" != "pull_request" ]]; then require coverage; fi
+          fi
+          if [[ "$RUST" == "true" || "$DOCKER" == "true" ]]; then require pins; fi
+          if [[ "$WORKFLOWS" == "true" ]]; then require workflow-lint; fi
+          if [[ "$DOCS" == "true" ]]; then require docs-lint; fi
+          if [[ "$DOCKER" == "true" && "$EVENT_NAME" != "push" ]]; then require docker-validation; fi
+          echo "Quality gate passed (rust=$RUST workflows=$WORKFLOWS docker=$DOCKER docs=$DOCS)"
 
+  # One multi-arch build per validated main push; this is the immutable image that
+  # a later release promotes. `latest` is intentionally not moved here: it tracks
+  # the newest stable release and is re-pointed by the release workflow.
   docker-publish:
     name: Publish main image
-    needs: check
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && inputs.source_sha == ''
+    needs: [changes, check]
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.changes.outputs.docker == 'true'
     permissions:
       contents: read
       packages: write

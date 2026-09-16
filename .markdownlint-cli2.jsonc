@@ -1,0 +1,18 @@
+{
+  // markdownlint-cli2 configuration for the repository documentation.
+  "config": {
+    "default": true,
+    // Prose is hand-wrapped in several documents; enforce style, not width.
+    "MD013": false,
+    // CHANGELOG repeats "### Fixed" and similar headings per release.
+    "MD024": { "siblings_only": true },
+    // Some tables and badges intentionally use inline HTML.
+    "MD033": false,
+    // Files may start with an HTML badge or front matter.
+    "MD041": false
+  },
+  "globs": ["*.md", ".github/**/*.md"],
+  // Historical planning and release logs are excluded from the style baseline;
+  // their formatting is preserved for provenance rather than reflowed.
+  "ignores": ["target/**", "CHANGELOG.md", "ROADMAP.md"]
+}

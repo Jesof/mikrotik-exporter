@@ -47,6 +47,9 @@ coverage/
 *.profraw
 *.profdata
 
+# Link checker cache
+.lycheecache
+
 # macOS
 .DS_Store
 .AppleDouble

@@ -68,10 +68,13 @@ Update `CHANGELOG.md` under `[Unreleased]` for any user-visible change. New publ
 test in the same PR; a bug fix needs a regression test that fails before the fix.
 
 For workflow/build-script changes also run `actionlint` and `shellcheck build-docker.sh`; validate
-container changes with a local build. CI additionally runs coverage and native amd64/arm64 Docker
-validation. Report unrun checks explicitly. When changing `Cargo.toml`, use Cargo to update
-`Cargo.lock` (`cargo check`); never edit the lockfile by hand. Do not weaken license, advisory, or
-duplicate-dependency checks to make an update pass; document any narrowly approved exceptions.
+container changes with a local build. For documentation changes run `markdownlint-cli2` and the link
+checker (`lychee`) locally if available. CI additionally runs docs linting for Markdown changes,
+coverage on `main` and schedules, and native Docker validation: a single-architecture (`amd64`)
+build on pull requests and `amd64`/`arm64` on `main` and schedules. Report unrun checks explicitly.
+When changing `Cargo.toml`, use Cargo to update `Cargo.lock` (`cargo check`); never edit the lockfile
+by hand. Do not weaken license, advisory, or duplicate-dependency checks to make an update pass;
+document any narrowly approved exceptions.
 
 ## Testing
 
@@ -113,7 +116,7 @@ enable ignored tests in ordinary CI.
 [Conventional Commits](https://www.conventionalcommits.org/), lowercase, no scopes, imperative mood,
 subject ≤ 72 characters:
 
-```
+```text
 fix: validate snapshot bounds
 feat: expose WireGuard peer counters
 chore: bump dependencies
@@ -134,13 +137,22 @@ changelog entry and maintainer sign-off.
 5. PRs are **squash-merged**, one commit per PR; the squash subject must be a valid Conventional
     Commit. Delete the branch after merge.
 
-Pull requests, scheduled runs, manual runs, and pushes to `main` execute the full quality suite.
-Feature-branch pushes are intentionally covered by the pull-request run instead of repeating the
-same suite before a PR exists. `Check` is an always-run aggregate gate over Cargo Check, tests,
-formatting, Clippy, coverage, dependency/security checks, workflow validation, and Docker validation.
-It fails when a dependency fails, is cancelled, or is skipped. Preserve required check names;
+Pull requests, scheduled runs, manual runs, and pushes to `main` run the quality suite with
+path-aware job selection. A reusable `Detect Changes` workflow classifies the diff once and every
+workflow consumes its outputs: when no Rust-related path changed, the heavy Rust steps are skipped
+while the required jobs still report success; docs linting runs only for Markdown changes, workflow
+validation only for `.github/` and build-script changes, and Docker validation only for container or
+crate changes. Pull requests validate a single `amd64` image; `main` and schedules validate
+`amd64`/`arm64`. Coverage runs on `main` and schedules, not on pull requests. Schedules and manual
+runs always execute the full suite. Feature-branch pushes are intentionally covered by the
+pull-request run instead of repeating the same suite before a PR exists.
+
+`Check` is an always-run aggregate gate. It fails when any job fails or is cancelled, and it requires
+the jobs relevant to the changed paths to have run and succeeded. Preserve required check names;
 changing them requires coordinating the repository ruleset. Actions are pinned to full commit SHAs.
-Main image publication follows the successful aggregate gate.
+
+Main image publication follows the successful aggregate gate and runs only when a container-affecting
+path changed.
 
 Automated agents need explicit user approval before commits, pushes, PR creation, merges, tags,
 or publication. Approval to edit files is not approval to publish or rewrite history. Maintainer
