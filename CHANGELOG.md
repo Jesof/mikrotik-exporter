@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Published image tags: `latest` now moves only on a release and always points at the newest stable
+  release, while `main` remains the rolling `main` build. The pre-1.0 major-line `:0` tag and the
+  duplicate `vX.Y.Z` tag are no longer published; release images are promoted from the verified
+  `main` digest as `X.Y.Z` and `X.Y` and are never rebuilt.
 - CI selects jobs from a single reusable `Detect Changes` workflow: documentation changes run docs
   lint (markdownlint and link checking), workflow changes run actionlint and shellcheck, container
   or crate changes run Docker validation, and coverage runs on `main` and schedules only. CodeQL runs

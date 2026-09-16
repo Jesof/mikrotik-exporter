@@ -156,7 +156,11 @@ workflow changes, with both running on schedules. Its query configuration lives 
 `.github/codeql/codeql-config.yml`.
 
 Main image publication follows the successful aggregate gate and runs only when a container-affecting
-path changed.
+path changed. A `main` push publishes the immutable `sha-<full-sha>` and rolling `main` tags. A
+release promotes that verified digest to `X.Y.Z`, `X.Y`, and `latest`; it never rebuilds the image,
+and `latest` moves only on a release, so it always points at the newest stable release. The
+repository must define a `RELEASE_TOKEN` secret with `contents: write` for the workflow to create the
+GitHub Release; the default `GITHUB_TOKEN` cannot.
 
 Automated agents need explicit user approval before commits, pushes, PR creation, merges, tags,
 or publication. Approval to edit files is not approval to publish or rewrite history. Maintainer
@@ -202,8 +206,11 @@ The workflow resolves an existing exact annotated, signed `vX.Y.Z` tag, checks C
 Manual dispatch must run from `main` with that existing tag. Native
 Linux/macOS amd64+arm64 and Windows amd64 jobs build locked binaries; checksums and provenance
 attestations accompany release assets. Images are promoted from the same verified SHA after the
-binary release succeeds; Docker is not rebuilt during release. Do not disable provenance permissions
-or bypass these gates.
+binary release succeeds; Docker is not rebuilt during release. Promotion publishes `X.Y.Z`, `X.Y`,
+and `latest`; `latest` moves only on a release and therefore always points at the newest stable
+release. Creating the GitHub Release requires the `RELEASE_TOKEN` secret (`contents: write`) because
+the default `GITHUB_TOKEN` cannot create releases. Do not disable provenance permissions or bypass
+these gates.
 
 Crates.io publication is a separate final step (`cargo publish`) requiring explicit approval;
 the tag workflow does not publish the crate automatically.
