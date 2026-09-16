@@ -43,13 +43,17 @@ pub(crate) async fn collect_group_firewall(
         let mut section_result = conn.command(path, &[FIREWALL_PROPLIST]).await;
 
         if matches!(&section_result, Ok(rows) if rows.is_empty()) {
-            let count = conn.count_only(path).await.ok();
-
-            if count != Some(0) {
-                inconsistent_sections.push(format!("{ip_version}/{section}"));
-                section_result = Err(crate::prelude::AppError::InvalidSnapshot(
-                    "unverified empty firewall snapshot".into(),
-                ));
+            match conn.count_only(path).await {
+                Ok(0) => {}
+                Ok(_) => {
+                    inconsistent_sections.push(format!("{ip_version}/{section}"));
+                    section_result = Err(crate::prelude::AppError::InvalidSnapshot(
+                        "unverified empty firewall snapshot".into(),
+                    ));
+                }
+                // Preserve the typed cause (for example a timeout that leaves the
+                // connection dirty) instead of silently degrading to a mismatch.
+                Err(error) => section_result = Err(error),
             }
         }
 
@@ -58,9 +62,14 @@ pub(crate) async fn collect_group_firewall(
     }
 
     let has_inconsistent_snapshot = !inconsistent_sections.is_empty();
-    let success = section_results.iter().all(Result::is_ok) && !has_inconsistent_snapshot;
+    let connection_failed = section_results.iter().any(|result| {
+        result
+            .as_ref()
+            .err()
+            .is_some_and(crate::prelude::AppError::is_connection_level)
+    });
     client
-        .record_group_result(&mut guard, "firewall", success)
+        .record_group_result(&mut guard, connection_failed)
         .await;
 
     drop(guard);

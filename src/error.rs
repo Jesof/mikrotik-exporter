@@ -57,6 +57,27 @@ pub enum AppError {
     AddrParse(#[from] std::net::AddrParseError),
 }
 
+impl AppError {
+    /// Whether this error means the pooled connection itself is unusable.
+    ///
+    /// Connection-level failures (I/O, timeouts, protocol desync, fatal or
+    /// authentication rejection) must discard the connection and count toward
+    /// pool backoff. Query-level failures (a `!trap` for an unsupported table,
+    /// or an invalid snapshot) leave a protocol-clean connection reusable and
+    /// must not drive backoff.
+    pub(crate) fn is_connection_level(&self) -> bool {
+        matches!(
+            self,
+            Self::Io(_)
+                | Self::Transport { .. }
+                | Self::Timeout(_)
+                | Self::Protocol(_)
+                | Self::RouterOsFatal
+                | Self::Authentication(_)
+        )
+    }
+}
+
 impl From<Box<dyn std::error::Error + Send + Sync>> for AppError {
     fn from(error: Box<dyn std::error::Error + Send + Sync>) -> Self {
         Self::RouterOs(error.to_string())

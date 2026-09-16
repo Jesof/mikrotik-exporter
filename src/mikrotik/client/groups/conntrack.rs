@@ -41,9 +41,14 @@ pub(crate) async fn collect_group_conntrack(
     let any_success = conntrack_results
         .iter()
         .any(|(_ip_version, result)| result.is_ok());
-    let success = conntrack_results.iter().all(|(_, result)| result.is_ok());
+    let connection_failed = conntrack_results.iter().any(|(_, result)| {
+        result
+            .as_ref()
+            .err()
+            .is_some_and(crate::prelude::AppError::is_connection_level)
+    });
     client
-        .record_group_result(&mut guard, "conntrack", success)
+        .record_group_result(&mut guard, connection_failed)
         .await;
 
     drop(guard);

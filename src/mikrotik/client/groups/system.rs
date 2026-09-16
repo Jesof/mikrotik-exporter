@@ -38,6 +38,14 @@ pub(crate) async fn collect_group_system_interfaces(
 
     let interfaces_count = interfaces_result.as_ref().map_or(0, Vec::len);
     let empty_interfaces_anomaly = interfaces_count == 0 && interfaces_result.is_ok();
+    let connection_failed = [&system_result, &interfaces_result]
+        .into_iter()
+        .any(|result| {
+            result
+                .as_ref()
+                .err()
+                .is_some_and(crate::prelude::AppError::is_connection_level)
+        });
     let parsed = system_result
         .and_then(|rows| parse_system(&rows))
         .and_then(|system| {
@@ -49,7 +57,6 @@ pub(crate) async fn collect_group_system_interfaces(
             }
             Ok(super::super::SystemInterfacesGroupData { system, interfaces })
         });
-    let success = parsed.is_ok();
 
     if empty_interfaces_anomaly {
         tracing::warn!(
@@ -60,7 +67,7 @@ pub(crate) async fn collect_group_system_interfaces(
     }
 
     client
-        .record_group_result(&mut guard, "system", success)
+        .record_group_result(&mut guard, connection_failed)
         .await;
 
     drop(guard);
