@@ -307,9 +307,15 @@ jobs:
   # One multi-arch build per validated main push; this is the immutable image that
   # a later release promotes. `latest` is intentionally not moved here: it tracks
   # the newest stable release and is re-pointed by the release workflow.
+  #
+  # A job that calls a reusable workflow is skipped when any job in its transitive
+  # `needs` chain is skipped, and neither `always()` nor `!cancelled()` overrides
+  # that. `check` transitively needs `docker-validation`, which is deliberately
+  # skipped on main, so `docker-publish` depends only on jobs that always run for a
+  # container-affecting change: the required Rust jobs and the pin check.
   docker-publish:
     name: Publish main image
-    needs: [changes, check]
+    needs: [changes, test, fmt, clippy, deny, security-audit, pins]
     if: >-
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
