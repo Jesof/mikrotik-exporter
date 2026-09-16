@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Container images carry standard OCI labels (`title`, `description`, `source`, `licenses`) for
+  registry and tooling metadata.
+
 ### Changed
 - Published image tags: `latest` now moves only on a release and always points at the newest stable
   release, while `main` remains the rolling `main` build. The pre-1.0 major-line `:0` tag and the

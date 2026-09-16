@@ -19,6 +19,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     cp "target/$target/release/mikrotik-exporter" /app/mikrotik-exporter
 
 FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+LABEL org.opencontainers.image.title="MikroTik Exporter" \
+      org.opencontainers.image.description="Prometheus exporter for MikroTik RouterOS devices" \
+      org.opencontainers.image.source="https://github.com/Jesof/mikrotik-exporter" \
+      org.opencontainers.image.licenses="MIT"
 RUN apk upgrade --no-cache && \
     apk add --no-cache ca-certificates libgcc && \
     addgroup -g 1000 mikrotik && \
