@@ -44,6 +44,7 @@ struct VpnCertGroupData {
     certificate_stats: Vec<CertificateStats>,
     wireguard_ok: bool,
     certificates_ok: bool,
+    certificates_complete: bool,
 }
 
 #[derive(Default)]
@@ -173,10 +174,12 @@ impl MikroTikClient {
                 } else {
                     FetchState::Failed
                 },
-                certificates: if vpn_group.certificates_ok {
+                certificates: if !vpn_group.certificates_ok {
+                    FetchState::Failed
+                } else if vpn_group.certificates_complete {
                     FetchState::Complete
                 } else {
-                    FetchState::Failed
+                    FetchState::Partial
                 },
                 firewall: if !firewall_ok {
                     FetchState::Failed
@@ -195,16 +198,20 @@ impl MikroTikClient {
         })
     }
 
+    /// Record the connection health outcome for a collection group.
+    ///
+    /// Only connection-level failures discard the connection and increment the
+    /// pool backoff counter. Query-level failures (for example a `!trap` for an
+    /// optional table) leave a reusable connection and must not affect backoff.
     async fn record_group_result(
         &self,
         guard: &mut PooledConnectionGuard,
-        _group: &'static str,
-        success: bool,
+        connection_failed: bool,
     ) {
-        if !success {
+        if connection_failed {
             guard.mark_broken();
         }
-        guard.record_result(success).await;
+        guard.record_result(!connection_failed).await;
     }
 
     /// Test connectivity to the router.

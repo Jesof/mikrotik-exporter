@@ -8,7 +8,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Treat per-query failures (an unsupported or denied firewall, WireGuard, or
+  conntrack table) as group-level results instead of connection errors: a
+  protocol-clean connection is no longer discarded and pool backoff no longer
+  suppresses the whole group, including its usable data.
+- Preserve firewall counter baselines during partial snapshots by refreshing their
+  TTL, and reset (rather than re-seed) interface and firewall counters when a
+  series returns after being removed. This removes a recovery spike in
+  `mikrotik_interface_*_total` and `mikrotik_firewall_rule_*_total`.
+- Keep `count-only` failures typed instead of silently degrading an empty-table
+  check, so a timeout cannot masquerade as a count mismatch and desynchronize the
+  rest of the group.
+- Update CPU, memory, and system metadata even when `uptime` is unparseable,
+  instead of dropping all system metrics.
+- Report the certificate group as usable but incomplete (success 1, completeness 0)
+  when RouterOS returns certificate rows but none carries a usable expiry, instead
+  of exporting a silent empty Complete snapshot. A router whose certificates all
+  lack a usable expiry (for example only a template) shows the group as partial;
+  routers with at least one usable row are unaffected.
+
 ### Changed
+- **Breaking:** `InterfaceStats::rx_errors` and `tx_errors` are now `Option<u64>`.
+  `None` means the router did not report the counter, so the exported
+  `mikrotik_interface_rx_errors_total` / `mikrotik_interface_tx_errors_total` is left
+  unchanged rather than reset to zero, and a counter that appears later establishes a
+  baseline instead of adding the router's lifetime count. Update library callers that
+  construct `InterfaceStats` or read these fields.
+- `/health` freshness is `3 × collection interval`, independent of
+  `GAP_RESET_THRESHOLD_SECONDS`; consecutive errors are matched against the full
+  router connection identity (address, username, password, TLS).
+- Cache the verified TLS trust store/connector per router and resolve it outside
+  the connection deadline, so loading system roots cannot surface as a connect
+  timeout.
 - CI runs on pull requests, schedules, manual dispatches, and `main` pushes instead of repeating
   the full quality suite on every feature-branch push.
 - Release recovery is repeatable for an existing tag, and release images expose exact, minor-line,
@@ -18,6 +50,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tests, and promote the already scanned immutable Docker image instead of rebuilding it.
 - Release tags must be annotated and cryptographically signed; Dependabot auto-merge excludes CI,
   release, Docker, and dependency configuration files.
+
+### Breaking Migration
+
+`0.5.0` compatibility changes. Metric names, units, types, and labels are unchanged.
+
+- **Rust API:** `InterfaceStats::rx_errors` and `tx_errors` are now `Option<u64>`. Library callers
+  that construct `InterfaceStats` or read these fields must handle `None`. `None` means RouterOS
+  did not report the counter, so `mikrotik_interface_rx_errors_total` /
+  `mikrotik_interface_tx_errors_total` keep their previous value (or stay absent) instead of being
+  reset to zero.
+- **`/health` freshness:** healthy requires a complete success no older than
+  `3 × COLLECTION_INTERVAL_SECONDS`, independent of `GAP_RESET_THRESHOLD_SECONDS`. Alerts or probes
+  that relied on the previous `max(3 × interval, gap reset threshold)` window must be updated.
+- **Certificate completeness:** the `certificates` group can report success with completeness `0`
+  when rows are returned without a usable expiry. Alerting that treats
+  `mikrotik_group_collection_success == 1` as data-present should also check
+  `mikrotik_group_collection_complete` for the `certificates` group.
 
 ## [0.4.0] - 2026-09-15
 
@@ -92,8 +141,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking Migration
 
-These changes are unreleased; no package version or release tag is changed here. Upgrade exporter,
-dashboards, recording rules, alerts, and library callers together. Old metric names are not aliases:
+Upgrade exporter, dashboards, recording rules, alerts, and library callers together. Old metric
+names are not aliases:
 
 | Old metric | New metric | Value conversion |
 | --- | --- | --- |

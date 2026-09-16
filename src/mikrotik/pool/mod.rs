@@ -84,6 +84,11 @@ mod tests {
         ["invalid", "-fixture"].concat()
     }
 
+    /// Empty credential used by the test record helpers.
+    fn fixture_credential() -> String {
+        String::new()
+    }
+
     #[test]
     fn test_connection_state_new() {
         let state = ConnectionState::new();
@@ -211,7 +216,7 @@ mod tests {
         pool.record_error("192.168.1.1", "admin", None).await;
 
         let result = pool
-            .get_connection_state("192.168.1.1", "admin", None)
+            .get_connection_state("192.168.1.1", "admin", &fixture_credential(), None, None)
             .await;
         assert!(result.is_some());
 
@@ -231,7 +236,7 @@ mod tests {
             .await;
 
         let result = pool
-            .get_connection_state("192.168.1.1", "admin", None)
+            .get_connection_state("192.168.1.1", "admin", &fixture_credential(), None, None)
             .await;
 
         assert!(result.is_some());
@@ -252,10 +257,22 @@ mod tests {
         pool.cleanup_states(&active).await;
 
         let system_state = pool
-            .get_connection_state("192.168.1.1:8728", "admin", Some("system"))
+            .get_connection_state(
+                "192.168.1.1:8728",
+                "admin",
+                &fixture_credential(),
+                None,
+                Some("system"),
+            )
             .await;
         let firewall_state = pool
-            .get_connection_state("192.168.1.1:8728", "admin", Some("firewall"))
+            .get_connection_state(
+                "192.168.1.1:8728",
+                "admin",
+                &fixture_credential(),
+                None,
+                Some("firewall"),
+            )
             .await;
 
         assert!(system_state.is_some());

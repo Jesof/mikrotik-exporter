@@ -10,6 +10,8 @@ use crate::metrics::labels::{
 };
 use crate::metrics::parsers::parse_uptime_to_seconds;
 use crate::mikrotik::{InterfaceStats, RouterMetrics, WireGuardPeerStats};
+use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::family::Family;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use tokio::time::Instant;
 
@@ -62,6 +64,8 @@ impl MetricsRegistry {
         self.update_wireguard_metrics(metrics, now);
         self.update_certificate_metrics(metrics, now);
         self.update_firewall_metrics(metrics, now, apply_counters);
+        self.collected_routers
+            .insert(metrics.router_name.clone(), ());
     }
 
     fn process_interface_counters(
@@ -69,57 +73,94 @@ impl MetricsRegistry {
         iface: &InterfaceStats,
         labels: &InterfaceLabels,
         apply_counters: bool,
+        seed_cumulative: bool,
     ) {
-        if apply_counters {
-            let is_first_collection = !self.prev_iface.contains_key(labels);
-
-            if is_first_collection {
-                self.interface_rx_bytes
-                    .get_or_create(labels)
-                    .inc_by(iface.rx_bytes);
-                self.interface_tx_bytes
-                    .get_or_create(labels)
-                    .inc_by(iface.tx_bytes);
-                self.interface_rx_packets
-                    .get_or_create(labels)
-                    .inc_by(iface.rx_packets);
-                self.interface_tx_packets
-                    .get_or_create(labels)
-                    .inc_by(iface.tx_packets);
-                self.interface_rx_errors
-                    .get_or_create(labels)
-                    .inc_by(iface.rx_errors);
-                self.interface_tx_errors
-                    .get_or_create(labels)
-                    .inc_by(iface.tx_errors);
-            } else if let Some(snapshot) = self.prev_iface.get(labels) {
-                let snapshot = *snapshot.value();
-                self.interface_rx_bytes
-                    .get_or_create(labels)
-                    .inc_by(counter_delta(iface.rx_bytes, snapshot.rx_bytes));
-                self.interface_tx_bytes
-                    .get_or_create(labels)
-                    .inc_by(counter_delta(iface.tx_bytes, snapshot.tx_bytes));
-                self.interface_rx_packets
-                    .get_or_create(labels)
-                    .inc_by(counter_delta(iface.rx_packets, snapshot.rx_packets));
-                self.interface_tx_packets
-                    .get_or_create(labels)
-                    .inc_by(counter_delta(iface.tx_packets, snapshot.tx_packets));
-                self.interface_rx_errors
-                    .get_or_create(labels)
-                    .inc_by(counter_delta(iface.rx_errors, snapshot.rx_errors));
-                self.interface_tx_errors
-                    .get_or_create(labels)
-                    .inc_by(counter_delta(iface.tx_errors, snapshot.tx_errors));
+        let previous = self.prev_iface.get(labels).map(|entry| *entry.value());
+        let required: [(&Family<InterfaceLabels, Counter>, u64, Option<u64>); 4] = [
+            (
+                &self.interface_rx_bytes,
+                iface.rx_bytes,
+                previous.map(|snapshot| snapshot.rx_bytes),
+            ),
+            (
+                &self.interface_tx_bytes,
+                iface.tx_bytes,
+                previous.map(|snapshot| snapshot.tx_bytes),
+            ),
+            (
+                &self.interface_rx_packets,
+                iface.rx_packets,
+                previous.map(|snapshot| snapshot.rx_packets),
+            ),
+            (
+                &self.interface_tx_packets,
+                iface.tx_packets,
+                previous.map(|snapshot| snapshot.tx_packets),
+            ),
+        ];
+        for (family, current, previous_value) in required {
+            let counter = family.get_or_create(labels);
+            if !apply_counters {
+                continue;
             }
-        } else {
-            let _ = self.interface_rx_bytes.get_or_create(labels);
-            let _ = self.interface_tx_bytes.get_or_create(labels);
-            let _ = self.interface_rx_packets.get_or_create(labels);
-            let _ = self.interface_tx_packets.get_or_create(labels);
-            let _ = self.interface_rx_errors.get_or_create(labels);
-            let _ = self.interface_tx_errors.get_or_create(labels);
+            if let Some(previous_value) = previous_value {
+                counter.inc_by(counter_delta(current, previous_value));
+            } else if previous.is_none() && seed_cumulative {
+                // Seed the router's cumulative value only on the first snapshot
+                // after startup. A label that appears later starts at zero so
+                // Prometheus sees a counter reset instead of a jump.
+                counter.inc_by(current);
+            }
+        }
+
+        self.process_optional_interface_counter(
+            &self.interface_rx_errors,
+            iface.rx_errors,
+            labels,
+            previous.and_then(|snapshot| snapshot.rx_errors),
+            apply_counters,
+            seed_cumulative,
+        );
+        self.process_optional_interface_counter(
+            &self.interface_tx_errors,
+            iface.tx_errors,
+            labels,
+            previous.and_then(|snapshot| snapshot.tx_errors),
+            apply_counters,
+            seed_cumulative,
+        );
+    }
+
+    /// Apply a counter the router reports only for some interface types.
+    ///
+    /// `None` means the router did not report the counter, so the previously
+    /// exported value is left untouched. The first reported value for an
+    /// existing interface establishes a baseline instead of adding the whole
+    /// lifetime count as a delta.
+    fn process_optional_interface_counter(
+        &self,
+        family: &Family<InterfaceLabels, Counter>,
+        current: Option<u64>,
+        labels: &InterfaceLabels,
+        previous: Option<u64>,
+        apply_counters: bool,
+        seed_cumulative: bool,
+    ) {
+        let Some(current) = current else {
+            return;
+        };
+        let counter = family.get_or_create(labels);
+        if !apply_counters {
+            return;
+        }
+        match previous {
+            Some(previous) => {
+                counter.inc_by(counter_delta(current, previous));
+            }
+            None if seed_cumulative && !self.prev_iface.contains_key(labels) => {
+                counter.inc_by(current);
+            }
+            None => {}
         }
     }
 
@@ -200,6 +241,7 @@ impl MetricsRegistry {
         }
 
         let mut current_interface_info = HashMap::new();
+        let seed_cumulative = !self.collected_routers.contains_key(&metrics.router_name);
 
         for iface in &metrics.interfaces {
             let labels = InterfaceLabels {
@@ -216,7 +258,7 @@ impl MetricsRegistry {
             current_interface_info.insert(labels.clone(), info_labels.clone());
 
             // Process different types of metrics
-            self.process_interface_counters(iface, &labels, apply_counters);
+            self.process_interface_counters(iface, &labels, apply_counters, seed_cumulative);
             self.process_interface_gauges(iface, &labels);
             self.process_interface_info(iface, &labels, &info_labels, now);
         }
@@ -237,9 +279,6 @@ impl MetricsRegistry {
         let router_label = RouterLabels {
             router: metrics.router_name.clone(),
         };
-        let Some(uptime_secs) = parse_uptime_to_seconds(&metrics.system.uptime) else {
-            return;
-        };
         #[allow(clippy::cast_possible_wrap)]
         {
             self.system_cpu_load
@@ -251,6 +290,11 @@ impl MetricsRegistry {
             self.system_total_memory
                 .get_or_create(&router_label)
                 .set(metrics.system.total_memory as i64);
+        }
+        // Uptime is independent of the other system fields: an unparseable value
+        // must not suppress CPU, memory, or metadata updates.
+        if let Some(uptime_secs) = parse_uptime_to_seconds(&metrics.system.uptime) {
+            #[allow(clippy::cast_possible_wrap)]
             self.system_uptime_seconds
                 .get_or_create(&router_label)
                 .set(uptime_secs as i64);
@@ -544,6 +588,7 @@ impl MetricsRegistry {
 
         let mut current_firewall_rules = HashSet::new();
         let mut current_firewall_info = HashMap::new();
+        let seed_cumulative = !self.collected_routers.contains_key(&metrics.router_name);
 
         for rule in &metrics.firewall_rules {
             let labels = FirewallRuleLabels {
@@ -569,12 +614,14 @@ impl MetricsRegistry {
                 let is_first_collection = !self.prev_firewall_rules.contains_key(&labels);
 
                 if is_first_collection {
-                    self.firewall_rule_bytes
-                        .get_or_create(&labels)
-                        .inc_by(rule.bytes);
-                    self.firewall_rule_packets
-                        .get_or_create(&labels)
-                        .inc_by(rule.packets);
+                    let bytes = self.firewall_rule_bytes.get_or_create(&labels);
+                    let packets = self.firewall_rule_packets.get_or_create(&labels);
+                    // Seed cumulative values only on the router's first
+                    // snapshot; later labels start at zero to avoid a spike.
+                    if seed_cumulative {
+                        bytes.inc_by(rule.bytes);
+                        packets.inc_by(rule.packets);
+                    }
                 } else if let Some(prev_entry) = self.prev_firewall_rules.get(&labels) {
                     let (prev_bytes, prev_packets) = *prev_entry.value();
 
@@ -606,7 +653,12 @@ impl MetricsRegistry {
         let prev_labels = prev_rules_entry.value_mut();
         if !metrics.collection_status.firewall_complete_ok() {
             // Retain missing rules, but remember newly observed rules for later cleanup.
-            current_firewall_rules.extend(prev_labels.iter().cloned());
+            // Refresh their TTL so an extended partial outage cannot expire a baseline
+            // that would otherwise be re-seeded from the full cumulative value.
+            for labels in prev_labels.iter() {
+                current_firewall_rules.insert(labels.clone());
+                self.firewall_rule_last_seen.insert(labels.clone(), now);
+            }
         }
         for stale in prev_labels.difference(&current_firewall_rules) {
             self.firewall_rule_bytes.remove(stale);
@@ -626,6 +678,8 @@ impl MetricsRegistry {
                 current_firewall_info
                     .entry(labels.clone())
                     .or_insert_with(|| info_labels.clone());
+                self.firewall_rule_info_last_seen
+                    .insert(info_labels.clone(), now);
             }
         }
         for (labels, info_labels) in prev_map.iter() {

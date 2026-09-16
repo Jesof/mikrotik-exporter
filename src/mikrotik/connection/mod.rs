@@ -50,16 +50,18 @@ impl RouterOsConnection {
         addr: &str,
         tls_config: Option<&crate::config::RouterTlsConfig>,
     ) -> Result<Self> {
+        // Resolve trust/identity before the deadline so slow trust-store loading
+        // cannot be reported as a connection timeout.
+        let connector = match tls_config {
+            Some(config) => Some((
+                tls::connector(config).await?,
+                config
+                    .server_name_for_address(addr)
+                    .map_err(AppError::Config)?,
+            )),
+            None => None,
+        };
         timeout(CONNECTION_TIMEOUT, async {
-            let connector = match tls_config {
-                Some(config) => Some((
-                    tls::connector(config).await?,
-                    config
-                        .server_name_for_address(addr)
-                        .map_err(AppError::Config)?,
-                )),
-                None => None,
-            };
             let stream = TcpStream::connect(addr)
                 .await
                 .map_err(|source| AppError::Transport {
@@ -471,6 +473,134 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_optional_table_trap_does_not_drive_backoff() {
+        use crate::config::RouterConfig;
+        use crate::mikrotik::client::MikroTikClient;
+        use std::sync::Arc;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let server = tokio::spawn(async move {
+            let mut peers = tokio::task::JoinSet::new();
+            for _ in 0..4 {
+                let stream = listener.accept().await.unwrap().0;
+                peers.spawn(async move {
+                    let mut peer = RouterOsConnection {
+                        stream: Box::new(stream),
+                        dirty: false,
+                    };
+                    loop {
+                        let (path, attributes) =
+                            match peer.read_sentence(&mut ResponseBudget::default()).await {
+                                Ok(sentence) => sentence,
+                                Err(AppError::Transport { source, .. })
+                                    if source.kind() == std::io::ErrorKind::UnexpectedEof =>
+                                {
+                                    break;
+                                }
+                                Err(error) => panic!("invalid production request: {error}"),
+                            };
+                        if attributes.contains_key("count-only") {
+                            send(&mut peer, &["!done", "=ret=0"]).await;
+                            continue;
+                        }
+                        match path.as_str() {
+                            "/system/resource/print" => {
+                                send(
+                                    &mut peer,
+                                    &[
+                                        "!re",
+                                        "=uptime=1d",
+                                        "=cpu-load=25",
+                                        "=free-memory=512",
+                                        "=total-memory=1024",
+                                        "=version=7.10",
+                                        "=board-name=test",
+                                    ],
+                                )
+                                .await;
+                            }
+                            "/interface/print" => {
+                                send(
+                                    &mut peer,
+                                    &[
+                                        "!re",
+                                        "=.id=*1",
+                                        "=name=ether1",
+                                        "=running=true",
+                                        "=rx-byte=1000",
+                                        "=tx-byte=2000",
+                                        "=rx-packet=10",
+                                        "=tx-packet=20",
+                                        "=rx-error=0",
+                                        "=tx-error=0",
+                                    ],
+                                )
+                                .await;
+                            }
+                            "/ip/firewall/connection/print" => {
+                                send(
+                                    &mut peer,
+                                    &["!re", "=src-address=192.0.2.1:1234", "=protocol=tcp"],
+                                )
+                                .await;
+                            }
+                            "/ipv6/firewall/connection/print" => {
+                                send(&mut peer, &["!trap", "=message=no such command prefix"])
+                                    .await;
+                            }
+                            _ => {}
+                        }
+                        send(&mut peer, &["!done"]).await;
+                    }
+                });
+            }
+            while let Some(result) = peers.join_next().await {
+                result.unwrap();
+            }
+        });
+
+        let pool = Arc::new(ConnectionPool::new());
+        let client = MikroTikClient::with_pool(
+            RouterConfig {
+                name: "loopback".into(),
+                address: address.clone(),
+                username: "test-user".into(),
+                password: fixture_password().into(),
+                tls: None,
+            },
+            pool.clone(),
+        );
+
+        for _ in 0..2 {
+            let snapshot = tokio::time::timeout(Duration::from_secs(5), client.collect_metrics())
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(snapshot.collection_status.conntrack_ok());
+            assert!(!snapshot.collection_status.conntrack_complete_ok());
+            assert!(!snapshot.connection_tracking.is_empty());
+        }
+        assert_eq!(
+            pool.get_connection_state(
+                &address,
+                "test-user",
+                &fixture_password(),
+                None,
+                Some("conntrack")
+            )
+            .await,
+            Some((0, true))
+        );
+        drop(client);
+        drop(pool);
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
     async fn test_traps_drained_through_done_before_next_command() {
         let (mut client, mut peer) = pair().await;
         let server = tokio::spawn(async move {
@@ -812,7 +942,7 @@ mod tests {
             guard.record_result(false).await;
         }
         assert_eq!(
-            pool.get_connection_state(&address, "admin", Some("system"))
+            pool.get_connection_state(&address, "admin", &fixture_password(), None, Some("system"))
                 .await,
             Some((2, false))
         );

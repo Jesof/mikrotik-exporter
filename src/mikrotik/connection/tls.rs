@@ -3,7 +3,8 @@
 
 use crate::config::RouterTlsConfig;
 use crate::prelude::{AppError, Result};
-use std::sync::Arc;
+use dashmap::DashMap;
+use std::sync::{Arc, OnceLock};
 use tokio_rustls::TlsConnector;
 use tokio_rustls::rustls::{
     ClientConfig, RootCertStore,
@@ -11,7 +12,27 @@ use tokio_rustls::rustls::{
     pki_types::{CertificateDer, pem::PemObject},
 };
 
+/// Process-wide cache of verified TLS connectors keyed by router TLS settings.
+///
+/// Building the connector loads the trust store (including system roots from
+/// disk); caching keeps that out of the per-connection connect deadline and
+/// avoids repeating it on every reconnect. Configuration changes require a
+/// restart, matching the documented configuration model.
+fn connector_cache() -> &'static DashMap<RouterTlsConfig, TlsConnector> {
+    static CACHE: OnceLock<DashMap<RouterTlsConfig, TlsConnector>> = OnceLock::new();
+    CACHE.get_or_init(DashMap::new)
+}
+
 pub(super) async fn connector(tls: &RouterTlsConfig) -> Result<TlsConnector> {
+    if let Some(cached) = connector_cache().get(tls) {
+        return Ok(cached.clone());
+    }
+    let connector = build_connector(tls).await?;
+    connector_cache().insert(tls.clone(), connector.clone());
+    Ok(connector)
+}
+
+async fn build_connector(tls: &RouterTlsConfig) -> Result<TlsConnector> {
     let mut roots = RootCertStore::empty();
     if let Some(path) = &tls.ca_file {
         let pem = tokio::fs::read(path)

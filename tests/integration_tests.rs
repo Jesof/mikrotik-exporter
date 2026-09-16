@@ -134,7 +134,7 @@ async fn test_metrics_are_retrievable_through_public_http_api() {
     );
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn test_collector_shutdown_cancels_inflight_router_io() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap().to_string();

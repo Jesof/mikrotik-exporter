@@ -13,8 +13,8 @@ pub struct InterfaceStats {
     pub tx_bytes: u64,
     pub rx_packets: u64,
     pub tx_packets: u64,
-    pub rx_errors: u64,
-    pub tx_errors: u64,
+    pub rx_errors: Option<u64>,
+    pub tx_errors: Option<u64>,
     pub running: bool,
 }
 
@@ -352,8 +352,8 @@ mod tests {
             tx_bytes: 2000,
             rx_packets: 10,
             tx_packets: 20,
-            rx_errors: 0,
-            tx_errors: 0,
+            rx_errors: Some(0),
+            tx_errors: Some(0),
             running: true,
         };
 
@@ -395,8 +395,8 @@ mod tests {
                 tx_bytes: 2000,
                 rx_packets: 10,
                 tx_packets: 20,
-                rx_errors: 0,
-                tx_errors: 0,
+                rx_errors: Some(0),
+                tx_errors: Some(0),
                 running: true,
             }],
             system: SystemResource {
@@ -467,8 +467,8 @@ mod tests {
             tx_bytes: 2000,
             rx_packets: 10,
             tx_packets: 20,
-            rx_errors: 0,
-            tx_errors: 0,
+            rx_errors: Some(0),
+            tx_errors: Some(0),
             running: true,
         };
 

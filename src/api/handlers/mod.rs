@@ -7,6 +7,9 @@
 //!
 //! This module implements the HTTP API handlers for the exporter:
 //!
+//! - **`/live`** and **`/ready`** (registered directly in `api`): process probes,
+//!   independent of router availability
+//!
 //! - **`/health`** (`health_check`): Health check endpoint with router availability
 //!   - Returns HTTP 200 when all routers are healthy
 //!   - Returns HTTP 503 when any router is degraded

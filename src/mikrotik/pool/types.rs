@@ -26,6 +26,14 @@ impl From<&str> for Credential {
     }
 }
 
+impl Credential {
+    /// Compare against a plaintext password without exposing the stored secret.
+    pub(super) fn matches(&self, password: &str) -> bool {
+        use secrecy::ExposeSecret;
+        self.0.expose_secret() == password
+    }
+}
+
 impl PartialEq for Credential {
     fn eq(&self, other: &Self) -> bool {
         use secrecy::ExposeSecret;
