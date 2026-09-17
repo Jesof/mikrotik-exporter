@@ -162,8 +162,9 @@ chain is skipped; `Check` transitively needs the Docker validation that is delib
 `main`. A `main` push publishes the immutable `sha-<full-sha>` and rolling `main` tags. A
 release promotes that verified digest to `X.Y.Z`, `X.Y`, and `latest`; it never rebuilds the image,
 and `latest` moves only on a release, so it always points at the newest stable release. The
-repository must define a `RELEASE_TOKEN` secret with `contents: write` for the workflow to create the
-GitHub Release; the default `GITHUB_TOKEN` cannot.
+repository must define the `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY` secrets for a GitHub App
+with `Contents: Read and write` installed on the repository; the workflow mints a short-lived
+installation token to create the GitHub Release, because the default `GITHUB_TOKEN` cannot.
 
 Automated agents need explicit user approval before commits, pushes, PR creation, merges, tags,
 or publication. Approval to edit files is not approval to publish or rewrite history. Maintainer
@@ -211,9 +212,9 @@ Linux/macOS amd64+arm64 and Windows amd64 jobs build locked binaries; checksums 
 attestations accompany release assets. Images are promoted from the same verified SHA after the
 binary release succeeds; Docker is not rebuilt during release. Promotion publishes `X.Y.Z`, `X.Y`,
 and `latest`; `latest` moves only on a release and therefore always points at the newest stable
-release. Creating the GitHub Release requires the `RELEASE_TOKEN` secret (`contents: write`) because
-the default `GITHUB_TOKEN` cannot create releases. Do not disable provenance permissions or bypass
-these gates.
+release. Creating the GitHub Release uses a short-lived token minted from the `RELEASE_APP_ID` /
+`RELEASE_APP_PRIVATE_KEY` GitHub App secrets (`Contents: Read and write`) because the default
+`GITHUB_TOKEN` cannot create releases. Do not disable provenance permissions or bypass these gates.
 
 Crates.io publication is a separate final step (`cargo publish`) requiring explicit approval;
 the tag workflow does not publish the crate automatically.
