@@ -8,114 +8,32 @@ mod init;
 mod scrape;
 mod update;
 
+pub(crate) mod domains;
+
 use dashmap::DashMap;
-use prometheus_client::metrics::counter::Counter;
-use prometheus_client::metrics::family::Family;
-use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
-use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
 use tokio::sync::Mutex;
-use tokio::time::Instant;
 
-use crate::metrics::labels::{
-    CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels, FirewallRuleLabels, GroupLabels,
-    InterfaceInfoLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardPeerInfoLabels,
-    WireGuardPeerLabels,
+use crate::metrics::registry::domains::{
+    certificate::CertificateDomain, conntrack::ConntrackDomain, firewall::FirewallDomain,
+    interface::InterfaceDomain, pool::PoolDomain, scrape::ScrapeDomain, system::SystemDomain,
+    wireguard::WireGuardDomain,
 };
-
-type FloatGauge = Gauge<f64, AtomicU64>;
-const CONNTRACK_SERIES_LIMIT_PER_ROUTER: usize = 1024;
-
-#[derive(Clone, Copy)]
-struct InterfaceSnapshot {
-    rx_bytes: u64,
-    tx_bytes: u64,
-    rx_packets: u64,
-    tx_packets: u64,
-    rx_errors: Option<u64>,
-    tx_errors: Option<u64>,
-}
 
 #[derive(Clone)]
 pub struct MetricsRegistry {
     registry: Arc<Mutex<Registry>>,
-    // counters (delta-applied)
-    interface_rx_bytes: Family<InterfaceLabels, Counter>,
-    interface_tx_bytes: Family<InterfaceLabels, Counter>,
-    interface_rx_packets: Family<InterfaceLabels, Counter>,
-    interface_tx_packets: Family<InterfaceLabels, Counter>,
-    interface_rx_errors: Family<InterfaceLabels, Counter>,
-    interface_tx_errors: Family<InterfaceLabels, Counter>,
-    // firewall rule counters (delta-applied)
-    firewall_rule_bytes: Family<FirewallRuleLabels, Counter>,
-    firewall_rule_packets: Family<FirewallRuleLabels, Counter>,
-    // gauges
-    interface_running: Family<InterfaceLabels, Gauge>,
-    system_cpu_load: Family<RouterLabels, FloatGauge>,
-    system_free_memory: Family<RouterLabels, Gauge>,
-    system_total_memory: Family<RouterLabels, Gauge>,
-    system_info: Family<SystemInfoLabels, Gauge>,
-    system_uptime_seconds: Family<RouterLabels, Gauge>,
-    // scrape status counters
-    scrape_success: Family<RouterLabels, Counter>,
-    scrape_errors: Family<RouterLabels, Counter>,
-    // scrape timing metrics
-    scrape_duration_seconds: Family<RouterLabels, FloatGauge>,
-    scrape_last_success_timestamp_seconds: Family<RouterLabels, Gauge>,
-    connection_consecutive_errors: Family<RouterLabels, Gauge>,
-    collection_cycle_duration_seconds: FloatGauge,
-    group_collection_success: Family<GroupLabels, Gauge>,
-    group_collection_complete: Family<GroupLabels, Gauge>,
-    group_last_success_timestamp_seconds: Family<GroupLabels, Gauge>,
-    conntrack_dropped_series: Family<RouterLabels, Gauge>,
+    interface: InterfaceDomain,
+    system: SystemDomain,
+    conntrack: ConntrackDomain,
+    wireguard: WireGuardDomain,
+    certificate: CertificateDomain,
+    firewall: FirewallDomain,
+    scrape: ScrapeDomain,
+    pool: PoolDomain,
     known_routers: Arc<DashMap<String, ()>>,
-    // Routers that have completed at least one metrics update. Used to seed a
-    // cumulative counter for the very first snapshot but reset (baseline) any
-    // label that appears later, avoiding a rate spike when a series returns.
     collected_routers: Arc<DashMap<String, ()>>,
-    // connection pool metrics
-    connection_pool_size: Gauge,
-    connection_pool_active: Gauge,
-    // connection tracking metrics
-    connection_tracking_count: Family<ConntrackLabels, Gauge>,
-    conntrack_active_series: Family<RouterLabels, Gauge>,
-    conntrack_update_duration_seconds: Family<RouterLabels, FloatGauge>,
-    // WireGuard metrics
-    wireguard_peer_rx_bytes: Family<WireGuardPeerLabels, Gauge>,
-    wireguard_peer_tx_bytes: Family<WireGuardPeerLabels, Gauge>,
-    wireguard_peer_latest_handshake: Family<WireGuardPeerLabels, Gauge>,
-    wireguard_peer_info: Family<WireGuardPeerInfoLabels, Gauge>,
-    // certificate metrics
-    certificate_days_until_expiry: Family<CertificateLabels, Gauge>,
-    // interface info
-    interface_info: Family<InterfaceInfoLabels, Gauge>,
-    // firewall info
-    firewall_rule_info: Family<FirewallRuleInfoLabels, Gauge>,
-
-    prev_iface: Arc<DashMap<InterfaceLabels, InterfaceSnapshot>>,
-    prev_firewall_rules: Arc<DashMap<FirewallRuleLabels, (u64, u64)>>,
-    prev_conntrack: Arc<DashMap<String, HashSet<ConntrackLabels>>>,
-    prev_system_info: Arc<DashMap<String, SystemInfoLabels>>,
-    prev_wireguard_peers: Arc<DashMap<String, HashSet<WireGuardPeerLabels>>>,
-    prev_wireguard_peer_info:
-        Arc<DashMap<String, HashMap<WireGuardPeerLabels, WireGuardPeerInfoLabels>>>,
-    prev_interface_info: Arc<DashMap<String, HashMap<InterfaceLabels, InterfaceInfoLabels>>>,
-    prev_firewall_rule_info:
-        Arc<DashMap<String, HashMap<FirewallRuleLabels, FirewallRuleInfoLabels>>>,
-    prev_certificates: Arc<DashMap<String, HashSet<CertificateLabels>>>,
-    prev_firewall_rules_by_router: Arc<DashMap<String, HashSet<FirewallRuleLabels>>>,
-    conntrack_last_seen: Arc<DashMap<ConntrackLabels, Instant>>,
-    firewall_rule_last_seen: Arc<DashMap<FirewallRuleLabels, Instant>>,
-    firewall_rule_info_last_seen: Arc<DashMap<FirewallRuleInfoLabels, Instant>>,
-    wireguard_peer_last_seen: Arc<DashMap<WireGuardPeerLabels, Instant>>,
-    wireguard_peer_info_last_seen: Arc<DashMap<WireGuardPeerInfoLabels, Instant>>,
-    certificate_last_seen: Arc<DashMap<CertificateLabels, Instant>>,
-    interface_info_last_seen: Arc<DashMap<InterfaceInfoLabels, Instant>>,
-    system_info_last_seen: Arc<DashMap<SystemInfoLabels, Instant>>,
-    last_scrape_success: Arc<DashMap<String, Instant>>,
-    consecutive_scrape_errors: Arc<DashMap<String, u32>>,
 }
 
 impl Default for MetricsRegistry {
@@ -127,11 +45,13 @@ impl Default for MetricsRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::RouterLabels;
     use crate::mikrotik::{
         CertificateStats, CollectionStatus, CollectionStatusParts, ConnectionTrackingStats,
         FetchState, FirewallRuleStats, InterfaceStats, RouterMetrics, SystemResource,
         WireGuardPeerStats,
     };
+    use tokio::time::Instant;
 
     fn make_router_metrics(
         router_name: &str,
@@ -246,11 +166,12 @@ mod tests {
             router: "router1".into(),
         };
         registry.record_group_status(&labels, &CollectionStatus::default());
-        let group = GroupLabels {
+        let group = crate::metrics::labels::GroupLabels {
             router: labels.router.clone(),
             group: "conntrack",
         };
         registry
+            .scrape
             .group_last_success_timestamp_seconds
             .get_or_create(&group)
             .set(123);
@@ -261,6 +182,7 @@ mod tests {
         registry.record_group_status(&labels, &status);
         assert_eq!(
             registry
+                .scrape
                 .group_collection_success
                 .get_or_create(&group)
                 .get(),
@@ -268,6 +190,7 @@ mod tests {
         );
         assert_eq!(
             registry
+                .scrape
                 .group_collection_complete
                 .get_or_create(&group)
                 .get(),
@@ -275,6 +198,7 @@ mod tests {
         );
         assert_eq!(
             registry
+                .scrape
                 .group_last_success_timestamp_seconds
                 .get_or_create(&group)
                 .get(),
@@ -284,6 +208,7 @@ mod tests {
         registry.record_scrape_error(&labels);
         assert_eq!(
             registry
+                .scrape
                 .group_collection_success
                 .get_or_create(&group)
                 .get(),
@@ -291,6 +216,7 @@ mod tests {
         );
         assert_eq!(
             registry
+                .scrape
                 .group_last_success_timestamp_seconds
                 .get_or_create(&group)
                 .get(),
@@ -307,17 +233,21 @@ mod tests {
             .map(|i| make_conntrack(&format!("10.0.{}.{}", i / 256, i % 256), "tcp", 1, "ipv4"))
             .collect();
         registry.update_metrics(&snapshot);
-        let first = registry.prev_conntrack.get("router1").unwrap().clone();
-        assert_eq!(first.len(), CONNTRACK_SERIES_LIMIT_PER_ROUTER);
+        let first = registry.conntrack.prev.get("router1").unwrap().clone();
+        assert_eq!(
+            first.len(),
+            super::domains::conntrack::SERIES_LIMIT_PER_ROUTER
+        );
         snapshot.connection_tracking.reverse();
         registry.update_metrics(&snapshot);
-        assert_eq!(*registry.prev_conntrack.get("router1").unwrap(), first);
+        assert_eq!(*registry.conntrack.prev.get("router1").unwrap(), first);
         let labels = RouterLabels {
             router: "router1".into(),
         };
         assert_eq!(
             registry
-                .conntrack_dropped_series
+                .conntrack
+                .dropped_series
                 .get_or_create(&labels)
                 .get(),
             76
@@ -335,8 +265,8 @@ mod tests {
                 .collect();
             registry.update_metrics(&snapshot);
             assert_eq!(
-                registry.conntrack_last_seen.len(),
-                CONNTRACK_SERIES_LIMIT_PER_ROUTER
+                registry.conntrack.last_seen.len(),
+                super::domains::conntrack::SERIES_LIMIT_PER_ROUTER
             );
             let encoded = registry.encode_metrics().await.unwrap();
             assert_eq!(
@@ -344,14 +274,14 @@ mod tests {
                     .lines()
                     .filter(|line| line.starts_with("mikrotik_connection_tracking_count{"))
                     .count(),
-                CONNTRACK_SERIES_LIMIT_PER_ROUTER
+                super::domains::conntrack::SERIES_LIMIT_PER_ROUTER
             );
             snapshot.collection_status = CollectionStatus::from_parts(CollectionStatusParts {
                 conntrack: FetchState::Partial,
                 ..Default::default()
             });
         }
-        registry.cleanup_stale_routers(&HashSet::new());
+        registry.cleanup_stale_routers(&std::collections::HashSet::new());
         assert!(!registry.encode_metrics().await.unwrap().contains("router1"));
     }
 
@@ -361,19 +291,19 @@ mod tests {
         let mut snapshot =
             make_router_metrics("router1", Vec::new(), make_system("7.10", "board", "1d"));
         registry.update_metrics(&snapshot);
-        let old = registry.prev_system_info.get("router1").unwrap().clone();
-        registry.system_info_last_seen.insert(
+        let old = registry.system.prev_info.get("router1").unwrap().clone();
+        registry.system.info_last_seen.insert(
             old.clone(),
             Instant::now() - std::time::Duration::from_secs(100),
         );
         snapshot.system.version = "7.11".into();
         registry.update_metrics(&snapshot);
         registry.cleanup_expired_dynamic_labels(std::time::Duration::from_secs(60));
-        assert!(!registry.system_info_last_seen.contains_key(&old));
+        assert!(!registry.system.info_last_seen.contains_key(&old));
         let encoded = registry.encode_metrics().await.unwrap();
         assert!(!encoded.contains("version=\"7.10\""));
         assert!(encoded.contains("version=\"7.11\""));
-        registry.cleanup_stale_routers(&HashSet::new());
+        registry.cleanup_stale_routers(&std::collections::HashSet::new());
         assert!(!registry.encode_metrics().await.unwrap().contains("router1"));
     }
 
@@ -384,13 +314,13 @@ mod tests {
             make_router_metrics("router1", Vec::new(), make_system("7.10", "board", "1d"));
         snapshot.connection_tracking = vec![make_conntrack("192.0.2.1", "tcp", 1, "ipv4")];
         registry.update_metrics(&snapshot);
-        let labels = ConntrackLabels {
+        let labels = crate::metrics::labels::ConntrackLabels {
             router: "router1".into(),
             src_address: "192.0.2.1".into(),
             protocol: "tcp".into(),
             ip_version: "ipv4".into(),
         };
-        registry.conntrack_last_seen.insert(
+        registry.conntrack.last_seen.insert(
             labels.clone(),
             Instant::now() - std::time::Duration::from_secs(100),
         );
@@ -401,11 +331,12 @@ mod tests {
         snapshot.connection_tracking.clear();
         registry.update_metrics(&snapshot);
         registry.cleanup_expired_dynamic_labels(std::time::Duration::from_secs(60));
-        assert!(!registry.conntrack_last_seen.contains_key(&labels));
-        assert!(registry.prev_conntrack.get("router1").unwrap().is_empty());
+        assert!(!registry.conntrack.last_seen.contains_key(&labels));
+        assert!(registry.conntrack.prev.get("router1").unwrap().is_empty());
         assert_eq!(
             registry
-                .conntrack_active_series
+                .conntrack
+                .active_series
                 .get_or_create(&RouterLabels {
                     router: "router1".into()
                 })
@@ -420,7 +351,7 @@ mod tests {
         registry.initialize_router_metrics(&RouterLabels {
             router: "never-connected".into(),
         });
-        registry.cleanup_stale_routers(&HashSet::new());
+        registry.cleanup_stale_routers(&std::collections::HashSet::new());
         assert!(
             !registry
                 .encode_metrics()
@@ -435,8 +366,9 @@ mod tests {
         let registry = MetricsRegistry::new();
         assert_eq!(
             registry
-                .interface_rx_bytes
-                .get_or_create(&InterfaceLabels {
+                .interface
+                .rx_bytes
+                .get_or_create(&crate::metrics::labels::InterfaceLabels {
                     router: "test".to_string(),
                     id: "*1".to_string(),
                 })
@@ -458,7 +390,7 @@ mod tests {
         registry.update_metrics(&snapshot);
         snapshot.interfaces.clear();
         registry.update_metrics(&snapshot);
-        assert!(registry.prev_iface.is_empty());
+        assert!(registry.interface.prev.is_empty());
         assert!(
             !registry
                 .encode_metrics()
@@ -489,11 +421,11 @@ mod tests {
         snapshot.wireguard_peers[0].comment = "new".into();
         snapshot.firewall_rules[0].comment = "new".into();
         registry.update_metrics(&snapshot);
-        registry.cleanup_stale_routers(&HashSet::new());
+        registry.cleanup_stale_routers(&std::collections::HashSet::new());
         assert!(!registry.encode_metrics().await.unwrap().contains("router1"));
-        assert!(registry.interface_info_last_seen.is_empty());
-        assert!(registry.wireguard_peer_info_last_seen.is_empty());
-        assert!(registry.firewall_rule_info_last_seen.is_empty());
+        assert!(registry.interface.info_last_seen.is_empty());
+        assert!(registry.wireguard.peer_info_last_seen.is_empty());
+        assert!(registry.firewall.rule_info_last_seen.is_empty());
     }
 
     #[tokio::test]
@@ -505,24 +437,24 @@ mod tests {
 
         registry.update_metrics(&metrics);
 
-        let labels = InterfaceLabels {
+        let labels = crate::metrics::labels::InterfaceLabels {
             router: "router1".to_string(),
             id: "*1".to_string(),
         };
         assert_eq!(
-            registry.interface_rx_bytes.get_or_create(&labels).get(),
+            registry.interface.rx_bytes.get_or_create(&labels).get(),
             1000
         );
         assert_eq!(
-            registry.interface_tx_bytes.get_or_create(&labels).get(),
+            registry.interface.tx_bytes.get_or_create(&labels).get(),
             2000
         );
         assert_eq!(
-            registry.interface_rx_packets.get_or_create(&labels).get(),
+            registry.interface.rx_packets.get_or_create(&labels).get(),
             10
         );
         assert_eq!(
-            registry.interface_tx_packets.get_or_create(&labels).get(),
+            registry.interface.tx_packets.get_or_create(&labels).get(),
             20
         );
     }
@@ -541,24 +473,24 @@ mod tests {
         let metrics2 = make_router_metrics("router1", vec![iface2], system2);
         registry.update_metrics(&metrics2);
 
-        let labels = InterfaceLabels {
+        let labels = crate::metrics::labels::InterfaceLabels {
             router: "router1".to_string(),
             id: "*1".to_string(),
         };
         assert_eq!(
-            registry.interface_rx_bytes.get_or_create(&labels).get(),
+            registry.interface.rx_bytes.get_or_create(&labels).get(),
             1500
         );
         assert_eq!(
-            registry.interface_tx_bytes.get_or_create(&labels).get(),
+            registry.interface.tx_bytes.get_or_create(&labels).get(),
             2500
         );
         assert_eq!(
-            registry.interface_rx_packets.get_or_create(&labels).get(),
+            registry.interface.rx_packets.get_or_create(&labels).get(),
             15
         );
         assert_eq!(
-            registry.interface_tx_packets.get_or_create(&labels).get(),
+            registry.interface.tx_packets.get_or_create(&labels).get(),
             25
         );
     }
@@ -572,12 +504,12 @@ mod tests {
         let metrics1 = make_router_metrics("router1", vec![iface1], system1);
         registry.update_metrics_baseline(&metrics1);
 
-        let labels = InterfaceLabels {
+        let labels = crate::metrics::labels::InterfaceLabels {
             router: "router1".to_string(),
             id: "*1".to_string(),
         };
-        assert_eq!(registry.interface_rx_bytes.get_or_create(&labels).get(), 0);
-        assert_eq!(registry.interface_tx_bytes.get_or_create(&labels).get(), 0);
+        assert_eq!(registry.interface.rx_bytes.get_or_create(&labels).get(), 0);
+        assert_eq!(registry.interface.tx_bytes.get_or_create(&labels).get(), 0);
 
         let iface2 = make_interface("*1", "ether1", "WAN", 1500, 2600, 15, 26, 0, 0, true);
         let system2 = make_system("7.10", "RB750Gr3", "1d");
@@ -585,11 +517,11 @@ mod tests {
         registry.update_metrics(&metrics2);
 
         assert_eq!(
-            registry.interface_rx_bytes.get_or_create(&labels).get(),
+            registry.interface.rx_bytes.get_or_create(&labels).get(),
             500
         );
         assert_eq!(
-            registry.interface_tx_bytes.get_or_create(&labels).get(),
+            registry.interface.tx_bytes.get_or_create(&labels).get(),
             600
         );
     }
@@ -624,24 +556,26 @@ mod tests {
                 .is_none()
         );
 
-        let iface_labels = InterfaceLabels {
+        let iface_labels = crate::metrics::labels::InterfaceLabels {
             router: "router1".to_string(),
             id: "*1".to_string(),
         };
         assert_eq!(
             registry
-                .interface_running
+                .interface
+                .running
                 .get_or_create(&iface_labels)
                 .get(),
             0
         );
         assert!(
-            (registry.system_cpu_load.get_or_create(&router_label).get() - 0.1).abs()
+            (registry.system.cpu_load.get_or_create(&router_label).get() - 0.1).abs()
                 < f64::EPSILON
         );
         assert_eq!(
             registry
-                .interface_rx_bytes
+                .interface
+                .rx_bytes
                 .get_or_create(&iface_labels)
                 .get(),
             1000
@@ -675,18 +609,20 @@ mod tests {
 
         assert_eq!(
             registry
-                .interface_running
+                .interface
+                .running
                 .get_or_create(&iface_labels)
                 .get(),
             1
         );
         assert!(
-            (registry.system_cpu_load.get_or_create(&router_label).get() - 0.55).abs()
+            (registry.system.cpu_load.get_or_create(&router_label).get() - 0.55).abs()
                 < f64::EPSILON
         );
         assert_eq!(
             registry
-                .interface_rx_bytes
+                .interface
+                .rx_bytes
                 .get_or_create(&iface_labels)
                 .get(),
             1000,
@@ -707,13 +643,14 @@ mod tests {
 
         assert_eq!(
             registry
-                .interface_rx_bytes
+                .interface
+                .rx_bytes
                 .get_or_create(&iface_labels)
                 .get(),
             1200
         );
         assert!(
-            (registry.system_cpu_load.get_or_create(&router_label).get() - 0.6).abs()
+            (registry.system.cpu_load.get_or_create(&router_label).get() - 0.6).abs()
                 < f64::EPSILON
         );
     }
@@ -732,28 +669,28 @@ mod tests {
         let metrics2 = make_router_metrics("router1", vec![iface2], system2);
         registry.update_metrics(&metrics2);
 
-        let labels = InterfaceLabels {
+        let labels = crate::metrics::labels::InterfaceLabels {
             router: "router1".to_string(),
             id: "*1".to_string(),
         };
         assert_eq!(
-            registry.interface_rx_bytes.get_or_create(&labels).get(),
+            registry.interface.rx_bytes.get_or_create(&labels).get(),
             6000
         );
         assert_eq!(
-            registry.interface_tx_bytes.get_or_create(&labels).get(),
+            registry.interface.tx_bytes.get_or_create(&labels).get(),
             8000
         );
         assert_eq!(
-            registry.interface_rx_packets.get_or_create(&labels).get(),
+            registry.interface.rx_packets.get_or_create(&labels).get(),
             60
         );
         assert_eq!(
-            registry.interface_tx_packets.get_or_create(&labels).get(),
+            registry.interface.tx_packets.get_or_create(&labels).get(),
             80
         );
-        assert_eq!(registry.interface_rx_errors.get_or_create(&labels).get(), 2);
-        assert_eq!(registry.interface_tx_errors.get_or_create(&labels).get(), 3);
+        assert_eq!(registry.interface.rx_errors.get_or_create(&labels).get(), 2);
+        assert_eq!(registry.interface.tx_errors.get_or_create(&labels).get(), 3);
     }
 
     #[tokio::test]
@@ -828,11 +765,11 @@ mod tests {
             router: "router1".to_string(),
         };
 
-        assert_eq!(registry.scrape_success.get_or_create(&labels).get(), 0);
+        assert_eq!(registry.scrape.success.get_or_create(&labels).get(), 0);
         registry.record_scrape_success(&labels);
-        assert_eq!(registry.scrape_success.get_or_create(&labels).get(), 1);
+        assert_eq!(registry.scrape.success.get_or_create(&labels).get(), 1);
         registry.record_scrape_success(&labels);
-        assert_eq!(registry.scrape_success.get_or_create(&labels).get(), 2);
+        assert_eq!(registry.scrape.success.get_or_create(&labels).get(), 2);
     }
 
     #[test]
@@ -842,11 +779,11 @@ mod tests {
             router: "router1".to_string(),
         };
 
-        assert_eq!(registry.scrape_errors.get_or_create(&labels).get(), 0);
+        assert_eq!(registry.scrape.errors.get_or_create(&labels).get(), 0);
         registry.record_scrape_error(&labels);
-        assert_eq!(registry.scrape_errors.get_or_create(&labels).get(), 1);
+        assert_eq!(registry.scrape.errors.get_or_create(&labels).get(), 1);
         registry.record_scrape_error(&labels);
-        assert_eq!(registry.scrape_errors.get_or_create(&labels).get(), 2);
+        assert_eq!(registry.scrape.errors.get_or_create(&labels).get(), 2);
     }
 
     #[test]
@@ -854,12 +791,12 @@ mod tests {
         let registry = MetricsRegistry::new();
 
         registry.update_pool_stats(10, 5);
-        assert_eq!(registry.connection_pool_size.get(), 10);
-        assert_eq!(registry.connection_pool_active.get(), 5);
+        assert_eq!(registry.pool.size.get(), 10);
+        assert_eq!(registry.pool.active.get(), 5);
 
         registry.update_pool_stats(20, 8);
-        assert_eq!(registry.connection_pool_size.get(), 20);
-        assert_eq!(registry.connection_pool_active.get(), 8);
+        assert_eq!(registry.pool.size.get(), 20);
+        assert_eq!(registry.pool.active.get(), 8);
     }
 
     #[test]
@@ -867,10 +804,14 @@ mod tests {
         let registry = MetricsRegistry::new();
 
         registry.record_collection_cycle_duration(0.012);
-        assert!((registry.collection_cycle_duration_seconds.get() - 0.012).abs() < f64::EPSILON);
+        assert!(
+            (registry.scrape.collection_cycle_duration_seconds.get() - 0.012).abs() < f64::EPSILON
+        );
 
         registry.record_collection_cycle_duration(1.234);
-        assert!((registry.collection_cycle_duration_seconds.get() - 1.234).abs() < f64::EPSILON);
+        assert!(
+            (registry.scrape.collection_cycle_duration_seconds.get() - 1.234).abs() < f64::EPSILON
+        );
     }
 
     #[test]
@@ -883,6 +824,7 @@ mod tests {
         registry.update_connection_errors(&labels, 0);
         assert_eq!(
             registry
+                .scrape
                 .connection_consecutive_errors
                 .get_or_create(&labels)
                 .get(),
@@ -892,6 +834,7 @@ mod tests {
         registry.update_connection_errors(&labels, 3);
         assert_eq!(
             registry
+                .scrape
                 .connection_consecutive_errors
                 .get_or_create(&labels)
                 .get(),
@@ -909,25 +852,25 @@ mod tests {
         let metrics = make_router_metrics("router1", vec![iface1, iface2], system);
         registry.update_metrics(&metrics);
 
-        let labels1 = InterfaceLabels {
+        let labels1 = crate::metrics::labels::InterfaceLabels {
             router: "router1".to_string(),
             id: "*1".to_string(),
         };
-        let labels2 = InterfaceLabels {
+        let labels2 = crate::metrics::labels::InterfaceLabels {
             router: "router1".to_string(),
             id: "*2".to_string(),
         };
 
         assert_eq!(
-            registry.interface_rx_bytes.get_or_create(&labels1).get(),
+            registry.interface.rx_bytes.get_or_create(&labels1).get(),
             1000
         );
         assert_eq!(
-            registry.interface_rx_bytes.get_or_create(&labels2).get(),
+            registry.interface.rx_bytes.get_or_create(&labels2).get(),
             3000
         );
-        assert_eq!(registry.interface_running.get_or_create(&labels1).get(), 1);
-        assert_eq!(registry.interface_running.get_or_create(&labels2).get(), 0);
+        assert_eq!(registry.interface.running.get_or_create(&labels1).get(), 1);
+        assert_eq!(registry.interface.running.get_or_create(&labels2).get(), 0);
     }
 
     #[tokio::test]
@@ -950,19 +893,21 @@ mod tests {
         };
 
         assert!(
-            (registry.system_cpu_load.get_or_create(&router_label).get() - 0.5).abs()
+            (registry.system.cpu_load.get_or_create(&router_label).get() - 0.5).abs()
                 < f64::EPSILON
         );
         assert_eq!(
             registry
-                .system_free_memory
+                .system
+                .free_memory
                 .get_or_create(&router_label)
                 .get(),
             512 * 1024 * 1024
         );
         assert_eq!(
             registry
-                .system_total_memory
+                .system
+                .total_memory
                 .get_or_create(&router_label)
                 .get(),
             1024 * 1024 * 1024
@@ -975,7 +920,6 @@ mod tests {
         let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
         let system = make_system("7.10", "RB750Gr3", "1d2h3m4s");
 
-        // First update for router1 with TCP connections
         let mut metrics1 = make_router_metrics("router1", vec![iface.clone()], system.clone());
         metrics1.connection_tracking = vec![
             make_conntrack("192.168.1.1", "tcp", 100, "ipv4"),
@@ -983,7 +927,6 @@ mod tests {
         ];
         registry.update_metrics(&metrics1);
 
-        // First update for router2 with different connections
         let mut metrics2 = make_router_metrics("router2", vec![iface.clone()], system.clone());
         metrics2.connection_tracking = vec![
             make_conntrack("10.0.0.1", "tcp", 200, "ipv4"),
@@ -991,26 +934,25 @@ mod tests {
         ];
         registry.update_metrics(&metrics2);
 
-        // Check that both routers have their metrics
-        let labels1_tcp = ConntrackLabels {
+        let labels1_tcp = crate::metrics::labels::ConntrackLabels {
             router: "router1".to_string(),
             src_address: "192.168.1.1".to_string(),
             protocol: "tcp".to_string(),
             ip_version: "ipv4".to_string(),
         };
-        let labels1_udp = ConntrackLabels {
+        let labels1_udp = crate::metrics::labels::ConntrackLabels {
             router: "router1".to_string(),
             src_address: "192.168.1.1".to_string(),
             protocol: "udp".to_string(),
             ip_version: "ipv4".to_string(),
         };
-        let labels2_tcp = ConntrackLabels {
+        let labels2_tcp = crate::metrics::labels::ConntrackLabels {
             router: "router2".to_string(),
             src_address: "10.0.0.1".to_string(),
             protocol: "tcp".to_string(),
             ip_version: "ipv4".to_string(),
         };
-        let labels2_icmp = ConntrackLabels {
+        let labels2_icmp = crate::metrics::labels::ConntrackLabels {
             router: "router2".to_string(),
             src_address: "10.0.0.1".to_string(),
             protocol: "icmp".to_string(),
@@ -1018,67 +960,40 @@ mod tests {
         };
 
         assert_eq!(
-            registry
-                .connection_tracking_count
-                .get_or_create(&labels1_tcp)
-                .get(),
+            registry.conntrack.count.get_or_create(&labels1_tcp).get(),
             100
         );
         assert_eq!(
-            registry
-                .connection_tracking_count
-                .get_or_create(&labels1_udp)
-                .get(),
+            registry.conntrack.count.get_or_create(&labels1_udp).get(),
             50
         );
         assert_eq!(
-            registry
-                .connection_tracking_count
-                .get_or_create(&labels2_tcp)
-                .get(),
+            registry.conntrack.count.get_or_create(&labels2_tcp).get(),
             200
         );
         assert_eq!(
-            registry
-                .connection_tracking_count
-                .get_or_create(&labels2_icmp)
-                .get(),
+            registry.conntrack.count.get_or_create(&labels2_icmp).get(),
             10
         );
 
-        // Second update for router1: remove UDP, keep TCP
         metrics1.connection_tracking = vec![make_conntrack("192.168.1.1", "tcp", 150, "ipv4")];
         registry.update_metrics(&metrics1);
 
-        // Check that router1's UDP was reset to 0, but TCP updated
         assert_eq!(
-            registry
-                .connection_tracking_count
-                .get_or_create(&labels1_tcp)
-                .get(),
+            registry.conntrack.count.get_or_create(&labels1_tcp).get(),
             150
         );
         assert_eq!(
-            registry
-                .connection_tracking_count
-                .get_or_create(&labels1_udp)
-                .get(),
+            registry.conntrack.count.get_or_create(&labels1_udp).get(),
             0
         );
 
-        // CRITICAL: Check that router2's metrics are NOT affected
         assert_eq!(
-            registry
-                .connection_tracking_count
-                .get_or_create(&labels2_tcp)
-                .get(),
+            registry.conntrack.count.get_or_create(&labels2_tcp).get(),
             200
         );
         assert_eq!(
-            registry
-                .connection_tracking_count
-                .get_or_create(&labels2_icmp)
-                .get(),
+            registry.conntrack.count.get_or_create(&labels2_icmp).get(),
             10
         );
     }
@@ -1102,14 +1017,16 @@ mod tests {
 
         assert_eq!(
             registry
-                .conntrack_active_series
+                .conntrack
+                .active_series
                 .get_or_create(&router_labels)
                 .get(),
             2
         );
         assert!(
             registry
-                .conntrack_update_duration_seconds
+                .conntrack
+                .update_duration_seconds
                 .get_or_create(&router_labels)
                 .get()
                 >= 0.0
@@ -1138,14 +1055,16 @@ mod tests {
             };
             assert_eq!(
                 registry
-                    .conntrack_active_series
+                    .conntrack
+                    .active_series
                     .get_or_create(&router_labels)
                     .get(),
                 3
             );
             assert!(
                 registry
-                    .conntrack_update_duration_seconds
+                    .conntrack
+                    .update_duration_seconds
                     .get_or_create(&router_labels)
                     .get()
                     >= 0.0
@@ -1178,13 +1097,13 @@ mod tests {
             vec![make_conntrack("192.168.1.1", "tcp", 150, "ipv4")];
         registry.update_metrics(&metrics_partial);
 
-        let labels_tcp = ConntrackLabels {
+        let labels_tcp = crate::metrics::labels::ConntrackLabels {
             router: "router1".to_string(),
             src_address: "192.168.1.1".to_string(),
             protocol: "tcp".to_string(),
             ip_version: "ipv4".to_string(),
         };
-        let labels_udp = ConntrackLabels {
+        let labels_udp = crate::metrics::labels::ConntrackLabels {
             router: "router1".to_string(),
             src_address: "192.168.1.1".to_string(),
             protocol: "udp".to_string(),
@@ -1192,17 +1111,11 @@ mod tests {
         };
 
         assert_eq!(
-            registry
-                .connection_tracking_count
-                .get_or_create(&labels_tcp)
-                .get(),
+            registry.conntrack.count.get_or_create(&labels_tcp).get(),
             150
         );
         assert_eq!(
-            registry
-                .connection_tracking_count
-                .get_or_create(&labels_udp)
-                .get(),
+            registry.conntrack.count.get_or_create(&labels_udp).get(),
             50,
             "UDP series should be preserved during partial conntrack snapshot"
         );
@@ -1253,14 +1166,15 @@ mod tests {
         }];
         registry.update_metrics(&metrics_partial);
 
-        let cert_labels = CertificateLabels {
+        let cert_labels = crate::metrics::labels::CertificateLabels {
             router: "router1".to_string(),
             id: "*cert1".to_string(),
             name: "cert1".to_string(),
         };
         assert_eq!(
             registry
-                .certificate_days_until_expiry
+                .certificate
+                .days_until_expiry
                 .get_or_create(&cert_labels)
                 .get(),
             30,
@@ -1302,21 +1216,23 @@ mod tests {
 
         registry.update_metrics(&metrics);
 
-        let labels = WireGuardPeerLabels {
+        let labels = crate::metrics::labels::WireGuardPeerLabels {
             router: "router1".to_string(),
             id: "*wg1".to_string(),
         };
 
         assert_eq!(
             registry
-                .wireguard_peer_rx_bytes
+                .wireguard
+                .peer_rx_bytes
                 .get_or_create(&labels)
                 .get(),
             400
         );
         assert_eq!(
             registry
-                .wireguard_peer_tx_bytes
+                .wireguard
+                .peer_tx_bytes
                 .get_or_create(&labels)
                 .get(),
             700
@@ -1346,7 +1262,7 @@ mod tests {
         metrics_partial.firewall_rules = vec![make_firewall_rule("*f1", 1500, 15)];
         registry.update_metrics(&metrics_partial);
 
-        let stale_rule_labels = FirewallRuleLabels {
+        let stale_rule_labels = crate::metrics::labels::FirewallRuleLabels {
             router: "router1".to_string(),
             id: "*f2".to_string(),
             chain: "forward".to_string(),
@@ -1357,7 +1273,8 @@ mod tests {
 
         assert_eq!(
             registry
-                .firewall_rule_bytes
+                .firewall
+                .rule_bytes
                 .get_or_create(&stale_rule_labels)
                 .get(),
             2000,
@@ -1375,7 +1292,7 @@ mod tests {
         full.firewall_rules = vec![make_firewall_rule("*f1", 1000, 10)];
         registry.update_metrics(&full);
 
-        let rule_labels = FirewallRuleLabels {
+        let rule_labels = crate::metrics::labels::FirewallRuleLabels {
             router: "router1".to_string(),
             id: "*f1".to_string(),
             chain: "forward".to_string(),
@@ -1383,7 +1300,7 @@ mod tests {
             ip_version: "ipv4".to_string(),
             section: "filter".to_string(),
         };
-        registry.firewall_rule_last_seen.insert(
+        registry.firewall.rule_last_seen.insert(
             rule_labels.clone(),
             Instant::now() - std::time::Duration::from_secs(100),
         );
@@ -1400,12 +1317,13 @@ mod tests {
         registry.cleanup_expired_dynamic_labels(std::time::Duration::from_secs(60));
 
         assert!(
-            registry.prev_firewall_rules.contains_key(&rule_labels),
+            registry.firewall.prev_rules.contains_key(&rule_labels),
             "retained firewall rule must survive TTL cleanup"
         );
         assert_eq!(
             registry
-                .firewall_rule_bytes
+                .firewall
+                .rule_bytes
                 .get_or_create(&rule_labels)
                 .get(),
             1000
@@ -1417,269 +1335,11 @@ mod tests {
         registry.update_metrics(&recovered);
         assert_eq!(
             registry
-                .firewall_rule_bytes
+                .firewall
+                .rule_bytes
                 .get_or_create(&rule_labels)
                 .get(),
-            1500,
-            "recovery must apply only the delta, not re-seed the cumulative value"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_reappearing_interface_starts_new_counter_baseline() {
-        let registry = MetricsRegistry::new();
-        let system = make_system("7.10", "RB750Gr3", "1d");
-        let labels = InterfaceLabels {
-            router: "router1".to_string(),
-            id: "*1".to_string(),
-        };
-
-        let first = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
-        registry.update_metrics(&make_router_metrics("router1", vec![first], system.clone()));
-        assert_eq!(
-            registry.interface_rx_bytes.get_or_create(&labels).get(),
-            1000
-        );
-
-        registry.update_metrics(&make_router_metrics("router1", Vec::new(), system.clone()));
-
-        let returned = make_interface("*1", "ether1", "", 100_000, 200_000, 1000, 2000, 0, 0, true);
-        registry.update_metrics(&make_router_metrics(
-            "router1",
-            vec![returned],
-            system.clone(),
-        ));
-        assert_eq!(
-            registry.interface_rx_bytes.get_or_create(&labels).get(),
-            0,
-            "a reappearing interface must reset, not seed the cumulative value"
-        );
-
-        let next = make_interface("*1", "ether1", "", 100_500, 200_500, 1005, 2005, 0, 0, true);
-        registry.update_metrics(&make_router_metrics("router1", vec![next], system));
-        assert_eq!(
-            registry.interface_rx_bytes.get_or_create(&labels).get(),
-            500
-        );
-    }
-
-    #[tokio::test]
-    async fn test_interface_error_counter_appearing_starts_at_baseline() {
-        let registry = MetricsRegistry::new();
-        let system = make_system("7.10", "RB750Gr3", "1d");
-        let labels = InterfaceLabels {
-            router: "router1".to_string(),
-            id: "*1".to_string(),
-        };
-
-        let mut iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
-        iface.rx_errors = None;
-        registry.update_metrics(&make_router_metrics(
-            "router1",
-            vec![iface.clone()],
-            system.clone(),
-        ));
-        assert_eq!(registry.interface_rx_errors.get_or_create(&labels).get(), 0);
-
-        // The router starts reporting the counter with a large lifetime value.
-        // This must establish a baseline, not add the whole value as a delta.
-        iface.rx_errors = Some(500);
-        registry.update_metrics(&make_router_metrics(
-            "router1",
-            vec![iface.clone()],
-            system.clone(),
-        ));
-        assert_eq!(registry.interface_rx_errors.get_or_create(&labels).get(), 0);
-
-        iface.rx_errors = Some(600);
-        registry.update_metrics(&make_router_metrics("router1", vec![iface], system));
-        assert_eq!(
-            registry.interface_rx_errors.get_or_create(&labels).get(),
-            100
-        );
-    }
-
-    #[tokio::test]
-    async fn test_unparseable_uptime_still_updates_other_system_metrics() {
-        let registry = MetricsRegistry::new();
-        let mut system = make_system("7.10", "RB750Gr3", "1d");
-        system.uptime = "garbage".into();
-        system.cpu_load = 42;
-        system.free_memory = 123;
-        system.total_memory = 456;
-        registry.update_metrics(&make_router_metrics("router1", Vec::new(), system));
-
-        let labels = RouterLabels {
-            router: "router1".into(),
-        };
-        assert!(
-            (registry.system_cpu_load.get_or_create(&labels).get() - 0.42).abs() < f64::EPSILON
-        );
-        assert_eq!(
-            registry.system_free_memory.get_or_create(&labels).get(),
-            123
-        );
-        assert_eq!(
-            registry.system_total_memory.get_or_create(&labels).get(),
-            456
-        );
-        assert_eq!(
-            registry.system_uptime_seconds.get_or_create(&labels).get(),
-            0
-        );
-    }
-
-    #[tokio::test]
-    async fn test_partial_firewall_tracks_new_rules_and_supersedes_metadata() {
-        for remove_router in [false, true] {
-            let registry = MetricsRegistry::new();
-            let mut snapshot =
-                make_router_metrics("router1", Vec::new(), make_system("7.10", "board", "1d"));
-            snapshot.collection_status = make_partial_status(
-                FetchState::Failed,
-                FetchState::Failed,
-                FetchState::Failed,
-                FetchState::Partial,
-            );
-            registry.update_metrics(&snapshot);
-            let old_info = registry
-                .prev_firewall_rule_info
-                .get("router1")
-                .unwrap()
-                .values()
-                .next()
-                .unwrap()
-                .clone();
-            snapshot.firewall_rules[0].comment = "updated".into();
-            registry.update_metrics(&snapshot);
-            assert_eq!(
-                registry.firewall_rule_info.get_or_create(&old_info).get(),
-                0
-            );
-            assert_eq!(
-                registry
-                    .prev_firewall_rules_by_router
-                    .get("router1")
-                    .unwrap()
-                    .len(),
-                1
-            );
-            if remove_router {
-                registry.cleanup_stale_routers(&HashSet::new());
-                assert!(!registry.encode_metrics().await.unwrap().contains("router1"));
-            } else {
-                snapshot.collection_status = CollectionStatus::default();
-                snapshot.firewall_rules.clear();
-                registry.update_metrics(&snapshot);
-                assert!(registry.prev_firewall_rules.is_empty());
-                assert!(
-                    !registry
-                        .encode_metrics()
-                        .await
-                        .unwrap()
-                        .lines()
-                        .any(|line| line.starts_with("mikrotik_firewall_rule_bytes_total{"))
-                );
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_system_info_stale_label_reset_on_version_change() {
-        let registry = MetricsRegistry::new();
-
-        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
-        let system_v1 = SystemResource {
-            uptime: "1d".to_string(),
-            cpu_load: 10,
-            free_memory: 512 * 1024 * 1024,
-            total_memory: 1024 * 1024 * 1024,
-            version: "7.10".to_string(),
-            board_name: "RB750Gr3".to_string(),
-        };
-        let metrics_v1 = make_router_metrics("router1", vec![iface.clone()], system_v1);
-        registry.update_metrics(&metrics_v1);
-
-        let old_labels = SystemInfoLabels {
-            router: "router1".to_string(),
-            version: "7.10".to_string(),
-            board: "RB750Gr3".to_string(),
-        };
-        assert_eq!(registry.system_info.get_or_create(&old_labels).get(), 1);
-
-        let system_v2 = SystemResource {
-            uptime: "1d".to_string(),
-            cpu_load: 10,
-            free_memory: 512 * 1024 * 1024,
-            total_memory: 1024 * 1024 * 1024,
-            version: "7.11".to_string(),
-            board_name: "RB750Gr3".to_string(),
-        };
-        let metrics_v2 = make_router_metrics("router1", vec![iface], system_v2);
-        registry.update_metrics(&metrics_v2);
-
-        let new_labels = SystemInfoLabels {
-            router: "router1".to_string(),
-            version: "7.11".to_string(),
-            board: "RB750Gr3".to_string(),
-        };
-        assert_eq!(
-            registry.system_info.get_or_create(&old_labels).get(),
-            0,
-            "Old system_info label should be reset to 0"
-        );
-        assert_eq!(
-            registry.system_info.get_or_create(&new_labels).get(),
-            1,
-            "New system_info label should be 1"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_system_info_no_reset_when_unchanged() {
-        let registry = MetricsRegistry::new();
-
-        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
-        let system = SystemResource {
-            uptime: "1d".to_string(),
-            cpu_load: 10,
-            free_memory: 512 * 1024 * 1024,
-            total_memory: 1024 * 1024 * 1024,
-            version: "7.10".to_string(),
-            board_name: "RB750Gr3".to_string(),
-        };
-        let metrics = make_router_metrics("router1", vec![iface.clone()], system.clone());
-        registry.update_metrics(&metrics);
-        registry.update_metrics(&metrics);
-
-        let labels = SystemInfoLabels {
-            router: "router1".to_string(),
-            version: "7.10".to_string(),
-            board: "RB750Gr3".to_string(),
-        };
-        assert_eq!(
-            registry.system_info.get_or_create(&labels).get(),
-            1,
-            "system_info should stay 1 when version/board unchanged"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_cleanup_stale_routers_idempotent() {
-        let registry = MetricsRegistry::new();
-        let iface = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
-        let system = make_system("7.10", "RB750Gr3", "1d");
-        let metrics = make_router_metrics("router-to-clean", vec![iface], system);
-        registry.update_metrics(&metrics);
-
-        let empty_active = std::collections::HashSet::new();
-        registry.cleanup_stale_routers(&empty_active);
-        registry.cleanup_stale_routers(&empty_active);
-
-        let encoded = registry.encode_metrics().await.expect("Failed to encode");
-        assert!(
-            !encoded.contains("router-to-clean"),
-            "cleanup should remove stale router metrics and be idempotent"
+            1500
         );
     }
 }

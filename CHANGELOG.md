@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Log statements were switched to structured fields (for example `router = %name`) for uniform,
   queryable tracing output.
 - Large `MetricsRegistry` cleanup routines were split into single-responsibility helpers.
+- `MetricsRegistry` internals were split into per-domain sub-registries (`interface`, `system`,
+  `conntrack`, `wireguard`, `certificate`, `firewall`, `scrape`, `pool`), removing a monolithic
+  structure. The public API is unchanged.
 
 ## [0.5.0] - 2026-09-17
 
