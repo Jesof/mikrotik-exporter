@@ -5,10 +5,11 @@
 
 mod groups;
 
-use crate::config::RouterConfig;
-use crate::prelude::{AppError, Result};
 use secrecy::ExposeSecret;
 use std::sync::Arc;
+
+use crate::config::RouterConfig;
+use crate::prelude::{AppError, Result};
 
 use super::pool::{ConnectionPool, PooledConnectionGuard};
 use super::types::{
@@ -62,7 +63,8 @@ impl MikroTikClient {
 
     /// Collects metrics from the router.
     pub(crate) async fn collect_metrics(&self) -> Result<RouterMetrics> {
-        use tokio::time::{Duration, timeout};
+        use std::time::Duration;
+        use tokio::time::timeout;
 
         const COLLECTION_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -71,23 +73,23 @@ impl MikroTikClient {
         match result {
             Ok(Ok(metrics)) => Ok(metrics),
             Ok(Err(error)) => {
-                tracing::error!("Router '{}' collection failed: {}", self.config.name, error);
+                tracing::error!(router = %self.config.name, %error, "Router collection failed");
                 Err(error)
             }
             Err(_) => {
-                let err = format!(
-                    "Router '{}' collection timeout (>{}s)",
-                    self.config.name,
-                    COLLECTION_TIMEOUT.as_secs()
+                tracing::error!(
+                    router = %self.config.name,
+                    timeout_secs = COLLECTION_TIMEOUT.as_secs(),
+                    "Router collection timeout"
                 );
-                tracing::error!("{err}");
-                Err(AppError::RouterOs(err))
+                Err(AppError::Timeout("collection"))
             }
         }
     }
 
     async fn collect_parallel(&self) -> Result<RouterMetrics> {
-        use tokio::time::{Duration, timeout};
+        use std::time::Duration;
+        use tokio::time::timeout;
 
         const GROUP_SYSTEM_TIMEOUT: Duration = Duration::from_secs(20);
         const GROUP_CONNTRACK_TIMEOUT: Duration = Duration::from_secs(30);
@@ -120,10 +122,7 @@ impl MikroTikClient {
         ])?;
 
         if system_ok && conntrack_ok && vpn_ok && firewall_ok {
-            tracing::debug!(
-                "Router '{}' collection succeeded for all groups",
-                self.config.name
-            );
+            tracing::debug!(router = %self.config.name, "Router collection succeeded for all groups");
         } else {
             let failed_groups = groups::failed_group_names(&[
                 ("system/interfaces", system_ok),
@@ -134,9 +133,9 @@ impl MikroTikClient {
 
             if !failed_groups.is_empty() {
                 tracing::warn!(
-                    "Router '{}' partial collection - failed groups: {:?}",
-                    self.config.name,
-                    failed_groups
+                    router = %self.config.name,
+                    failed_groups = ?failed_groups,
+                    "Router partial collection"
                 );
             }
 
@@ -248,10 +247,10 @@ impl MikroTikClient {
 }
 
 fn reject_invalid_snapshot(messages: [Option<&str>; 4]) -> Result<()> {
-    if let Some(message) = messages.into_iter().flatten().next() {
-        return Err(AppError::InvalidSnapshot(message.to_string()));
+    match messages.into_iter().flatten().next() {
+        Some(message) => Err(AppError::InvalidSnapshot(message.to_string())),
+        None => Ok(()),
     }
-    Ok(())
 }
 
 #[cfg(test)]

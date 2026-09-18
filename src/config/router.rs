@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
+use crate::prelude::{AppError, Result};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
+use tokio_rustls::rustls::pki_types::ServerName;
 
+/// TLS settings for a single router (opt-in; insecure options are rejected).
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq, Hash)]
 #[serde(deny_unknown_fields)]
 pub struct RouterTlsConfig {
@@ -12,21 +15,19 @@ pub struct RouterTlsConfig {
 }
 
 impl RouterTlsConfig {
-    pub(crate) fn server_name_for_address(
-        &self,
-        address: &str,
-    ) -> Result<tokio_rustls::rustls::pki_types::ServerName<'static>, String> {
+    /// Resolves the TLS server name to verify for a router `address`.
+    pub(crate) fn server_name_for_address(&self, address: &str) -> Result<ServerName<'static>> {
         let host = address
             .rsplit_once(':')
             .map(|(host, _)| host)
-            .ok_or_else(|| "Invalid TLS router address".to_string())?;
+            .ok_or_else(|| AppError::Config("Invalid TLS router address".into()))?;
         let host = host
             .strip_prefix('[')
             .and_then(|host| host.strip_suffix(']'))
             .unwrap_or(host);
         let name = self.server_name.as_deref().unwrap_or(host);
-        tokio_rustls::rustls::pki_types::ServerName::try_from(name.to_string())
-            .map_err(|_| "Invalid TLS server name: expected a DNS name or IP address".into())
+        ServerName::try_from(name.to_string())
+            .map_err(|_| AppError::Config("Invalid TLS server name".into()))
     }
 }
 
@@ -62,12 +63,12 @@ impl RouterConfig {
     /// - Short nonempty passwords produce a warning, not a validation error
     ///
     /// # Returns
-    /// Returns `Ok(())` if validation passes, or `Err(String)` with a descriptive
-    /// error message if validation fails.
+    /// Returns `Ok(())` if validation passes, or `Err(AppError::Config)` with a
+    /// descriptive error message if validation fails.
     ///
     /// # Errors
-    /// Returns `Err(String)` when any validation rule fails (empty name, invalid
-    /// address format, empty username, or invalid TLS settings).
+    /// Returns `Err(AppError::Config)` when any validation rule fails (empty name,
+    /// invalid address format, empty username, or invalid TLS settings).
     ///
     /// # Examples
     /// ```
@@ -81,7 +82,7 @@ impl RouterConfig {
     /// };
     /// assert!(config.validate().is_ok());
     /// ```
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<()> {
         self.validate_name()?;
         self.validate_address()?;
         self.validate_username()?;
@@ -92,7 +93,7 @@ impl RouterConfig {
                 .as_ref()
                 .is_some_and(|path| path.as_os_str().is_empty())
             {
-                return Err("TLS CA file path cannot be empty".into());
+                return Err(AppError::Config("TLS CA file path cannot be empty".into()));
             }
         }
         self.warn_on_weak_password();
@@ -100,9 +101,9 @@ impl RouterConfig {
         Ok(())
     }
 
-    fn validate_name(&self) -> Result<(), String> {
+    fn validate_name(&self) -> Result<()> {
         if self.name.trim().is_empty() {
-            return Err("Router name cannot be empty".to_string());
+            return Err(AppError::Config("Router name cannot be empty".to_string()));
         }
 
         if !self
@@ -110,51 +111,53 @@ impl RouterConfig {
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
         {
-            return Err(format!(
+            return Err(AppError::Config(format!(
                 "Router name '{}' contains invalid characters. Only alphanumeric, underscore, and hyphen are allowed",
                 self.name
-            ));
+            )));
         }
 
         if self.name.len() > 128 {
-            return Err("Router name is too long: maximum length is 128 characters".into());
+            return Err(AppError::Config(
+                "Router name is too long: maximum length is 128 characters".into(),
+            ));
         }
         Ok(())
     }
 
-    fn validate_address(&self) -> Result<(), String> {
+    fn validate_address(&self) -> Result<()> {
         let Some((host, port_str)) = self.address.rsplit_once(':') else {
-            return Err(format!(
+            return Err(AppError::Config(format!(
                 "Invalid address format '{}': expected 'host:port'",
                 self.address
-            ));
+            )));
         };
 
         if host.is_empty() {
-            return Err(format!(
+            return Err(AppError::Config(format!(
                 "Invalid address format '{}': host cannot be empty",
                 self.address
-            ));
+            )));
         }
 
         if host.starts_with('[') {
             if !host.ends_with(']') || host.len() <= 2 {
-                return Err(format!(
+                return Err(AppError::Config(format!(
                     "Invalid IPv6 address format '{}': expected '[addr]:port'",
                     self.address
-                ));
+                )));
             }
             if host[1..host.len() - 1]
                 .parse::<std::net::Ipv6Addr>()
                 .is_err()
             {
-                return Err("Invalid IPv6 address".into());
+                return Err(AppError::Config("Invalid IPv6 address".into()));
             }
         } else if host.contains(':') {
-            return Err(format!(
+            return Err(AppError::Config(format!(
                 "Invalid IPv6 address format '{}': wrap IPv6 hosts in brackets",
                 self.address
-            ));
+            )));
         } else if !host.trim_end_matches('.').split('.').all(|label| {
             !label.is_empty()
                 && label.len() <= 63
@@ -164,48 +167,48 @@ impl RouterConfig {
                     .bytes()
                     .all(|ch| ch.is_ascii_alphanumeric() || ch == b'-')
         }) {
-            return Err("Invalid router hostname".into());
+            return Err(AppError::Config("Invalid router hostname".into()));
         }
 
         match port_str.parse::<u16>() {
             Ok(0) => {
-                return Err(format!(
+                return Err(AppError::Config(format!(
                     "Invalid port number in address '{}': port cannot be 0",
                     self.address
-                ));
+                )));
             }
             Err(_) => {
-                return Err(format!(
+                return Err(AppError::Config(format!(
                     "Invalid port number in address '{}': expected numeric value 1-65535",
                     self.address
-                ));
+                )));
             }
             _ => {}
         }
 
         if self.address.len() > 253 {
-            return Err(format!(
+            return Err(AppError::Config(format!(
                 "Address '{}' is too long: maximum length is 253 characters",
                 self.address
-            ));
+            )));
         }
 
         Ok(())
     }
 
-    fn validate_username(&self) -> Result<(), String> {
+    fn validate_username(&self) -> Result<()> {
         if self.username.trim().is_empty() {
-            return Err(format!(
+            return Err(AppError::Config(format!(
                 "Username cannot be empty for router '{}'",
                 self.name
-            ));
+            )));
         }
 
         if self.username.len() > 64 {
-            return Err(format!(
+            return Err(AppError::Config(format!(
                 "Username for router '{}' is too long: maximum length is 64 characters",
                 self.name
-            ));
+            )));
         }
 
         Ok(())
@@ -215,9 +218,9 @@ impl RouterConfig {
         let password_len = self.password.expose_secret().len();
         if password_len > 0 && password_len < 8 {
             tracing::warn!(
-                "Router '{}' has a weak password ({} characters): consider using a stronger password",
-                self.name,
-                password_len
+                router = %self.name,
+                password_len,
+                "Weak password: consider using a stronger password"
             );
         }
     }

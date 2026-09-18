@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-use crate::prelude::{AppError, Result};
+//! `RouterOS` API connection: framing, TLS, authentication, and cancellation-safe transport.
+
 mod auth;
 mod protocol;
 mod tls;
@@ -13,6 +14,8 @@ use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
+
+use crate::prelude::{AppError, Result};
 
 use protocol::{encode_length, read_length};
 
@@ -55,9 +58,7 @@ impl RouterOsConnection {
         let connector = match tls_config {
             Some(config) => Some((
                 tls::connector(config).await?,
-                config
-                    .server_name_for_address(addr)
-                    .map_err(AppError::Config)?,
+                config.server_name_for_address(addr)?,
             )),
             None => None,
         };

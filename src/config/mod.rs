@@ -15,6 +15,8 @@ mod tests;
 
 pub use self::router::{RouterConfig, RouterTlsConfig};
 
+use crate::AppError;
+
 /// Application-wide configuration
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -97,12 +99,18 @@ impl Config {
             Ok(value) => Ok(Some(value)),
             Err(std::env::VarError::NotPresent) => Ok(None),
             Err(std::env::VarError::NotUnicode(_)) => {
-                Err(crate::AppError::Config(format!("Invalid Unicode in {key}")))
+                Err(AppError::Config(format!("Invalid Unicode in {key}")))
             }
         })
     }
 
-    #[allow(clippy::missing_errors_doc)]
+    /// Loads configuration from an arbitrary lookup closure.
+    ///
+    /// Used by `from_env` and by tests to inject values without touching the
+    /// process environment.
+    ///
+    /// # Errors
+    /// Rejects malformed values, invalid routers, unknown JSON fields, and duplicate names.
     pub fn from_lookup(
         lookup: impl Fn(&str) -> crate::Result<Option<String>>,
     ) -> crate::Result<Self> {
@@ -140,10 +148,14 @@ impl Config {
         Ok(config)
     }
 
-    #[allow(clippy::missing_errors_doc)]
+    /// Validates the loaded configuration.
+    ///
+    /// Checks the server address, numeric bounds, strict-mode prerequisites,
+    /// and every router via `RouterConfig::validate`.
+    ///
+    /// # Errors
+    /// Returns `AppError::Config` for any invalid field or duplicate router name.
     pub fn validate(&self) -> crate::Result<()> {
-        use crate::AppError;
-
         self.server_addr
             .parse::<std::net::SocketAddr>()
             .map_err(|_| AppError::Config("SERVER_ADDR must be an IP socket address".into()))?;
@@ -182,7 +194,7 @@ impl Config {
         }
         let mut names = std::collections::HashSet::new();
         for router in &self.routers {
-            router.validate().map_err(AppError::Config)?;
+            router.validate()?;
             if !names.insert(&router.name) {
                 return Err(AppError::Config(format!(
                     "Duplicate router name '{}'",

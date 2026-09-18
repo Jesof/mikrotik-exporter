@@ -340,8 +340,10 @@ impl MetricsRegistry {
         );
         certificate_days_until_expiry
     }
+
     #[allow(clippy::similar_names)]
     #[must_use]
+    /// Creates an empty registry with all metric families registered.
     pub fn new() -> Self {
         let mut registry = Registry::default();
 

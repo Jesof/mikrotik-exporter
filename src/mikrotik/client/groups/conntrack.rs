@@ -3,10 +3,11 @@
 
 //! Connection tracking collection group.
 
+use secrecy::ExposeSecret;
+
 use crate::mikrotik::client::MikroTikClient;
 use crate::mikrotik::responses::parse_connection_tracking;
 use crate::prelude::Result;
-use secrecy::ExposeSecret;
 
 pub(crate) async fn collect_group_conntrack(
     client: &MikroTikClient,
@@ -38,9 +39,7 @@ pub(crate) async fn collect_group_conntrack(
         ));
     }
 
-    let any_success = conntrack_results
-        .iter()
-        .any(|(_ip_version, result)| result.is_ok());
+    let any_success = conntrack_results.iter().any(|(_, result)| result.is_ok());
     let connection_failed = conntrack_results.iter().any(|(_, result)| {
         result
             .as_ref()

@@ -22,8 +22,8 @@ pub async fn metrics_handler(State(state): State<Arc<AppState>>) -> Response {
             metrics_text,
         )
             .into_response(),
-        Err(e) => {
-            tracing::error!("Failed to encode metrics: {}", e);
+        Err(error) => {
+            tracing::error!(%error, "Failed to encode metrics");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to encode metrics",

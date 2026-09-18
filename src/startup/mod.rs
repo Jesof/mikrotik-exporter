@@ -24,13 +24,9 @@ pub async fn run_startup_connectivity_tests(config: &Config) -> Result<()> {
     }
 
     tracing::info!(
-        "Performing startup connectivity tests (timeout: {}s{})",
-        config.startup_connectivity_timeout_secs,
-        if config.strict_startup_mode {
-            ", strict mode enabled"
-        } else {
-            ""
-        }
+        timeout_secs = config.startup_connectivity_timeout_secs,
+        strict = config.strict_startup_mode,
+        "Performing startup connectivity tests"
     );
 
     let failed_routers =
@@ -42,9 +38,9 @@ pub async fn run_startup_connectivity_tests(config: &Config) -> Result<()> {
     }
 
     tracing::warn!(
-        "Connectivity test failed for {} router(s): {:?}",
-        failed_routers.len(),
-        failed_routers
+        failed_count = failed_routers.len(),
+        failed_routers = ?failed_routers,
+        "Startup connectivity test failed"
     );
 
     enforce_startup_connectivity_policy(&failed_routers, config.strict_startup_mode)

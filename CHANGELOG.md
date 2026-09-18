@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per language (Rust only for Rust changes, Actions only for workflow changes) with queries
   configured in `.github/codeql/codeql-config.yml`. Main image publication runs only for
   container-affecting changes.
+- `RouterConfig::validate` and `RouterTlsConfig::server_name_for_address` now return `AppError`
+  instead of plain `String`, so configuration errors are uniformly typed across the crate.
+- Log statements were switched to structured fields (for example `router = %name`) for uniform,
+  queryable tracing output.
+- Large `MetricsRegistry` cleanup routines were split into single-responsibility helpers.
 
 ## [0.5.0] - 2026-09-17
 

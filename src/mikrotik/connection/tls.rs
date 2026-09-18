@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-use crate::config::RouterTlsConfig;
-use crate::prelude::{AppError, Result};
+//! `RouterOS` TLS connector with root store loading and server-name identity.
+
 use dashmap::DashMap;
 use std::sync::{Arc, OnceLock};
 use tokio_rustls::TlsConnector;
@@ -11,6 +11,9 @@ use tokio_rustls::rustls::{
     crypto::ring,
     pki_types::{CertificateDer, pem::PemObject},
 };
+
+use crate::config::RouterTlsConfig;
+use crate::prelude::{AppError, Result};
 
 /// Process-wide cache of verified TLS connectors keyed by router TLS settings.
 ///

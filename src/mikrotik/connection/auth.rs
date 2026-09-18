@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-use crate::prelude::{AppError, Result};
+//! `RouterOS` login: legacy MD5 challenge-response and modern user auth.
+
 use md5::compute as md5_compute;
+
+use crate::prelude::{AppError, Result};
 
 use super::RouterOsConnection;
 

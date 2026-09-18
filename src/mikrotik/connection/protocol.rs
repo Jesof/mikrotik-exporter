@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-use crate::prelude::{AppError, Result};
+//! `RouterOS` word-length framing encoding and decoding.
+
 use tokio::io::{AsyncRead, AsyncReadExt};
+
+use crate::prelude::{AppError, Result};
 
 pub(super) fn encode_length(len: usize) -> Result<Vec<u8>> {
     let value =

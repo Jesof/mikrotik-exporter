@@ -7,10 +7,19 @@ use crate::metrics::labels::{GroupLabels, RouterLabels};
 use crate::mikrotik::CollectionStatus;
 use crate::prelude::{AppError, Result};
 use prometheus_client::encoding::text::encode;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::Instant;
 
 use super::MetricsRegistry;
+
+fn now_epoch_i64() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        .try_into()
+        .unwrap_or(i64::MAX)
+}
 
 impl MetricsRegistry {
     /// Encode all metrics to `OpenMetrics` text format.
@@ -27,15 +36,9 @@ impl MetricsRegistry {
 
     pub fn record_scrape_success(&self, labels: &RouterLabels) {
         self.scrape_success.get_or_create(labels).inc();
-        // Record timestamp of successful scrape
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        #[allow(clippy::cast_possible_wrap)]
         self.scrape_last_success_timestamp_seconds
             .get_or_create(labels)
-            .set(now as i64);
+            .set(now_epoch_i64());
         self.last_scrape_success
             .insert(labels.router.clone(), Instant::now());
         self.consecutive_scrape_errors
@@ -51,14 +54,9 @@ impl MetricsRegistry {
         reset_threshold: Duration,
     ) -> Option<Duration> {
         self.scrape_success.get_or_create(labels).inc();
-        let now_epoch = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        #[allow(clippy::cast_possible_wrap)]
         self.scrape_last_success_timestamp_seconds
             .get_or_create(labels)
-            .set(now_epoch as i64);
+            .set(now_epoch_i64());
 
         let previous = self
             .last_scrape_success
@@ -139,11 +137,7 @@ impl MetricsRegistry {
 
     pub fn record_group_status(&self, labels: &RouterLabels, status: &CollectionStatus) {
         self.initialize_router_metrics(labels);
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |duration| {
-                i64::try_from(duration.as_secs()).unwrap_or(i64::MAX)
-            });
+        let timestamp = now_epoch_i64();
         for (group, state) in status.group_states() {
             let labels = GroupLabels {
                 router: labels.router.clone(),

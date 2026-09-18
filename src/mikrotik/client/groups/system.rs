@@ -3,10 +3,11 @@
 
 //! System and interface collection group.
 
+use secrecy::ExposeSecret;
+
 use crate::mikrotik::client::MikroTikClient;
 use crate::mikrotik::responses::{parse_interfaces, parse_system};
 use crate::prelude::Result;
-use secrecy::ExposeSecret;
 
 pub(crate) async fn collect_group_system_interfaces(
     client: &MikroTikClient,
@@ -60,8 +61,8 @@ pub(crate) async fn collect_group_system_interfaces(
 
     if empty_interfaces_anomaly {
         tracing::warn!(
-            "Router '{}' /interface/print returned empty response, forcing reconnect",
-            client.config.name
+            router = %client.config.name,
+            "Empty /interface/print response, forcing reconnect"
         );
         guard.mark_broken();
     }

@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-use super::{RouterConfig, RouterTlsConfig, defaults, env_vars};
+//! Environment and JSON configuration loading with strict parsing.
+
 use crate::prelude::{AppError, Result};
 
+use super::{RouterConfig, RouterTlsConfig, defaults, env_vars};
+
+/// Loads router configurations from `ROUTERS_CONFIG` JSON or legacy env vars.
 pub(crate) fn load_router_configs(
     lookup: &impl Fn(&str) -> Result<Option<String>>,
 ) -> Result<Vec<RouterConfig>> {
@@ -44,6 +48,7 @@ pub(crate) fn load_router_configs(
     }])
 }
 
+/// Parses an environment variable or falls back to `default`; rejects invalid values.
 pub(crate) fn parse_env_or_default<T: std::str::FromStr>(
     lookup: &impl Fn(&str) -> Result<Option<String>>,
     key: &str,
@@ -57,6 +62,7 @@ pub(crate) fn parse_env_or_default<T: std::str::FromStr>(
     }
 }
 
+/// Reads an environment variable as a string, or returns `default` when unset.
 pub(crate) fn string_env_or_default(
     lookup: &impl Fn(&str) -> Result<Option<String>>,
     key: &str,

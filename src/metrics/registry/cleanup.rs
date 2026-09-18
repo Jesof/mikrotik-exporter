@@ -18,7 +18,15 @@ impl MetricsRegistry {
     /// Clean up stale dynamic labels based on TTL to prevent unbounded growth
     pub fn cleanup_expired_dynamic_labels(&self, ttl: Duration) {
         let now = Instant::now();
+        self.cleanup_expired_system_info(now, ttl);
+        self.cleanup_expired_conntrack(now, ttl);
+        self.cleanup_expired_wireguard_peers(now, ttl);
+        self.cleanup_expired_certificates(now, ttl);
+        self.cleanup_expired_firewall_rules(now, ttl);
+        self.cleanup_expired_info_labels(now, ttl);
+    }
 
+    fn cleanup_expired_system_info(&self, now: Instant, ttl: Duration) {
         let stale_system_info: Vec<_> = self
             .system_info_last_seen
             .iter()
@@ -31,8 +39,9 @@ impl MetricsRegistry {
             self.prev_system_info
                 .remove_if(&labels.router, |_, current| current == &labels);
         }
+    }
 
-        // 1. Conntrack
+    fn cleanup_expired_conntrack(&self, now: Instant, ttl: Duration) {
         let stale_conntrack: Vec<ConntrackLabels> = {
             let stale: Vec<_> = self
                 .conntrack_last_seen
@@ -54,7 +63,7 @@ impl MetricsRegistry {
                 }
                 self.connection_tracking_count.remove(label);
             }
-            tracing::debug!("Expired {} conntrack labels via TTL cleanup", count);
+            tracing::debug!(expired = count, "Expired conntrack labels via TTL cleanup");
             for entry in self.prev_conntrack.iter() {
                 self.conntrack_active_series
                     .get_or_create(&RouterLabels {
@@ -63,8 +72,9 @@ impl MetricsRegistry {
                     .set(i64::try_from(entry.value().len()).unwrap_or(i64::MAX));
             }
         }
+    }
 
-        // 2. WireGuard Peers
+    fn cleanup_expired_wireguard_peers(&self, now: Instant, ttl: Duration) {
         let stale_peers: Vec<WireGuardPeerLabels> = {
             let stale: Vec<_> = self
                 .wireguard_peer_last_seen
@@ -96,10 +106,14 @@ impl MetricsRegistry {
                     self.wireguard_peer_info_last_seen.remove(&info_label);
                 }
             }
-            tracing::debug!("Expired {} wireguard peer labels via TTL cleanup", count);
+            tracing::debug!(
+                expired = count,
+                "Expired wireguard peer labels via TTL cleanup"
+            );
         }
+    }
 
-        // 3. Certificates
+    fn cleanup_expired_certificates(&self, now: Instant, ttl: Duration) {
         let stale_certificates: Vec<CertificateLabels> = {
             let stale: Vec<_> = self
                 .certificate_last_seen
@@ -121,10 +135,14 @@ impl MetricsRegistry {
                 }
                 self.certificate_days_until_expiry.remove(label);
             }
-            tracing::debug!("Expired {} certificate labels via TTL cleanup", count);
+            tracing::debug!(
+                expired = count,
+                "Expired certificate labels via TTL cleanup"
+            );
         }
+    }
 
-        // 4. Firewall Rules
+    fn cleanup_expired_firewall_rules(&self, now: Instant, ttl: Duration) {
         let stale_firewall_rules: Vec<FirewallRuleLabels> = {
             let stale: Vec<_> = self
                 .firewall_rule_last_seen
@@ -156,12 +174,16 @@ impl MetricsRegistry {
                     self.firewall_rule_info_last_seen.remove(&info_label);
                 }
             }
-            tracing::debug!("Expired {} firewall rule labels via TTL cleanup", count);
+            tracing::debug!(
+                expired = count,
+                "Expired firewall rule labels via TTL cleanup"
+            );
         }
+    }
 
-        // 5. Info Labels TTL (handles metadata changes when entity still exists)
-
-        // 5.1 Interface Info
+    /// Clean up expired info labels (metadata for entities that still exist).
+    fn cleanup_expired_info_labels(&self, now: Instant, ttl: Duration) {
+        // 1. Interface Info
         let stale_iface_info: Vec<InterfaceInfoLabels> = self
             .interface_info_last_seen
             .iter()
@@ -174,10 +196,13 @@ impl MetricsRegistry {
                 self.interface_info_last_seen.remove(&label);
                 self.interface_info.remove(&label);
             }
-            tracing::debug!("Expired {} interface info labels via TTL cleanup", count);
+            tracing::debug!(
+                expired = count,
+                "Expired interface info labels via TTL cleanup"
+            );
         }
 
-        // 5.2 WireGuard Peer Info
+        // 2. WireGuard Peer Info
         let stale_peer_info: Vec<WireGuardPeerInfoLabels> = self
             .wireguard_peer_info_last_seen
             .iter()
@@ -191,12 +216,12 @@ impl MetricsRegistry {
                 self.wireguard_peer_info.remove(&label);
             }
             tracing::debug!(
-                "Expired {} wireguard peer info labels via TTL cleanup",
-                count
+                expired = count,
+                "Expired wireguard peer info labels via TTL cleanup"
             );
         }
 
-        // 5.3 Firewall Rule Info
+        // 3. Firewall Rule Info
         let stale_rule_info: Vec<FirewallRuleInfoLabels> = self
             .firewall_rule_info_last_seen
             .iter()
@@ -210,20 +235,33 @@ impl MetricsRegistry {
                 self.firewall_rule_info.remove(&label);
             }
             tracing::debug!(
-                "Expired {} firewall rule info labels via TTL cleanup",
-                count
+                expired = count,
+                "Expired firewall rule info labels via TTL cleanup"
             );
         }
     }
 
     /// Clean up cached state for routers that are no longer configured
     pub fn cleanup_stale_routers(&self, active_routers: &HashSet<String>) {
+        self.retain_active_last_seen(active_routers);
+
         let mut stale_routers: HashSet<_> = self
             .known_routers
             .iter()
             .filter(|entry| !active_routers.contains(entry.key()))
             .map(|entry| entry.key().clone())
             .collect();
+        self.collect_stale_interfaces(active_routers, &mut stale_routers);
+        self.collect_stale_system_info(active_routers, &mut stale_routers);
+        self.collect_stale_conntrack(active_routers, &mut stale_routers);
+        self.collect_stale_wireguard(active_routers);
+        self.collect_stale_certificates(active_routers);
+        self.collect_stale_firewall(active_routers);
+
+        self.remove_stale_router_metrics(&stale_routers);
+    }
+
+    fn retain_active_last_seen(&self, active_routers: &HashSet<String>) {
         self.system_info_last_seen.retain(|labels, _| {
             if active_routers.contains(&labels.router) {
                 true
@@ -257,7 +295,13 @@ impl MetricsRegistry {
                 false
             }
         });
+    }
 
+    fn collect_stale_interfaces(
+        &self,
+        active_routers: &HashSet<String>,
+        stale_routers: &mut HashSet<String>,
+    ) {
         // Interfaces
         let stale_interfaces: Vec<InterfaceLabels> = self
             .prev_iface
@@ -287,7 +331,13 @@ impl MetricsRegistry {
                 false
             }
         });
+    }
 
+    fn collect_stale_system_info(
+        &self,
+        active_routers: &HashSet<String>,
+        stale_routers: &mut HashSet<String>,
+    ) {
         // System Info
         self.prev_system_info.retain(|router, label| {
             if active_routers.contains(router) {
@@ -298,7 +348,13 @@ impl MetricsRegistry {
                 false
             }
         });
+    }
 
+    fn collect_stale_conntrack(
+        &self,
+        active_routers: &HashSet<String>,
+        stale_routers: &mut HashSet<String>,
+    ) {
         // Conntrack
         self.prev_conntrack.retain(|router, set| {
             if active_routers.contains(router) {
@@ -312,7 +368,9 @@ impl MetricsRegistry {
                 false
             }
         });
+    }
 
+    fn collect_stale_wireguard(&self, active_routers: &HashSet<String>) {
         // WireGuard
         self.prev_wireguard_peers.retain(|router, set| {
             if active_routers.contains(router) {
@@ -338,7 +396,9 @@ impl MetricsRegistry {
                 false
             }
         });
+    }
 
+    fn collect_stale_certificates(&self, active_routers: &HashSet<String>) {
         // Certificates
         self.prev_certificates.retain(|router, set| {
             if active_routers.contains(router) {
@@ -351,7 +411,9 @@ impl MetricsRegistry {
                 false
             }
         });
+    }
 
+    fn collect_stale_firewall(&self, active_routers: &HashSet<String>) {
         // Firewall
         self.prev_firewall_rules_by_router.retain(|router, set| {
             if active_routers.contains(router) {
@@ -377,9 +439,11 @@ impl MetricsRegistry {
                 false
             }
         });
+    }
 
+    fn remove_stale_router_metrics(&self, stale_routers: &HashSet<String>) {
         // General Router Metrics
-        for router in &stale_routers {
+        for router in stale_routers {
             let router_labels = RouterLabels {
                 router: router.clone(),
             };

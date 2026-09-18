@@ -5,12 +5,14 @@
 
 use prometheus_client::encoding::EncodeLabelSet;
 
+/// Label set for a router interface.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct InterfaceLabels {
     pub(crate) router: String,
     pub(crate) id: String,
 }
 
+/// Label set for router interface identity metadata.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct InterfaceInfoLabels {
     pub(crate) router: String,
@@ -19,17 +21,20 @@ pub(crate) struct InterfaceInfoLabels {
     pub(crate) comment: String,
 }
 
+/// Label set identifying a single router.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub struct RouterLabels {
     pub router: String,
 }
 
+/// Label set for a collection group.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct GroupLabels {
     pub(crate) router: String,
     pub(crate) group: &'static str,
 }
 
+/// Label set for system resource metadata.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct SystemInfoLabels {
     pub(crate) router: String,
@@ -37,6 +42,7 @@ pub(crate) struct SystemInfoLabels {
     pub(crate) board: String,
 }
 
+/// Label set for a connection-tracking series.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct ConntrackLabels {
     pub(crate) router: String,
@@ -45,12 +51,14 @@ pub(crate) struct ConntrackLabels {
     pub(crate) ip_version: String,
 }
 
+/// Label set for a `WireGuard` peer.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct WireGuardPeerLabels {
     pub(crate) router: String,
     pub(crate) id: String,
 }
 
+/// Label set for `WireGuard` peer identity metadata.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct WireGuardPeerInfoLabels {
     pub(crate) router: String,
@@ -62,6 +70,7 @@ pub(crate) struct WireGuardPeerInfoLabels {
     pub(crate) comment: String,
 }
 
+/// Label set for a router certificate.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct CertificateLabels {
     pub(crate) router: String,
@@ -69,6 +78,7 @@ pub(crate) struct CertificateLabels {
     pub(crate) name: String,
 }
 
+/// Label set for a firewall rule.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct FirewallRuleLabels {
     pub(crate) router: String,
@@ -79,6 +89,7 @@ pub(crate) struct FirewallRuleLabels {
     pub(crate) section: String,
 }
 
+/// Label set for firewall rule identity metadata.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub(crate) struct FirewallRuleInfoLabels {
     pub(crate) router: String,
