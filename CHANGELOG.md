@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `MetricsRegistry` internals were split into per-domain sub-registries (`interface`, `system`,
   `conntrack`, `wireguard`, `certificate`, `firewall`, `scrape`, `pool`), removing a monolithic
   structure. The public API is unchanged.
+- Added Criterion benchmarks for the hot metric paths (`encode_metrics`, `update_metrics`). They
+  run locally with `cargo bench` and are not part of the CI gate.
 
 ## [0.5.0] - 2026-09-17
 
