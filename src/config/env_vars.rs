@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
+//! Environment variable names.
+
 pub const SERVER_ADDR: &str = "SERVER_ADDR";
 pub const ROUTERS_CONFIG: &str = "ROUTERS_CONFIG";
 pub const COLLECTION_INTERVAL_SECONDS: &str = "COLLECTION_INTERVAL_SECONDS";

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
+//! Default configuration values.
+
 pub const SERVER_ADDR: &str = "0.0.0.0:9090";
 pub const ROUTEROS_USERNAME: &str = "admin";
 pub const ROUTEROS_PASSWORD: &str = "";

@@ -50,9 +50,9 @@ impl Drop for PooledConnectionGuard {
     fn drop(&mut self) {
         if let Some(conn) = self.connection.take() {
             if self.broken || !conn.is_reusable() {
-                tracing::debug!("Dropping broken connection: {}", self.key);
+                tracing::debug!(key = %self.key, "Dropping broken connection");
             } else if let Ok(mut pool) = self.pool.connections.try_lock() {
-                tracing::trace!("Connection returned to pool: {}", self.key);
+                tracing::trace!(key = %self.key, "Connection returned to pool");
                 pool.insert(
                     self.key.clone(),
                     super::types::PooledConnection {
@@ -65,7 +65,7 @@ impl Drop for PooledConnectionGuard {
                 let key = self.key.clone();
                 handle.spawn(async move {
                     let mut pool = connections.lock().await;
-                    tracing::trace!("Connection returned to pool asynchronously: {}", key);
+                    tracing::trace!(key = %key, "Connection returned to pool asynchronously");
                     pool.insert(
                         key,
                         super::types::PooledConnection {
@@ -76,8 +76,8 @@ impl Drop for PooledConnectionGuard {
                 });
             } else {
                 tracing::warn!(
-                    "Dropping reusable connection outside Tokio runtime while pool lock is contended: {}",
-                    self.key
+                    key = %self.key,
+                    "Dropping reusable connection outside Tokio runtime while pool lock is contended"
                 );
             }
         }
@@ -88,8 +88,8 @@ impl Drop for PooledConnectionGuard {
             let current = active.load(Ordering::Acquire);
             if current == 0 {
                 tracing::warn!(
-                    "Active connection count underflow detected for key: {}",
-                    self.key
+                    key = %self.key,
+                    "Active connection count underflow detected"
                 );
                 break;
             }

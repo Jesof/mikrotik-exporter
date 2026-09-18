@@ -5,6 +5,10 @@
 
 use crate::prelude::{AppError, Result};
 
+/// Enforces the strict startup connectivity policy.
+///
+/// # Errors
+/// Returns `AppError::Config` when strict mode is enabled and routers failed.
 pub(crate) fn enforce_startup_connectivity_policy(
     failed_routers: &[String],
     strict_mode: bool,
@@ -16,6 +20,7 @@ pub(crate) fn enforce_startup_connectivity_policy(
     Ok(())
 }
 
+/// Formats the strict-mode unreachable-router error message.
 pub(crate) fn format_strict_mode_error(failed_routers: &[String]) -> String {
     format!(
         "Strict startup mode: {} router(s) unreachable: {:?}",

@@ -234,8 +234,8 @@ impl MetricsRegistry {
     ) {
         if !metrics.collection_status.system_interfaces_ok() {
             tracing::debug!(
-                "Skipping system/interfaces metric update for router {} due to partial collection",
-                metrics.router_name
+                router = %metrics.router_name,
+                "Skipping system/interfaces metric update due to partial collection"
             );
             return;
         }
@@ -270,8 +270,8 @@ impl MetricsRegistry {
     fn update_system_metrics(&self, metrics: &RouterMetrics) {
         if !metrics.collection_status.system_interfaces_ok() {
             tracing::debug!(
-                "Skipping system metric update for router {} due to partial collection",
-                metrics.router_name
+                router = %metrics.router_name,
+                "Skipping system metric update due to partial collection"
             );
             return;
         }
@@ -324,8 +324,8 @@ impl MetricsRegistry {
 
         if !metrics.collection_status.conntrack_ok() {
             tracing::debug!(
-                "Skipping conntrack metric update for router {} due to partial collection",
-                metrics.router_name
+                router = %metrics.router_name,
+                "Skipping conntrack metric update due to partial collection"
             );
             self.conntrack_update_duration_seconds
                 .get_or_create(&router_labels)
@@ -426,8 +426,8 @@ impl MetricsRegistry {
     fn update_wireguard_metrics(&self, metrics: &RouterMetrics, now: Instant) {
         if !metrics.collection_status.wireguard_ok() {
             tracing::debug!(
-                "Skipping wireguard metric update for router {} due to partial collection",
-                metrics.router_name
+                router = %metrics.router_name,
+                "Skipping wireguard metric update due to partial collection"
             );
             return;
         }
@@ -541,8 +541,8 @@ impl MetricsRegistry {
     fn update_certificate_metrics(&self, metrics: &RouterMetrics, now: Instant) {
         if !metrics.collection_status.certificates_ok() {
             tracing::debug!(
-                "Skipping certificate metric update for router {} due to partial collection",
-                metrics.router_name
+                router = %metrics.router_name,
+                "Skipping certificate metric update due to partial collection"
             );
             return;
         }
@@ -580,8 +580,8 @@ impl MetricsRegistry {
     fn update_firewall_metrics(&self, metrics: &RouterMetrics, now: Instant, apply_counters: bool) {
         if !metrics.collection_status.firewall_ok() {
             tracing::debug!(
-                "Skipping firewall metric update for router {} due to partial collection",
-                metrics.router_name
+                router = %metrics.router_name,
+                "Skipping firewall metric update due to partial collection"
             );
             return;
         }

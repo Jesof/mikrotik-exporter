@@ -1,18 +1,27 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
+//! `mikrotik-exporter` binary entry point.
+//!
+//! Owns runtime initialization, readiness signaling, bounded task shutdown,
+//! and graceful handling of `SIGINT`/`SIGTERM`.
+
 use mikrotik_exporter::{
     AppError, AppState, Config, ConnectionPool, MetricsRegistry, Result,
     run_startup_connectivity_tests, start_collection_loop,
 };
+use std::env::args_os;
+use std::ffi::OsString;
+use std::future::pending;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::net::TcpListener;
 use tokio::sync::watch;
-use tokio::task::JoinSet;
+use tokio::task::{JoinHandle, JoinSet};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 fn main() -> Result<()> {
-    if version_requested(std::env::args_os().skip(1))? {
+    if version_requested(args_os().skip(1))? {
         println!("mikrotik-exporter {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
@@ -25,7 +34,8 @@ fn main() -> Result<()> {
         .block_on(run(config))
 }
 
-fn version_requested(args: impl IntoIterator<Item = std::ffi::OsString>) -> Result<bool> {
+/// Parses `--version`/`-V` command-line arguments.
+fn version_requested(args: impl IntoIterator<Item = OsString>) -> Result<bool> {
     let mut args = args.into_iter();
     match (args.next(), args.next()) {
         (None, None) => Ok(false),
@@ -36,14 +46,16 @@ fn version_requested(args: impl IntoIterator<Item = std::ffi::OsString>) -> Resu
     }
 }
 
+/// Outcome of a supervised runtime task.
 #[derive(Debug)]
 enum TaskExit {
     Initialized,
     Http,
 }
 
+/// Runs the exporter: serves HTTP, presence collection, and shutdown plumbing.
 async fn run(config: Config) -> Result<()> {
-    let listener = tokio::net::TcpListener::bind(&config.server_addr).await?;
+    let listener = TcpListener::bind(&config.server_addr).await?;
     tracing::info!(address = %listener.local_addr()?, routers = config.routers.len(), "Starting exporter");
     let config = Arc::new(config);
     let metrics = MetricsRegistry::new();
@@ -70,14 +82,14 @@ async fn run(config: Config) -> Result<()> {
     });
     let signal = shutdown_signal();
     tokio::pin!(signal);
-    let mut collector: Option<tokio::task::JoinHandle<Result<()>>> = None;
+    let mut collector: Option<JoinHandle<Result<()>>> = None;
     let outcome = loop {
         tokio::select! {
             result = &mut signal => break result,
             result = async {
                 match collector.as_mut() {
                     Some(handle) => handle.await,
-                    None => std::future::pending().await,
+                    None => pending().await,
                 }
             } => {
                 collector = None;
@@ -112,6 +124,7 @@ async fn run(config: Config) -> Result<()> {
     outcome
 }
 
+/// Drains the task set with a bounded timeout, logging any failures.
 async fn drain_tasks(tasks: &mut JoinSet<Result<TaskExit>>) {
     if tokio::time::timeout(Duration::from_secs(5), async {
         while let Some(result) = tasks.join_next().await {
@@ -127,6 +140,7 @@ async fn drain_tasks(tasks: &mut JoinSet<Result<TaskExit>>) {
     }
 }
 
+/// Awaits the shutdown flag or a closed channel, returning immediately.
 async fn wait_for_shutdown(mut rx: watch::Receiver<bool>) {
     loop {
         if *rx.borrow_and_update() || rx.changed().await.is_err() {
@@ -135,6 +149,7 @@ async fn wait_for_shutdown(mut rx: watch::Receiver<bool>) {
     }
 }
 
+/// Resolves once `SIGINT`/`SIGTERM` (or platform equivalent) is received.
 async fn shutdown_signal() -> Result<()> {
     #[cfg(unix)]
     {
@@ -150,6 +165,7 @@ async fn shutdown_signal() -> Result<()> {
     Ok(())
 }
 
+/// Initializes the `tracing` subscriber from `RUST_LOG` or the `info` default.
 fn setup_tracing() {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));

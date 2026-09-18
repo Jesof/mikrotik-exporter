@@ -20,12 +20,15 @@ pub enum AppError {
     #[error("RouterOS error: {0}")]
     RouterOs(String),
 
+    /// Parsed router snapshot is inconsistent or malformed
     #[error("Invalid router snapshot: {0}")]
     InvalidSnapshot(String),
 
+    /// `RouterOS` protocol framing or sentence violation
     #[error("RouterOS protocol error: {0}")]
     Protocol(String),
 
+    /// Transport-level failure during a `RouterOS` operation
     #[error("RouterOS transport error during {operation}: {source}")]
     Transport {
         operation: &'static str,
@@ -33,18 +36,22 @@ pub enum AppError {
         source: std::io::Error,
     },
 
+    /// Operation did not complete within its deadline
     #[error("RouterOS timeout during {0}")]
     Timeout(&'static str),
 
+    /// `RouterOS` rejected the command with a trap sentence
     #[error("RouterOS command rejected (category {category:?})")]
     RouterOsTrap {
         category: Option<u8>,
         message: String,
     },
 
+    /// `RouterOS` closed the connection without a clean reply
     #[error("RouterOS terminated the connection")]
     RouterOsFatal,
 
+    /// Credentials or challenge were rejected by the router
     #[error("RouterOS authentication failed: {0}")]
     Authentication(String),
 

@@ -1,18 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
-//! Metrics registry and update logic
+//! Metrics registry: registration, update, encoding, and cleanup logic.
 
 mod cleanup;
 mod init;
 mod scrape;
 mod update;
 
-use crate::metrics::labels::{
-    CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels, FirewallRuleLabels, GroupLabels,
-    InterfaceInfoLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardPeerInfoLabels,
-    WireGuardPeerLabels,
-};
 use dashmap::DashMap;
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
@@ -20,10 +15,17 @@ use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
 
-type FloatGauge = Gauge<f64, std::sync::atomic::AtomicU64>;
+use crate::metrics::labels::{
+    CertificateLabels, ConntrackLabels, FirewallRuleInfoLabels, FirewallRuleLabels, GroupLabels,
+    InterfaceInfoLabels, InterfaceLabels, RouterLabels, SystemInfoLabels, WireGuardPeerInfoLabels,
+    WireGuardPeerLabels,
+};
+
+type FloatGauge = Gauge<f64, AtomicU64>;
 const CONNTRACK_SERIES_LIMIT_PER_ROUTER: usize = 1024;
 
 #[derive(Clone, Copy)]

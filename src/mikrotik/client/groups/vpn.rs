@@ -3,11 +3,12 @@
 
 //! `WireGuard` and certificate collection group.
 
+use secrecy::ExposeSecret;
+
 use crate::mikrotik::client::MikroTikClient;
 use crate::mikrotik::responses::{parse_certificates, parse_wireguard_peers};
 use crate::mikrotik::types::CertificateStats;
 use crate::prelude::Result;
-use secrecy::ExposeSecret;
 
 pub(crate) async fn collect_group_vpn_certs(
     client: &MikroTikClient,

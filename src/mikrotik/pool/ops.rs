@@ -4,7 +4,6 @@
 //! Internal methods for `ConnectionPool` operations.
 
 use std::collections::HashSet;
-
 use std::sync::atomic::Ordering;
 
 use crate::mikrotik::connection::RouterOsConnection;
@@ -40,10 +39,10 @@ impl ConnectionPool {
             if state.should_skip_attempt() {
                 let delay = state.remaining_retry_delay();
                 tracing::info!(
-                    "Router {} in backoff mode ({} consecutive errors, next retry in {:?})",
-                    addr,
-                    state.consecutive_errors,
-                    delay
+                    addr = %addr,
+                    consecutive_errors = state.consecutive_errors,
+                    retry_delay_secs = ?delay,
+                    "Router in backoff mode, skipping connection attempt"
                 );
                 return Err(AppError::RouterOs(format!(
                     "Connection to {} temporarily disabled due to {} consecutive errors. Will retry in {:?}",
@@ -58,16 +57,16 @@ impl ConnectionPool {
                 if pooled.last_used.elapsed() < self.max_idle_time
                     && pooled.connection.is_reusable()
                 {
-                    tracing::debug!("Reusing connection from pool for {}", addr);
-                    tracing::trace!("Connection last used: {:?} ago", pooled.last_used.elapsed());
+                    tracing::debug!(addr = %addr, "Reusing connection from pool");
+                    tracing::trace!(idle = ?pooled.last_used.elapsed(), "Connection last used");
                     pooled.last_used = tokio::time::Instant::now();
                     Some(pooled.connection)
                 } else {
-                    tracing::debug!("Reusing expired connection for {}", addr);
+                    tracing::debug!(addr = %addr, "Reusing expired connection");
                     tracing::trace!(
-                        "Connection age: {:?} (max: {:?})",
-                        pooled.last_used.elapsed(),
-                        self.max_idle_time
+                        idle = ?pooled.last_used.elapsed(),
+                        max_idle = ?self.max_idle_time,
+                        "Connection age exceeds maximum"
                     );
                     None
                 }
@@ -79,43 +78,45 @@ impl ConnectionPool {
         let conn = if let Some(c) = conn {
             c
         } else {
-            tracing::debug!("Creating new connection for {}", addr);
+            tracing::debug!(addr = %addr, "Creating new connection");
 
             match RouterOsConnection::connect(addr, tls).await {
                 Ok(mut conn) => {
-                    tracing::trace!("Connection established, attempting login");
+                    tracing::trace!(addr = %addr, "Connection established, attempting login");
                     match conn.login(username, password).await {
                         Ok(()) => {
-                            tracing::trace!("Login successful, connection ready");
+                            tracing::trace!(addr = %addr, "Login successful, connection ready");
                             // A successful login does not prove the subsequent group command works.
                             // Reset backoff only when the caller records a successful operation.
                             conn
                         }
                         Err(error) => {
-                            tracing::trace!("Login failed: {error}");
+                            tracing::trace!(addr = %addr, %error, "Login failed");
                             let mut states = self.connection_states.lock().await;
                             let state = states
                                 .entry(key.clone())
                                 .or_insert_with(ConnectionState::new);
                             state.record_error();
                             tracing::trace!(
-                                "Login error recorded, consecutive errors: {}",
-                                state.consecutive_errors
+                                addr = %addr,
+                                consecutive_errors = state.consecutive_errors,
+                                "Login error recorded"
                             );
                             return Err(error);
                         }
                     }
                 }
                 Err(error) => {
-                    tracing::trace!("Connection failed: {error}");
+                    tracing::trace!(addr = %addr, %error, "Connection failed");
                     let mut states = self.connection_states.lock().await;
                     let state = states
                         .entry(key.clone())
                         .or_insert_with(ConnectionState::new);
                     state.record_error();
                     tracing::trace!(
-                        "Connection error recorded, consecutive errors: {}",
-                        state.consecutive_errors
+                        addr = %addr,
+                        consecutive_errors = state.consecutive_errors,
+                        "Connection error recorded"
                     );
                     return Err(error);
                 }
@@ -238,7 +239,7 @@ impl ConnectionPool {
     }
 
     /// Get pool statistics for metrics.
-    pub async fn get_pool_stats(&self) -> (usize, usize) {
+    pub(crate) async fn get_pool_stats(&self) -> (usize, usize) {
         let pool = self.connections.lock().await;
         let total = pool.len();
         // All connections in pool are currently idle (not in use)
@@ -248,25 +249,25 @@ impl ConnectionPool {
     }
 
     /// Clean up expired connections.
-    pub async fn cleanup(&self) {
+    pub(crate) async fn cleanup(&self) {
         let mut pool = self.connections.lock().await;
         pool.retain(|key, pooled| {
             let should_keep = pooled.last_used.elapsed() < self.max_idle_time;
             if !should_keep {
-                tracing::debug!("Cleaning up expired connection: {}", key);
+                tracing::debug!(key = %key, "Cleaning up expired connection");
             }
             should_keep
         });
     }
 
     /// Clean up connection state for routers no longer configured.
-    pub async fn cleanup_states(&self, active_keys: &HashSet<String>) {
+    pub(crate) async fn cleanup_states(&self, active_keys: &HashSet<String>) {
         let mut states = self.connection_states.lock().await;
         let before_count = states.len();
         states.retain(|key, _| active_keys.contains(&format!("{}:{}", key.address, key.username)));
         let removed = before_count - states.len();
         if removed > 0 {
-            tracing::debug!("Removed {} stale connection state entries", removed);
+            tracing::debug!(removed, "Removed stale connection state entries");
         }
     }
 }

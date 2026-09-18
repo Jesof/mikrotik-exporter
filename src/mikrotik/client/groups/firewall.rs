@@ -3,10 +3,11 @@
 
 //! Firewall collection group.
 
+use secrecy::ExposeSecret;
+
 use crate::mikrotik::client::MikroTikClient;
 use crate::mikrotik::responses::parse_firewall_rules;
 use crate::prelude::Result;
-use secrecy::ExposeSecret;
 
 pub(crate) async fn collect_group_firewall(
     client: &MikroTikClient,

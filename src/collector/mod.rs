@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
+//! Production metrics collection loop.
+//!
+//! Schedules per-router collection on independent, non-overlapping tasks,
+//! supervises the tasks, and performs periodic dynamic-label cleanup.
+
 mod cleanup;
 mod router_task;
 
 use std::collections::HashSet;
+use std::future::Future;
+use std::io::Error as IoError;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, watch};
@@ -19,6 +26,10 @@ use crate::prelude::{AppError, Result};
 const STALE_LABEL_TTL: Duration = Duration::from_mins(30);
 
 #[must_use]
+/// Starts the supervised metrics collection loop.
+///
+/// Spawns one schedule task per router plus a pool-cleanup task, and returns
+/// their `JoinHandle`. On shutdown the handle resolves once all tasks joined.
 pub fn start_collection_loop(
     mut shutdown_rx: watch::Receiver<bool>,
     config: Arc<Config>,
@@ -77,7 +88,7 @@ pub fn start_collection_loop(
                     }
                 }
                 result = tasks.join_next() => {
-                    break Err(AppError::Io(std::io::Error::other(format!("Collector worker stopped unexpectedly: {result:?}"))));
+                    break Err(AppError::Io(IoError::other(format!("Collector worker stopped unexpectedly: {result:?}"))));
                 }
                 Some(router) = completed_rx.recv() => {
                     pending.remove(&router);
@@ -104,7 +115,7 @@ pub fn start_collection_loop(
 async fn run_schedule<F, Fut>(period: Duration, mut collect: F)
 where
     F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = ()>,
+    Fut: Future<Output = ()>,
 {
     let mut ticker = tokio::time::interval(period);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
