@@ -1,0 +1,343 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Jesof
+
+//! Interface metrics domain.
+
+use crate::metrics::labels::{InterfaceInfoLabels, InterfaceLabels};
+use crate::mikrotik::InterfaceStats;
+use dashmap::DashMap;
+use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::family::Family;
+use prometheus_client::metrics::gauge::Gauge;
+use prometheus_client::registry::Registry;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::time::Instant;
+
+#[derive(Clone, Copy)]
+pub(crate) struct InterfaceSnapshot {
+    pub(crate) rx_bytes: u64,
+    pub(crate) tx_bytes: u64,
+    pub(crate) rx_packets: u64,
+    pub(crate) tx_packets: u64,
+    pub(crate) rx_errors: Option<u64>,
+    pub(crate) tx_errors: Option<u64>,
+}
+
+#[derive(Clone)]
+pub(crate) struct InterfaceDomain {
+    pub(crate) rx_bytes: Family<InterfaceLabels, Counter>,
+    pub(crate) tx_bytes: Family<InterfaceLabels, Counter>,
+    pub(crate) rx_packets: Family<InterfaceLabels, Counter>,
+    pub(crate) tx_packets: Family<InterfaceLabels, Counter>,
+    pub(crate) rx_errors: Family<InterfaceLabels, Counter>,
+    pub(crate) tx_errors: Family<InterfaceLabels, Counter>,
+    pub(crate) running: Family<InterfaceLabels, Gauge>,
+    pub(crate) info: Family<InterfaceInfoLabels, Gauge>,
+    pub(crate) prev: Arc<DashMap<InterfaceLabels, InterfaceSnapshot>>,
+    pub(crate) prev_info: Arc<DashMap<String, HashMap<InterfaceLabels, InterfaceInfoLabels>>>,
+    pub(crate) info_last_seen: Arc<DashMap<InterfaceInfoLabels, Instant>>,
+}
+
+impl InterfaceDomain {
+    pub(crate) fn new(registry: &mut Registry) -> Self {
+        let rx_bytes = Family::<InterfaceLabels, Counter>::default();
+        registry.register(
+            "mikrotik_interface_rx_bytes",
+            "Received bytes on interface",
+            rx_bytes.clone(),
+        );
+        let tx_bytes = Family::<InterfaceLabels, Counter>::default();
+        registry.register(
+            "mikrotik_interface_tx_bytes",
+            "Transmitted bytes on interface",
+            tx_bytes.clone(),
+        );
+        let rx_packets = Family::<InterfaceLabels, Counter>::default();
+        registry.register(
+            "mikrotik_interface_rx_packets",
+            "Received packets on interface",
+            rx_packets.clone(),
+        );
+        let tx_packets = Family::<InterfaceLabels, Counter>::default();
+        registry.register(
+            "mikrotik_interface_tx_packets",
+            "Transmitted packets on interface",
+            tx_packets.clone(),
+        );
+        let rx_errors = Family::<InterfaceLabels, Counter>::default();
+        registry.register(
+            "mikrotik_interface_rx_errors",
+            "Receive errors on interface",
+            rx_errors.clone(),
+        );
+        let tx_errors = Family::<InterfaceLabels, Counter>::default();
+        registry.register(
+            "mikrotik_interface_tx_errors",
+            "Transmit errors on interface",
+            tx_errors.clone(),
+        );
+        let running = Family::<InterfaceLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_interface_running",
+            "Interface running status (1=running,0=down)",
+            running.clone(),
+        );
+        let info = Family::<InterfaceInfoLabels, Gauge>::default();
+        registry.register(
+            "mikrotik_interface_info",
+            "Static interface info (value=1)",
+            info.clone(),
+        );
+
+        Self {
+            rx_bytes,
+            tx_bytes,
+            rx_packets,
+            tx_packets,
+            rx_errors,
+            tx_errors,
+            running,
+            info,
+            prev: Arc::new(DashMap::new()),
+            prev_info: Arc::new(DashMap::new()),
+            info_last_seen: Arc::new(DashMap::new()),
+        }
+    }
+
+    pub(crate) fn update(
+        &self,
+        router_name: &str,
+        interfaces: &[InterfaceStats],
+        apply_counters: bool,
+        seed_cumulative: bool,
+    ) {
+        let mut current_interface_info = HashMap::new();
+
+        for iface in interfaces {
+            let labels = InterfaceLabels {
+                router: router_name.into(),
+                id: iface.id.clone(),
+            };
+            let info_labels = InterfaceInfoLabels {
+                router: router_name.into(),
+                id: iface.id.clone(),
+                name: iface.name.clone(),
+                comment: iface.comment.clone(),
+            };
+
+            current_interface_info.insert(labels.clone(), info_labels.clone());
+
+            self.process_counters(iface, &labels, apply_counters, seed_cumulative);
+            self.process_gauges(iface, &labels);
+            self.process_info(iface, &labels, &info_labels);
+        }
+
+        self.cleanup_stale(router_name, &current_interface_info);
+    }
+
+    fn process_counters(
+        &self,
+        iface: &InterfaceStats,
+        labels: &InterfaceLabels,
+        apply_counters: bool,
+        seed_cumulative: bool,
+    ) {
+        let previous = self.prev.get(labels).map(|entry| *entry.value());
+        let required: [(&Family<InterfaceLabels, Counter>, u64, Option<u64>); 4] = [
+            (&self.rx_bytes, iface.rx_bytes, previous.map(|s| s.rx_bytes)),
+            (&self.tx_bytes, iface.tx_bytes, previous.map(|s| s.tx_bytes)),
+            (
+                &self.rx_packets,
+                iface.rx_packets,
+                previous.map(|s| s.rx_packets),
+            ),
+            (
+                &self.tx_packets,
+                iface.tx_packets,
+                previous.map(|s| s.tx_packets),
+            ),
+        ];
+        for (family, current, previous_value) in required {
+            let counter = family.get_or_create(labels);
+            if !apply_counters {
+                continue;
+            }
+            if let Some(previous_value) = previous_value {
+                counter.inc_by(counter_delta(current, previous_value));
+            } else if previous.is_none() && seed_cumulative {
+                counter.inc_by(current);
+            }
+        }
+
+        self.process_optional_counter(
+            &self.rx_errors,
+            iface.rx_errors,
+            labels,
+            previous.and_then(|s| s.rx_errors),
+            apply_counters,
+            seed_cumulative,
+        );
+        self.process_optional_counter(
+            &self.tx_errors,
+            iface.tx_errors,
+            labels,
+            previous.and_then(|s| s.tx_errors),
+            apply_counters,
+            seed_cumulative,
+        );
+    }
+
+    fn process_optional_counter(
+        &self,
+        family: &Family<InterfaceLabels, Counter>,
+        current: Option<u64>,
+        labels: &InterfaceLabels,
+        previous: Option<u64>,
+        apply_counters: bool,
+        seed_cumulative: bool,
+    ) {
+        let Some(current) = current else {
+            return;
+        };
+        let counter = family.get_or_create(labels);
+        if !apply_counters {
+            return;
+        }
+        match previous {
+            Some(previous) => {
+                counter.inc_by(counter_delta(current, previous));
+            }
+            None if seed_cumulative && !self.prev.contains_key(labels) => {
+                counter.inc_by(current);
+            }
+            None => {}
+        }
+    }
+
+    fn process_gauges(&self, iface: &InterfaceStats, labels: &InterfaceLabels) {
+        self.running
+            .get_or_create(labels)
+            .set(i64::from(iface.running));
+    }
+
+    fn process_info(
+        &self,
+        iface: &InterfaceStats,
+        labels: &InterfaceLabels,
+        info_labels: &InterfaceInfoLabels,
+    ) {
+        let now = Instant::now();
+        self.info.get_or_create(info_labels).set(1);
+        self.prev.insert(
+            labels.clone(),
+            InterfaceSnapshot {
+                rx_bytes: iface.rx_bytes,
+                tx_bytes: iface.tx_bytes,
+                rx_packets: iface.rx_packets,
+                tx_packets: iface.tx_packets,
+                rx_errors: iface.rx_errors,
+                tx_errors: iface.tx_errors,
+            },
+        );
+        self.info_last_seen.insert(info_labels.clone(), now);
+    }
+
+    fn cleanup_stale(
+        &self,
+        router_name: &str,
+        current_interface_info: &HashMap<InterfaceLabels, InterfaceInfoLabels>,
+    ) {
+        let mut prev_info_entry = self.prev_info.entry(router_name.into()).or_default();
+        let prev_map = prev_info_entry.value_mut();
+
+        for (labels, info_labels) in prev_map.iter() {
+            if !current_interface_info.contains_key(labels) {
+                self.rx_bytes.remove(labels);
+                self.tx_bytes.remove(labels);
+                self.rx_packets.remove(labels);
+                self.tx_packets.remove(labels);
+                self.rx_errors.remove(labels);
+                self.tx_errors.remove(labels);
+                self.running.remove(labels);
+                self.prev.remove(labels);
+
+                self.info.remove(info_labels);
+                self.info_last_seen.remove(info_labels);
+            } else if let Some(current_info) = current_interface_info.get(labels)
+                && current_info != info_labels
+            {
+                self.info.get_or_create(info_labels).set(0);
+            }
+        }
+        prev_map.clone_from(current_interface_info);
+    }
+
+    pub(crate) fn cleanup_expired_info(&self, now: Instant, ttl: std::time::Duration) {
+        let stale: Vec<InterfaceInfoLabels> = self
+            .info_last_seen
+            .iter()
+            .filter(|entry| now.duration_since(*entry.value()) > ttl)
+            .map(|entry| entry.key().clone())
+            .collect();
+        if !stale.is_empty() {
+            let count = stale.len();
+            for label in stale {
+                self.info_last_seen.remove(&label);
+                self.info.remove(&label);
+            }
+            tracing::debug!(
+                expired = count,
+                "Expired interface info labels via TTL cleanup"
+            );
+        }
+    }
+
+    pub(crate) fn cleanup_stale_router(&self, router_name: &str) {
+        let stale: Vec<InterfaceLabels> = self
+            .prev
+            .iter()
+            .filter(|entry| entry.key().router == router_name)
+            .map(|entry| entry.key().clone())
+            .collect();
+        for label in stale {
+            self.prev.remove(&label);
+            self.rx_bytes.remove(&label);
+            self.tx_bytes.remove(&label);
+            self.rx_packets.remove(&label);
+            self.tx_packets.remove(&label);
+            self.rx_errors.remove(&label);
+            self.tx_errors.remove(&label);
+            self.running.remove(&label);
+        }
+        if let Some((_, map)) = self.prev_info.remove(router_name) {
+            for info_label in map.values() {
+                self.info.remove(info_label);
+                self.info_last_seen.remove(info_label);
+            }
+        }
+    }
+
+    pub(crate) fn retain_active_last_seen(
+        &self,
+        active_routers: &std::collections::HashSet<String>,
+    ) {
+        self.info_last_seen.retain(|labels, _| {
+            if active_routers.contains(&labels.router) {
+                true
+            } else {
+                self.info.remove(labels);
+                false
+            }
+        });
+    }
+}
+
+#[inline]
+fn counter_delta(current: u64, previous: u64) -> u64 {
+    if current >= previous {
+        current - previous
+    } else {
+        current
+    }
+}
