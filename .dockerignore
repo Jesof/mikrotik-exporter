@@ -6,3 +6,5 @@
 !.cargo/config.toml
 !src
 !src/**
+!benches
+!benches/**
