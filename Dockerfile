@@ -24,8 +24,14 @@ LABEL org.opencontainers.image.title="MikroTik Exporter" \
       org.opencontainers.image.description="Prometheus exporter for MikroTik RouterOS devices" \
       org.opencontainers.image.source="https://github.com/Jesof/mikrotik-exporter" \
       org.opencontainers.image.licenses="MIT"
-RUN apk upgrade --no-cache && \
-    apk add --no-cache ca-certificates libgcc && \
+# Runtime packages are pinned to exact versions for reproducible builds; the
+# libcrypto3/libssl3 bumps carry the OpenSSL CVE-2026-14456 fix. Do not replace
+# the pins with an unpinned `apk upgrade`: that defeats the base digest pin.
+RUN apk add --no-cache \
+      ca-certificates=20260909-r0 \
+      libgcc=15.2.0-r5 \
+      libcrypto3=3.5.8-r0 \
+      libssl3=3.5.8-r0 && \
     addgroup -g 1000 mikrotik && \
     adduser -D -u 1000 -G mikrotik mikrotik
 WORKDIR /app

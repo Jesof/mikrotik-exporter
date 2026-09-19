@@ -98,9 +98,15 @@ allow-workspace = false
 # Explicitly banned crates
 deny = []
 
-# Skip specific crate versions during duplicate detection
-# syn: syn 2 and syn 3 coexist while the ecosystem migrates; tracing-attributes
-# (latest 0.1.31) still depends on syn 2 while other proc-macro crates use syn 3
+# Skip specific crate versions during duplicate detection.
+# `syn` (2 and 3) is the long-term exception: tracing-attributes (0.1.31)
+# still depends on syn 2 while other proc-macro crates use syn 3.
+# cargo-deny prunes by the configured targets (see `[graph]`), so duplicate
+# versions reachable only through dev/test/bench crates (for example the extra
+# `getrandom` and `bit-vec` copies pulled by tempfile/proptest/criterion) do not
+# fail the check. If a future dependency change makes one of those duplicates
+# reachable from production code, `cargo deny check bans` will report it:
+# add a new entry here only for a review-approved, narrowly scoped exception.
 skip = ["syn"]
 
 # Skip entire dependency trees from duplicate checks (very heavy hammer)

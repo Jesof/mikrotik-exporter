@@ -248,6 +248,47 @@ jobs:
           args: --config lychee.toml --no-progress '*.md' '.github/**/*.md'
           fail: true
 
+  # Non-Rust deployment/config artifacts (k8s manifests, Grafana dashboard,
+  # helper scripts, dependabot config) used to merge with zero validation.
+  # This job gives them at least a syntax check without spawning a cluster.
+  config-lint:
+    name: Config Syntax
+    needs: changes
+    if: needs.changes.outputs.config == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate Kubernetes manifests
+        run: |
+          set -euo pipefail
+          if [[ -d k8s ]]; then
+            docker run --rm -v "$GITHUB_WORKSPACE/k8s:/src:ro" -w /src \
+              ghcr.io/yannh/kubeconform@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e \
+              -strict -summary /src
+          fi
+      - name: Validate Grafana dashboard JSON
+        run: |
+          set -euo pipefail
+          for f in grafana/*.json; do
+            [[ -f "$f" ]] && python3 -m json.tool "$f" > /dev/null
+          done
+      - name: Validate helper scripts
+        run: |
+          set -euo pipefail
+          for f in scripts/*.py; do
+            [[ -f "$f" ]] && python3 -m py_compile "$f"
+          done
+      - name: Validate dependabot configuration
+        run: |
+          set -euo pipefail
+          if [[ -f .github/dependabot.yml ]]; then
+            python3 -m pip install --quiet pyyaml
+            python3 -c 'import pathlib,yaml; d=yaml.safe_load(pathlib.Path(".github/dependabot.yml").read_text()); assert isinstance(d, dict) and d.get("version") == 2'
+          fi
+
   # Docker validation is a single-arch smoke test on pull requests. On main the
   # publication job performs the one multi-arch build, so validation is skipped
   # there to avoid building the same image twice.
@@ -272,7 +313,7 @@ jobs:
   check:
     name: Check
     if: always()
-    needs: [changes, cargo-check, pins, test, fmt, clippy, coverage, deny, security-audit, workflow-lint, docs-lint, docker-validation]
+    needs: [changes, cargo-check, pins, test, fmt, clippy, coverage, deny, security-audit, workflow-lint, docs-lint, config-lint, docker-validation]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -283,6 +324,7 @@ jobs:
           WORKFLOWS: ${{ needs.changes.outputs.workflows }}
           DOCKER: ${{ needs.changes.outputs.docker }}
           DOCS: ${{ needs.changes.outputs.docs }}
+          CONFIG: ${{ needs.changes.outputs.config }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
@@ -301,8 +343,9 @@ jobs:
           if [[ "$RUST" == "true" || "$DOCKER" == "true" ]]; then require pins; fi
           if [[ "$WORKFLOWS" == "true" ]]; then require workflow-lint; fi
           if [[ "$DOCS" == "true" ]]; then require docs-lint; fi
+          if [[ "$CONFIG" == "true" ]]; then require config-lint; fi
           if [[ "$DOCKER" == "true" && "$EVENT_NAME" != "push" ]]; then require docker-validation; fi
-          echo "Quality gate passed (rust=$RUST workflows=$WORKFLOWS docker=$DOCKER docs=$DOCS)"
+          echo "Quality gate passed (rust=$RUST workflows=$WORKFLOWS docker=$DOCKER docs=$DOCS config=$CONFIG)"
 
   # One multi-arch build per validated main push; this is the immutable image that
   # a later release promotes. `latest` is intentionally not moved here: it tracks
