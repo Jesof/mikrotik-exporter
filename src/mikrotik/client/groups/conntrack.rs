@@ -52,9 +52,12 @@ pub(crate) async fn collect_group_conntrack(
 
     drop(guard);
 
+    // If every family failed with an unparsable snapshot, propagate the typed
+    // error so the whole-router invalid-snapshot guard still sees it.
     if let Some(index) = conntrack_results
         .iter()
         .position(|(_, result)| matches!(result, Err(crate::prelude::AppError::InvalidSnapshot(_))))
+        && !any_success
     {
         return conntrack_results
             .remove(index)
@@ -62,19 +65,24 @@ pub(crate) async fn collect_group_conntrack(
             .map(|_| super::super::ConntrackGroupData::default());
     }
 
-    if !any_success {
-        return Err(crate::prelude::AppError::RouterOs(format!(
-            "Router '{}' conntrack collection failed for both IPv4 and IPv6",
-            client.config.name
-        )));
-    }
-
+    // Salvage per family: one malformed row in a single family is a query-level
+    // failure that must not discard the healthy other family's data. The group
+    // reports partial (complete_ok=false) so the unparsable data stays visible
+    // via the completeness gauge instead of silently blanking both families.
     let mut entries = Vec::new();
     let mut complete_ok = true;
 
     for (_, result) in conntrack_results {
-        complete_ok &= result.is_ok();
-        entries.extend(result.unwrap_or_default());
+        match result {
+            Ok(rows) => entries.extend(rows),
+            Err(_) => complete_ok = false,
+        }
+    }
+    if entries.is_empty() && !complete_ok {
+        return Err(crate::prelude::AppError::RouterOs(format!(
+            "Router '{}' conntrack collection failed for both IPv4 and IPv6",
+            client.config.name
+        )));
     }
 
     Ok(super::super::ConntrackGroupData {

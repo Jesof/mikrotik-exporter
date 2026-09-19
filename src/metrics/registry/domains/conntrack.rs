@@ -112,28 +112,56 @@ impl ConntrackDomain {
             }
         }
 
+        // Deterministic family-fair selection: `ip_version` lexically sorts
+        // `"ipv4"` before `"ipv6"`, so a plain sorted `take(cap)` lets a large
+        // IPv4 family exhaust the budget and evict the entire IPv6 family.
+        // Round-robin across families keeps the total cap while giving each
+        // family a fair share, so IPv6 survives an IPv4-saturated table.
+        let mut families: BTreeMap<String, Vec<(String, String, u64)>> = BTreeMap::new();
+        for ((ip_version, src_address, protocol), count) in candidates {
+            families
+                .entry(ip_version)
+                .or_default()
+                .push((src_address, protocol, count));
+        }
+        let mut offsets = vec![0; families.len()];
         let mut current_conntrack = HashSet::new();
         let now = Instant::now();
-        for ((ip_version, src_address, protocol), count) in
-            candidates.into_iter().take(SERIES_LIMIT_PER_ROUTER)
-        {
-            let ct_labels = ConntrackLabels {
-                router: router_name.into(),
-                src_address,
-                protocol,
-                ip_version,
-            };
-            current_conntrack.insert(ct_labels.clone());
-            #[allow(clippy::cast_possible_wrap)]
-            self.count
-                .get_or_create(&ct_labels)
-                .set(i64::try_from(count).unwrap_or(i64::MAX));
-            if observed.contains(&(
-                ct_labels.ip_version.clone(),
-                ct_labels.src_address.clone(),
-                ct_labels.protocol.clone(),
-            )) {
-                self.last_seen.insert(ct_labels, now);
+        let mut chosen = 0;
+        loop {
+            let mut advanced = false;
+            for (index, (ip_version, series)) in families.iter().enumerate() {
+                if chosen == SERIES_LIMIT_PER_ROUTER {
+                    break;
+                }
+                let offset = &mut offsets[index];
+                if *offset < series.len() {
+                    let (src_address, protocol, count) = series[*offset].clone();
+                    *offset += 1;
+                    chosen += 1;
+                    advanced = true;
+                    let ct_labels = ConntrackLabels {
+                        router: router_name.into(),
+                        src_address,
+                        protocol,
+                        ip_version: ip_version.clone(),
+                    };
+                    current_conntrack.insert(ct_labels.clone());
+                    #[allow(clippy::cast_possible_wrap)]
+                    self.count
+                        .get_or_create(&ct_labels)
+                        .set(i64::try_from(count).unwrap_or(i64::MAX));
+                    if observed.contains(&(
+                        ct_labels.ip_version.clone(),
+                        ct_labels.src_address.clone(),
+                        ct_labels.protocol.clone(),
+                    )) {
+                        self.last_seen.insert(ct_labels, now);
+                    }
+                }
+            }
+            if !advanced {
+                break;
             }
         }
 
@@ -309,7 +337,77 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_connection_tracking_multi_router() {
+    async fn test_conntrack_cap_is_family_fair_when_ipv4_saturates() {
+        let registry = MetricsRegistry::new();
+        let mut snapshot =
+            make_router_metrics("router1", Vec::new(), make_system("7.10", "board", "1d"));
+        let mut tracking: Vec<_> = (0..1600)
+            .map(|i| make_conntrack(&format!("10.0.{}.{}", i / 256, i % 256), "tcp", 1, "ipv4"))
+            .collect();
+        tracking.push(make_conntrack("2001:db8::1", "tcp", 1, "ipv6"));
+        tracking.push(make_conntrack("2001:db8::2", "udp", 1, "ipv6"));
+        tracking.push(make_conntrack("fe80::1", "tcp", 1, "ipv6"));
+        snapshot.connection_tracking = tracking;
+        registry.update_metrics(&snapshot);
+
+        let prev = registry.conntrack.prev.get("router1").unwrap();
+        assert_eq!(prev.len(), SERIES_LIMIT_PER_ROUTER);
+        for expected in [
+            ("2001:db8::1", "tcp"),
+            ("2001:db8::2", "udp"),
+            ("fe80::1", "tcp"),
+        ] {
+            let labels = crate::metrics::labels::ConntrackLabels {
+                router: "router1".into(),
+                src_address: expected.0.into(),
+                protocol: expected.1.into(),
+                ip_version: "ipv6".into(),
+            };
+            assert!(
+                prev.contains(&labels),
+                "IPv6 series {} must survive an IPv4-saturated cap",
+                expected.0
+            );
+            assert!(registry.conntrack.count.get_or_create(&labels).get() >= 1);
+        }
+        let router_labels = RouterLabels {
+            router: "router1".into(),
+        };
+        assert_eq!(
+            registry
+                .conntrack
+                .dropped_series
+                .get_or_create(&router_labels)
+                .get(),
+            i64::try_from(1603 - SERIES_LIMIT_PER_ROUTER).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_conntrack_cap_single_family_preserves_determinism() {
+        let registry = MetricsRegistry::new();
+        let mut snapshot =
+            make_router_metrics("router2", Vec::new(), make_system("7.10", "board", "1d"));
+        snapshot.connection_tracking = (0..1200)
+            .map(|i| {
+                make_conntrack(
+                    &format!("192.0.2.{}.{}", i / 256, i % 256),
+                    "udp",
+                    1,
+                    "ipv4",
+                )
+            })
+            .collect();
+        registry.update_metrics(&snapshot);
+        let first = registry.conntrack.prev.get("router2").unwrap().clone();
+        assert_eq!(first.len(), SERIES_LIMIT_PER_ROUTER);
+        snapshot.connection_tracking.reverse();
+        registry.update_metrics(&snapshot);
+        assert_eq!(*registry.conntrack.prev.get("router2").unwrap(), first);
+    }
+
+    #[tokio::test]
+    async fn test_connection_tracking_multi_outter() {
         let registry = MetricsRegistry::new();
         let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
         let system = make_system("7.10", "RB750Gr3", "1d2h3m4s");
