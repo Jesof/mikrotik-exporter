@@ -23,10 +23,13 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+        automountServiceAccountToken: false
       containers:
       - name: mikrotik-exporter
-        image: ghcr.io/jesof/mikrotik-exporter:latest
-        imagePullPolicy: Always
+        image: ghcr.io/jesof/mikrotik-exporter:0.5.0
+        imagePullPolicy: IfNotPresent
         ports:
         - name: metrics
           containerPort: 9090
