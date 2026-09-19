@@ -272,6 +272,70 @@ mod tests {
     use crate::metrics::labels::RouterLabels;
     use crate::metrics::registry::MetricsRegistry;
     use crate::metrics::registry::test_support::router_label;
+    use crate::mikrotik::{CollectionStatus, CollectionStatusParts, FetchState};
+
+    #[test]
+    fn test_partial_group_status_does_not_advance_freshness() {
+        let registry = MetricsRegistry::new();
+        let labels = router_label("router1");
+        registry.record_group_status(&labels, &CollectionStatus::default());
+        let group = crate::metrics::labels::GroupLabels {
+            router: labels.router.clone(),
+            group: "conntrack",
+        };
+        registry
+            .scrape
+            .group_last_success_timestamp_seconds
+            .get_or_create(&group)
+            .set(123);
+        let status = CollectionStatus::from_parts(CollectionStatusParts {
+            conntrack: FetchState::Partial,
+            ..Default::default()
+        });
+        registry.record_group_status(&labels, &status);
+        assert_eq!(
+            registry
+                .scrape
+                .group_collection_success
+                .get_or_create(&group)
+                .get(),
+            1
+        );
+        assert_eq!(
+            registry
+                .scrape
+                .group_collection_complete
+                .get_or_create(&group)
+                .get(),
+            0
+        );
+        assert_eq!(
+            registry
+                .scrape
+                .group_last_success_timestamp_seconds
+                .get_or_create(&group)
+                .get(),
+            123
+        );
+        assert!(!status.all_ok());
+        registry.record_scrape_error(&labels);
+        assert_eq!(
+            registry
+                .scrape
+                .group_collection_success
+                .get_or_create(&group)
+                .get(),
+            0
+        );
+        assert_eq!(
+            registry
+                .scrape
+                .group_last_success_timestamp_seconds
+                .get_or_create(&group)
+                .get(),
+            123
+        );
+    }
 
     #[test]
     fn test_record_scrape_success_increments() {

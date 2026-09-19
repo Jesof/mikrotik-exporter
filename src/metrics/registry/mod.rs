@@ -50,74 +50,7 @@ mod tests {
     use super::test_support::*;
     use super::*;
     use crate::RouterLabels;
-    use crate::mikrotik::{
-        CollectionStatus, CollectionStatusParts, FetchState, SystemResource, WireGuardPeerStats,
-    };
-
-    #[test]
-    fn test_partial_group_status_does_not_advance_freshness() {
-        let registry = MetricsRegistry::new();
-        let labels = RouterLabels {
-            router: "router1".into(),
-        };
-        registry.record_group_status(&labels, &CollectionStatus::default());
-        let group = crate::metrics::labels::GroupLabels {
-            router: labels.router.clone(),
-            group: "conntrack",
-        };
-        registry
-            .scrape
-            .group_last_success_timestamp_seconds
-            .get_or_create(&group)
-            .set(123);
-        let status = CollectionStatus::from_parts(CollectionStatusParts {
-            conntrack: FetchState::Partial,
-            ..Default::default()
-        });
-        registry.record_group_status(&labels, &status);
-        assert_eq!(
-            registry
-                .scrape
-                .group_collection_success
-                .get_or_create(&group)
-                .get(),
-            1
-        );
-        assert_eq!(
-            registry
-                .scrape
-                .group_collection_complete
-                .get_or_create(&group)
-                .get(),
-            0
-        );
-        assert_eq!(
-            registry
-                .scrape
-                .group_last_success_timestamp_seconds
-                .get_or_create(&group)
-                .get(),
-            123
-        );
-        assert!(!status.all_ok());
-        registry.record_scrape_error(&labels);
-        assert_eq!(
-            registry
-                .scrape
-                .group_collection_success
-                .get_or_create(&group)
-                .get(),
-            0
-        );
-        assert_eq!(
-            registry
-                .scrape
-                .group_last_success_timestamp_seconds
-                .get_or_create(&group)
-                .get(),
-            123
-        );
-    }
+    use crate::mikrotik::{SystemResource, WireGuardPeerStats};
 
     #[tokio::test]
     async fn test_cleanup_removes_initialized_router_without_successful_snapshot() {
