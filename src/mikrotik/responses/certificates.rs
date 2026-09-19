@@ -2,6 +2,7 @@
 // Copyright (c) 2025 Jesof
 
 use super::common::required_field;
+use crate::mikrotik::SnapshotError;
 use crate::mikrotik::types::CertificateStats;
 use crate::prelude::{AppError, Result};
 use chrono::{NaiveDate, Utc};
@@ -21,8 +22,9 @@ pub(crate) fn parse_certificates(
         let Some(expiry) = expiry else {
             continue;
         };
-        let date = parse_expiry_date(expiry)
-            .ok_or_else(|| AppError::InvalidSnapshot("invalid certificate expiry".into()))?;
+        let date = parse_expiry_date(expiry).ok_or(AppError::InvalidSnapshot(
+            SnapshotError::InvalidCertificateExpiry,
+        ))?;
         certificates.push(CertificateStats {
             id: id.into(),
             name: name.into(),

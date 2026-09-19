@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Jesof
 
+use crate::mikrotik::SnapshotError;
 use crate::prelude::{AppError, Result};
 use std::collections::HashMap;
 
@@ -12,7 +13,11 @@ pub(super) fn required_field<'a>(
         .get(field)
         .filter(|value| !value.is_empty())
         .map(String::as_str)
-        .ok_or_else(|| AppError::InvalidSnapshot(format!("missing field {field}")))
+        .ok_or_else(|| {
+            AppError::InvalidSnapshot(SnapshotError::MissingField {
+                field: field.to_string(),
+            })
+        })
 }
 
 pub(super) fn parse_u64_field(
@@ -21,7 +26,10 @@ pub(super) fn parse_u64_field(
     context: &'static str,
 ) -> Result<u64> {
     required_field(sentence, field)?.parse().map_err(|_| {
-        AppError::InvalidSnapshot(format!("invalid numeric field {field} in {context}"))
+        AppError::InvalidSnapshot(SnapshotError::InvalidNumericField {
+            field: field.to_string(),
+            context: context.to_string(),
+        })
     })
 }
 

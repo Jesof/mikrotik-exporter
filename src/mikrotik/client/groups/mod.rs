@@ -3,7 +3,7 @@
 
 //! Grouped collection implementations for router metric collection.
 
-use crate::mikrotik::client::MikroTikClient;
+use crate::mikrotik::{MikroTikClient, SnapshotError};
 use crate::prelude::Result;
 
 mod conntrack;
@@ -50,9 +50,9 @@ pub(crate) fn failed_group_names(groups: &[(&'static str, bool)]) -> Vec<&'stati
 
 pub(crate) fn inconsistent_snapshot_error<T>(
     group: &std::result::Result<Result<T>, tokio::time::error::Elapsed>,
-) -> Option<&str> {
-    if let Ok(Err(crate::prelude::AppError::InvalidSnapshot(message))) = group {
-        return Some(message.as_str());
+) -> Option<&SnapshotError> {
+    if let Ok(Err(crate::prelude::AppError::InvalidSnapshot(error))) = group {
+        return Some(error);
     }
     None
 }
@@ -64,9 +64,12 @@ mod tests {
 
     #[test]
     fn test_snapshot_error_classification_uses_variant() {
-        let invalid: std::result::Result<Result<()>, tokio::time::error::Elapsed> =
-            Ok(Err(AppError::InvalidSnapshot("bad number".into())));
-        assert_eq!(inconsistent_snapshot_error(&invalid), Some("bad number"));
+        let invalid: std::result::Result<Result<()>, tokio::time::error::Elapsed> = Ok(Err(
+            AppError::InvalidSnapshot(SnapshotError::GenericMessage("bad number".into())),
+        ));
+        assert!(
+            matches!(inconsistent_snapshot_error(&invalid), Some(SnapshotError::GenericMessage(message)) if message == "bad number")
+        );
         let other: std::result::Result<Result<()>, tokio::time::error::Elapsed> =
             Ok(Err(AppError::RouterOs("inconsistent snapshot".into())));
         assert_eq!(inconsistent_snapshot_error(&other), None);

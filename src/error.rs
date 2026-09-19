@@ -4,6 +4,7 @@
 //! Error types for `MikroTik` Exporter application
 
 use crate::config::ConfigError;
+use crate::mikrotik::{ProtocolError, SnapshotError};
 use thiserror::Error;
 
 /// Main application error type
@@ -23,11 +24,11 @@ pub enum AppError {
 
     /// Parsed router snapshot is inconsistent or malformed
     #[error("Invalid router snapshot: {0}")]
-    InvalidSnapshot(String),
+    InvalidSnapshot(SnapshotError),
 
     /// `RouterOS` protocol framing or sentence violation
     #[error("RouterOS protocol error: {0}")]
-    Protocol(String),
+    Protocol(ProtocolError),
 
     /// Transport-level failure during a `RouterOS` operation
     #[error("RouterOS transport error during {operation}: {source}")]

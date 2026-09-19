@@ -145,6 +145,6 @@ pub use metrics::{MetricsRegistry, RouterLabels};
 /// `MikroTik` connection pool and metric input types
 pub use mikrotik::{
     CertificateStats, CollectionStatus, CollectionStatusParts, ConnectionPool,
-    ConnectionTrackingStats, FetchState, FirewallRuleStats, InterfaceStats, RouterMetrics,
-    SystemResource, WireGuardPeerStats,
+    ConnectionTrackingStats, FetchState, FirewallRuleStats, InterfaceStats, ProtocolError,
+    RouterMetrics, SnapshotError, SystemResource, WireGuardPeerStats,
 };

@@ -5,6 +5,7 @@
 
 use secrecy::ExposeSecret;
 
+use crate::mikrotik::SnapshotError;
 use crate::mikrotik::client::MikroTikClient;
 use crate::mikrotik::responses::parse_firewall_rules;
 use crate::prelude::Result;
@@ -49,7 +50,7 @@ pub(crate) async fn collect_group_firewall(
                 Ok(_) => {
                     inconsistent_sections.push(format!("{ip_version}/{section}"));
                     section_result = Err(crate::prelude::AppError::InvalidSnapshot(
-                        "unverified empty firewall snapshot".into(),
+                        SnapshotError::UnverifiedEmptyFirewallSnapshot,
                     ));
                 }
                 // Preserve the typed cause (for example a timeout that leaves the
@@ -76,10 +77,11 @@ pub(crate) async fn collect_group_firewall(
     drop(guard);
 
     if has_inconsistent_snapshot {
-        return Err(crate::prelude::AppError::InvalidSnapshot(format!(
-            "inconsistent snapshot: firewall count mismatch in sections {}",
-            inconsistent_sections.join(",")
-        )));
+        return Err(crate::prelude::AppError::InvalidSnapshot(
+            SnapshotError::FirewallCountMismatch {
+                sections: inconsistent_sections.join(","),
+            },
+        ));
     }
 
     if let Some(index) = section_results

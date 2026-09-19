@@ -16,6 +16,7 @@ use super::types::{
     CertificateStats, CollectionStatus, CollectionStatusParts, ConnectionTrackingStats, FetchState,
     FirewallRuleStats, InterfaceStats, RouterMetrics, SystemResource, WireGuardPeerStats,
 };
+use crate::mikrotik::SnapshotError;
 
 /// `MikroTik` `RouterOS` API client
 ///
@@ -246,9 +247,9 @@ impl MikroTikClient {
     }
 }
 
-fn reject_invalid_snapshot(messages: [Option<&str>; 4]) -> Result<()> {
-    match messages.into_iter().flatten().next() {
-        Some(message) => Err(AppError::InvalidSnapshot(message.to_string())),
+fn reject_invalid_snapshot(snapshot_errors: [Option<&SnapshotError>; 4]) -> Result<()> {
+    match snapshot_errors.into_iter().flatten().next() {
+        Some(error) => Err(AppError::InvalidSnapshot(error.clone())),
         None => Ok(()),
     }
 }
@@ -311,11 +312,12 @@ mod tests {
                 .collect_metrics()
                 .await
                 .map_err(|error| match error {
-                    AppError::InvalidSnapshot(message) => {
-                        println!(
-                            "validation_missing_field={}",
-                            message.starts_with("missing field ")
-                        );
+                    AppError::InvalidSnapshot(SnapshotError::MissingField { .. }) => {
+                        println!("validation_missing_field=true");
+                        "snapshot validation failed (details redacted)"
+                    }
+                    AppError::InvalidSnapshot(_) => {
+                        println!("validation_missing_field=false");
                         "snapshot validation failed (details redacted)"
                     }
                     _ => "collection failed (details redacted)",
@@ -349,12 +351,15 @@ mod tests {
 
     #[test]
     fn test_invalid_snapshot_remains_typed_for_every_group() {
+        let sample = SnapshotError::GenericMessage("invalid snapshot".into());
         for group in 0..4 {
             let mut errors = [None; 4];
-            errors[group] = Some("invalid snapshot");
-            assert!(
-                matches!(reject_invalid_snapshot(errors), Err(AppError::InvalidSnapshot(message)) if message == "invalid snapshot")
-            );
+            errors[group] = Some(&sample);
+            assert!(matches!(
+                reject_invalid_snapshot(errors),
+                Err(AppError::InvalidSnapshot(SnapshotError::GenericMessage(message)))
+                    if message == "invalid snapshot"
+            ));
         }
         assert!(reject_invalid_snapshot([None; 4]).is_ok());
     }

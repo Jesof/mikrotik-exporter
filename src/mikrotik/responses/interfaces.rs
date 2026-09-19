@@ -2,6 +2,7 @@
 // Copyright (c) 2025 Jesof
 
 use super::common::{parse_u64_field, required_field};
+use crate::mikrotik::SnapshotError;
 use crate::mikrotik::types::InterfaceStats;
 use crate::prelude::{AppError, Result};
 use std::collections::{HashMap, HashSet};
@@ -15,7 +16,9 @@ pub(crate) fn parse_interfaces(
         .map(|s| {
             let id = required_field(s, ".id")?;
             if !ids.insert(id) {
-                return Err(AppError::InvalidSnapshot("duplicate interface id".into()));
+                return Err(AppError::InvalidSnapshot(SnapshotError::DuplicateId {
+                    kind: "interface",
+                }));
             }
             Ok(InterfaceStats {
                 id: id.into(),
@@ -41,7 +44,7 @@ pub(crate) fn parse_interfaces(
                     "false" => false,
                     _ => {
                         return Err(AppError::InvalidSnapshot(
-                            "invalid interface running state".into(),
+                            SnapshotError::InvalidInterfaceRunningState,
                         ));
                     }
                 },
