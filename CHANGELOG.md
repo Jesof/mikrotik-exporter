@@ -32,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   establishes a baseline" is replaced by "the first observed value is counted"; single-label alerting
   on `mikrotik_interface_rx_errors_total`/`tx_errors_total` should re-check expected values after
   this transition. Interface counters in this case appear once and then accumulate deltas normally.
+- An outer group collection deadline now records a connection failure against the affected group's
+  pool state, so a router that consistently exceeds a group timeout applies pool backoff instead of
+  churning a fresh connection every cycle.
 - **Rust API:** `AppError::Config`, `AppError::InvalidSnapshot`, and `AppError::Protocol` now carry
   `ConfigError`, `SnapshotError`, and `ProtocolError` payloads respectively. Library callers matching
   on those variants should match the typed sub-error instead of inspecting a message string; the

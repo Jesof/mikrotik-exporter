@@ -609,6 +609,97 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_group_deadline_records_connection_failure_for_backoff() {
+        use crate::config::RouterConfig;
+        use crate::mikrotik::client::{GROUP_FIREWALL_TIMEOUT, MikroTikClient};
+        use std::sync::Arc;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let (peer_tx, mut peer_rx) = tokio::sync::mpsc::channel(4);
+        let server = tokio::spawn(async move {
+            let mut handles = tokio::task::JoinSet::new();
+            for _ in 0..4 {
+                let stream = listener.accept().await.unwrap().0;
+                let peer_tx = peer_tx.clone();
+                handles.spawn(async move {
+                    let mut peer = RouterOsConnection {
+                        stream: Box::new(stream),
+                        dirty: false,
+                    };
+                    loop {
+                        match peer.read_sentence(&mut ResponseBudget::default()).await {
+                            Ok((kind, _)) if kind == "/login" => {
+                                send(&mut peer, &["!done"]).await;
+                                let _ = peer_tx.send(()).await;
+                                break;
+                            }
+                            Ok(_) => {}
+                            Err(_) => return,
+                        }
+                    }
+                    // Never answer the group queries, so the outer group
+                    // deadline fires and cancels the command. The client drops
+                    // the timed-out connection, so exit on EOF.
+                    loop {
+                        if peer
+                            .read_sentence(&mut ResponseBudget::default())
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                });
+            }
+            drop(peer_tx);
+            while handles.join_next().await.is_some() {}
+        });
+
+        let pool = Arc::new(ConnectionPool::new());
+        let client = MikroTikClient::with_pool(
+            RouterConfig {
+                name: "loopback".into(),
+                address: address.clone(),
+                username: "test-user".into(),
+                password: fixture_password().into(),
+                tls: None,
+            },
+            pool.clone(),
+        );
+        let collection = tokio::spawn(async move { client.collect_metrics().await });
+        // Wait for every group connection to complete login before freezing the
+        // clock, so the hang is on the group query rather than the handshake.
+        for _ in 0..4 {
+            let _ = peer_rx.recv().await;
+        }
+        // `GROUP_SYSTEM_TIMEOUT` (20s) is shorter than the command timeout
+        // (30s), so the system deadline deterministically fires first. Advance
+        // past the longest group deadline so every hung command resolves.
+        tokio::time::pause();
+        tokio::time::advance(GROUP_FIREWALL_TIMEOUT).await;
+        tokio::time::resume();
+        let _ = collection.await.unwrap();
+        assert_eq!(
+            pool.get_connection_state(
+                &address,
+                "test-user",
+                &fixture_password(),
+                None,
+                Some("system")
+            )
+            .await,
+            Some((1, false)),
+            "an outer group deadline must record a connection failure for backoff"
+        );
+        drop(pool);
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
     async fn test_optional_table_trap_does_not_drive_backoff() {
         use crate::config::RouterConfig;
         use crate::mikrotik::client::MikroTikClient;

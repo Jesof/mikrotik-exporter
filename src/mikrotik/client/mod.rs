@@ -28,6 +28,14 @@ pub(crate) struct MikroTikClient {
     pool: Arc<ConnectionPool>,
 }
 
+/// Per-group collection deadlines. When an outer deadline fires the guarded
+/// future is cancelled mid-command, so the drop path cannot report its own
+/// failure; `collect_parallel` records the attempt to drive pool backoff.
+pub(super) const GROUP_SYSTEM_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+pub(super) const GROUP_CONNTRACK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+pub(super) const GROUP_VPNCERT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+pub(super) const GROUP_FIREWALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
+
 #[derive(Default)]
 struct SystemInterfacesGroupData {
     system: SystemResource,
@@ -89,13 +97,7 @@ impl MikroTikClient {
     }
 
     async fn collect_parallel(&self) -> Result<RouterMetrics> {
-        use std::time::Duration;
         use tokio::time::timeout;
-
-        const GROUP_SYSTEM_TIMEOUT: Duration = Duration::from_secs(20);
-        const GROUP_CONNTRACK_TIMEOUT: Duration = Duration::from_secs(30);
-        const GROUP_VPNCERT_TIMEOUT: Duration = Duration::from_secs(30);
-        const GROUP_FIREWALL_TIMEOUT: Duration = Duration::from_secs(45);
 
         let (g1, g2, g3, g4) = tokio::join!(
             timeout(
@@ -109,6 +111,30 @@ impl MikroTikClient {
             timeout(GROUP_VPNCERT_TIMEOUT, groups::collect_group_vpn_certs(self)),
             timeout(GROUP_FIREWALL_TIMEOUT, groups::collect_group_firewall(self)),
         );
+
+        // An outer group deadline cancels the guarded future mid-command, so
+        // the drop path cannot report the failure itself. Record it against
+        // the group's connection state so the attempt still drives pool
+        // backoff.
+        let timed_out = [
+            (g1.is_err(), "system"),
+            (g2.is_err(), "conntrack"),
+            (g3.is_err(), "vpn"),
+            (g4.is_err(), "firewall"),
+        ];
+        for (elapsed, group) in timed_out {
+            if elapsed {
+                self.pool
+                    .record_connection_error(
+                        &self.config.address,
+                        &self.config.username,
+                        self.config.password.expose_secret(),
+                        self.config.tls.as_ref(),
+                        Some(group),
+                    )
+                    .await;
+            }
+        }
 
         let system_ok = groups::timeout_group_ok(&g1);
         let conntrack_ok = groups::timeout_group_ok(&g2);
