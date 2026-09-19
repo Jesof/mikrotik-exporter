@@ -23,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   IPv6 series survive an IPv4-saturated router while the total cap is preserved.
 - A malformed conntrack row in one family no longer discards the healthy other family's data; the
   group reports partial (`complete` 0) instead of blanking both families.
+- Counter families seed their cumulative values on the first **usable** collection of that domain
+  instead of the first snapshot of the router: a router whose first snapshot had the firewall group
+  failed still seeds firewall counters when the group first succeeds, instead of starting from zero.
+- **Breaking (`InterfaceStats` optional counters):** when `rx_errors`/`tx_errors` transition from
+  `None` (router did not report) to `Some`, the exporter now seeds the reported lifetime count
+  instead of leaving the series at a zero baseline. The 0.5.0 behavior "a counter that appears later
+  establishes a baseline" is replaced by "the first observed value is counted"; single-label alerting
+  on `mikrotik_interface_rx_errors_total`/`tx_errors_total` should re-check expected values after
+  this transition. Interface counters in this case appear once and then accumulate deltas normally.
 - **Rust API:** `AppError::Config`, `AppError::InvalidSnapshot`, and `AppError::Protocol` now carry
   `ConfigError`, `SnapshotError`, and `ProtocolError` payloads respectively. Library callers matching
   on those variants should match the typed sub-error instead of inspecting a message string; the
