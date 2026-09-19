@@ -6,6 +6,7 @@
 //! Kept in a dedicated `#[cfg(test)]` module so domain-specific tests can build
 //! realistic `RouterMetrics` snapshots without duplicating construction logic.
 
+use crate::metrics::RouterLabels;
 use crate::mikrotik::{
     CollectionStatus, CollectionStatusParts, ConnectionTrackingStats, FetchState,
     FirewallRuleStats, InterfaceStats, RouterMetrics, SystemResource,
@@ -114,5 +115,11 @@ pub(crate) fn make_firewall_rule(id: &str, bytes: u64, packets: u64) -> Firewall
         packets,
         ip_version: "ipv4".to_string(),
         section: "filter".to_string(),
+    }
+}
+
+pub(crate) fn router_label(router: &str) -> RouterLabels {
+    RouterLabels {
+        router: router.to_string(),
     }
 }

@@ -37,3 +37,21 @@ impl PoolDomain {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::metrics::registry::MetricsRegistry;
+
+    #[test]
+    fn test_update_pool_stats_sets_gauges() {
+        let registry = MetricsRegistry::new();
+
+        registry.update_pool_stats(10, 5);
+        assert_eq!(registry.pool.size.get(), 10);
+        assert_eq!(registry.pool.active.get(), 5);
+
+        registry.update_pool_stats(20, 8);
+        assert_eq!(registry.pool.size.get(), 20);
+        assert_eq!(registry.pool.active.get(), 8);
+    }
+}
