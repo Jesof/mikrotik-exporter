@@ -69,11 +69,6 @@ pub fn start_collection_loop(
             .iter()
             .map(|router| router.name.clone())
             .collect();
-        let active_pool_keys: HashSet<_> = config
-            .routers
-            .iter()
-            .map(|router| format!("{}:{}", router.address, router.username))
-            .collect();
         let mut pending = active_routers.clone();
         let mut cycle_start = Instant::now();
         let mut cleanup_tick =
@@ -103,7 +98,7 @@ pub fn start_collection_loop(
                 _ = cleanup_tick.tick() => {
                     metrics.cleanup_expired_dynamic_labels(STALE_LABEL_TTL);
                     metrics.cleanup_stale_routers(&active_routers);
-                    pool.cleanup_states(&active_pool_keys).await;
+                    pool.cleanup_states(&config.routers).await;
                 }
             }
         };

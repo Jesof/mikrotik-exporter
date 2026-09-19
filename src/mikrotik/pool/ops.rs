@@ -3,7 +3,6 @@
 
 //! Internal methods for `ConnectionPool` operations.
 
-use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 
 use crate::mikrotik::connection::RouterOsConnection;
@@ -261,10 +260,25 @@ impl ConnectionPool {
     }
 
     /// Clean up connection state for routers no longer configured.
-    pub(crate) async fn cleanup_states(&self, active_keys: &HashSet<String>) {
+    ///
+    /// Retains states that match the full connection identity of a configured
+    /// router (address, username, password, and TLS settings) with any group,
+    /// so a router whose credential or TLS profile changed is not kept alive
+    /// merely because its address and username are unchanged.
+    pub(crate) async fn cleanup_states(&self, active_routers: &[crate::config::RouterConfig]) {
         let mut states = self.connection_states.lock().await;
         let before_count = states.len();
-        states.retain(|key, _| active_keys.contains(&format!("{}:{}", key.address, key.username)));
+        states.retain(|key, _| {
+            active_routers.iter().any(|router| {
+                use secrecy::ExposeSecret;
+                key.matches_identity(
+                    &router.address,
+                    &router.username,
+                    router.password.expose_secret(),
+                    router.tls.as_ref(),
+                )
+            })
+        });
         let removed = before_count - states.len();
         if removed > 0 {
             tracing::debug!(removed, "Removed stale connection state entries");
