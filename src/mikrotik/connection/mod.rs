@@ -473,6 +473,142 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_malformed_family_row_salvages_healthy_family() {
+        use crate::config::RouterConfig;
+        use crate::mikrotik::client::MikroTikClient;
+        use std::sync::Arc;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let server = tokio::spawn(async move {
+            let mut peers = tokio::task::JoinSet::new();
+            for _ in 0..4 {
+                let stream = listener.accept().await.unwrap().0;
+                peers.spawn(async move {
+                    let mut peer = RouterOsConnection {
+                        stream: Box::new(stream),
+                        dirty: false,
+                    };
+                    loop {
+                        let (path, attributes) =
+                            match peer.read_sentence(&mut ResponseBudget::default()).await {
+                                Ok(sentence) => sentence,
+                                Err(AppError::Transport { source, .. })
+                                    if source.kind() == std::io::ErrorKind::UnexpectedEof =>
+                                {
+                                    break;
+                                }
+                                Err(error) => panic!("invalid production request: {error}"),
+                            };
+                        if attributes.contains_key("count-only") {
+                            send(&mut peer, &["!done", "=ret=0"]).await;
+                            continue;
+                        }
+                        match path.as_str() {
+                            "/login" => assert_eq!(attributes["name"], "test-user"),
+                            "/system/resource/print" => {
+                                assert!(attributes.contains_key(".proplist"));
+                                send(
+                                    &mut peer,
+                                    &[
+                                        "!re",
+                                        "=uptime=1d",
+                                        "=cpu-load=25",
+                                        "=free-memory=512",
+                                        "=total-memory=1024",
+                                        "=version=7.10",
+                                        "=board-name=test",
+                                    ],
+                                )
+                                .await;
+                            }
+                            "/interface/print" => {
+                                assert!(attributes.contains_key(".proplist"));
+                                send(
+                                    &mut peer,
+                                    &[
+                                        "!re",
+                                        "=.id=*1",
+                                        "=name=ether1",
+                                        "=running=true",
+                                        "=rx-byte=1000",
+                                        "=tx-byte=2000",
+                                        "=rx-packet=10",
+                                        "=tx-packet=20",
+                                        "=rx-error=0",
+                                        "=tx-error=0",
+                                    ],
+                                )
+                                .await;
+                            }
+                            "/certificate/print" => {
+                                assert_eq!(
+                                    attributes[".proplist"],
+                                    ".id,name,invalid-after,expiration"
+                                );
+                            }
+                            "/ip/firewall/connection/print" => {
+                                send(
+                                    &mut peer,
+                                    &["!re", "=src-address=192.0.2.1:1234", "=protocol=tcp"],
+                                )
+                                .await;
+                            }
+                            "/ipv6/firewall/connection/print" => {
+                                send(
+                                    &mut peer,
+                                    &["!re", "=src-address=not-an-ip", "=protocol=tcp"],
+                                )
+                                .await;
+                            }
+                            "/interface/wireguard/peers/print"
+                            | "/ip/firewall/filter/print"
+                            | "/ip/firewall/nat/print"
+                            | "/ip/firewall/mangle/print"
+                            | "/ip/firewall/raw/print"
+                            | "/ipv6/firewall/filter/print"
+                            | "/ipv6/firewall/nat/print"
+                            | "/ipv6/firewall/mangle/print"
+                            | "/ipv6/firewall/raw/print" => {}
+                            _ => assert!(attributes.contains_key(".proplist"), "{path}"),
+                        }
+                        send(&mut peer, &["!done"]).await;
+                    }
+                });
+            }
+            while let Some(result) = peers.join_next().await {
+                result.unwrap();
+            }
+        });
+
+        let client = MikroTikClient::with_pool(
+            RouterConfig {
+                name: "loopback".into(),
+                address,
+                username: "test-user".into(),
+                password: fixture_password().into(),
+                tls: None,
+            },
+            Arc::new(ConnectionPool::new()),
+        );
+        let snapshot = tokio::time::timeout(Duration::from_secs(5), client.collect_metrics())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(snapshot.collection_status.conntrack_ok());
+        assert!(!snapshot.collection_status.conntrack_complete_ok());
+        assert_eq!(snapshot.connection_tracking.len(), 1);
+        assert_eq!(snapshot.connection_tracking[0].src_address, "192.0.2.1");
+        assert_eq!(snapshot.connection_tracking[0].ip_version, "ipv4");
+        assert!(snapshot.collection_status.vpn_certs_ok());
+        drop(client);
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
     async fn test_optional_table_trap_does_not_drive_backoff() {
         use crate::config::RouterConfig;
         use crate::mikrotik::client::MikroTikClient;

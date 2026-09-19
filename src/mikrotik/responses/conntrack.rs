@@ -43,15 +43,31 @@ fn extract_src_ip(src: &str) -> Result<String> {
         return Ok(socket.ip().to_string());
     }
 
-    if let Some(ip) = src.strip_prefix('[').and_then(|v| v.strip_suffix(']')) {
-        return ip
-            .parse::<std::net::Ipv6Addr>()
-            .map(|ip| ip.to_string())
-            .map_err(|_| AppError::InvalidSnapshot(SnapshotError::InvalidConntrackSourceAddress));
+    // Bracketed IPv6, optionally followed by a port (for example the scoped
+    // `[fe80::1%br1]:1234` form, which `SocketAddr` rejects).
+    if let Some(rest) = src.strip_prefix('[')
+        && let Some((host, tail)) = rest.split_once(']')
+        && (tail.is_empty()
+            || tail
+                .strip_prefix(':')
+                .is_some_and(|port| port.parse::<u16>().is_ok()))
+    {
+        return parse_scoped_ipv6(host);
     }
-    Err(AppError::InvalidSnapshot(
-        SnapshotError::InvalidConntrackSourceAddress,
-    ))
+
+    parse_scoped_ipv6(src)
+}
+
+/// Parses an IPv6 host, ignoring a trailing `RouterOS` interface zone.
+///
+/// Link-local connection rows carry a zone scope (for example `fe80::1%br1`),
+/// which `std::net` rejects. The zone identifies the local interface and is not
+/// part of the address, so the canonicalized series addresses remain stable.
+fn parse_scoped_ipv6(host: &str) -> Result<String> {
+    let host = host.split_once('%').map_or(host, |(address, _)| address);
+    host.parse::<std::net::Ipv6Addr>()
+        .map(|ip| ip.to_string())
+        .map_err(|_| AppError::InvalidSnapshot(SnapshotError::InvalidConntrackSourceAddress))
 }
 
 #[cfg(test)]
@@ -81,6 +97,27 @@ mod tests {
         ] {
             assert!(extract_src_ip(invalid).is_err());
         }
+    }
+
+    #[test]
+    fn test_scoped_ipv6_zone_stripped_before_parsing() {
+        assert_eq!(extract_src_ip("fe80::1%br1").unwrap(), "fe80::1");
+        assert_eq!(extract_src_ip("[fe80::1%br1]").unwrap(), "fe80::1");
+        assert_eq!(extract_src_ip("[fe80::1%br1]:1234").unwrap(), "fe80::1");
+    }
+
+    #[test]
+    fn test_parse_connection_tracking_scoped_ipv6_accepted() {
+        let mut conn = HashMap::new();
+        conn.insert("src-address".to_string(), "fe80::1%br1:12345".to_string());
+        conn.insert("protocol".to_string(), "tcp".to_string());
+
+        let result = parse_connection_tracking(&[conn], "ipv6").unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].src_address, "fe80::1");
+        assert_eq!(result[0].protocol, "tcp");
+        assert_eq!(result[0].ip_version, "ipv6");
     }
 
     #[test]
