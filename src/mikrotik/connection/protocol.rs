@@ -5,11 +5,12 @@
 
 use tokio::io::{AsyncRead, AsyncReadExt};
 
+use crate::mikrotik::ProtocolError;
 use crate::prelude::{AppError, Result};
 
 pub(super) fn encode_length(len: usize) -> Result<Vec<u8>> {
     let value =
-        u32::try_from(len).map_err(|_| AppError::Protocol("word length exceeds 32 bits".into()))?;
+        u32::try_from(len).map_err(|_| AppError::Protocol(ProtocolError::WordLengthTooLarge))?;
     let bytes = value.to_be_bytes();
     Ok(if value < 0x80 {
         vec![bytes[3]]
@@ -32,13 +33,12 @@ pub(super) async fn read_length<R: AsyncRead + Unpin>(stream: &mut R) -> Result<
         0xC0..=0xDF => (u32::from(first & 0x1F), 2),
         0xE0..=0xEF => (u32::from(first & 0x0F), 3),
         0xF0 => (0, 4),
-        _ => return Err(AppError::Protocol("reserved word length prefix".into())),
+        _ => return Err(AppError::Protocol(ProtocolError::ReservedWordLengthPrefix)),
     };
     for _ in 0..remaining {
         value = (value << 8) | u32::from(stream.read_u8().await.map_err(length_io_error)?);
     }
-    usize::try_from(value)
-        .map_err(|_| AppError::Protocol("word length exceeds platform limit".into()))
+    usize::try_from(value).map_err(|_| AppError::Protocol(ProtocolError::WordLengthPlatformLimit))
 }
 
 fn length_io_error(source: std::io::Error) -> AppError {

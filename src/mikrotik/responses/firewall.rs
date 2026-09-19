@@ -2,6 +2,7 @@
 // Copyright (c) 2025 Jesof
 
 use super::common::{parse_u64_field, required_field};
+use crate::mikrotik::SnapshotError;
 use crate::mikrotik::types::FirewallRuleStats;
 use crate::prelude::{AppError, Result};
 use std::collections::{HashMap, HashSet};
@@ -18,7 +19,9 @@ pub(crate) fn parse_firewall_rules(
         .map(|s| {
             let id = required_field(s, ".id")?;
             if !ids.insert(id) {
-                return Err(AppError::InvalidSnapshot("duplicate firewall id".into()));
+                return Err(AppError::InvalidSnapshot(SnapshotError::DuplicateId {
+                    kind: "firewall",
+                }));
             }
             Ok(FirewallRuleStats {
                 id: id.into(),

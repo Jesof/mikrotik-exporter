@@ -12,7 +12,7 @@ use tokio_rustls::rustls::{
     pki_types::{CertificateDer, pem::PemObject},
 };
 
-use crate::config::RouterTlsConfig;
+use crate::config::{RouterTlsConfig, TlsError};
 use crate::prelude::{AppError, Result};
 
 /// Process-wide cache of verified TLS connectors keyed by router TLS settings.
@@ -46,25 +46,23 @@ async fn build_connector(tls: &RouterTlsConfig) -> Result<TlsConnector> {
             })?;
         for certificate in CertificateDer::pem_slice_iter(&pem) {
             let certificate =
-                certificate.map_err(|_| AppError::Config("Invalid TLS CA PEM".into()))?;
+                certificate.map_err(|_| AppError::Config(TlsError::InvalidCaPem.into()))?;
             roots
                 .add(certificate)
-                .map_err(|_| AppError::Config("Invalid TLS CA certificate".into()))?;
+                .map_err(|_| AppError::Config(TlsError::InvalidCaCertificate.into()))?;
         }
     } else {
         let native = tokio::task::spawn_blocking(rustls_native_certs::load_native_certs)
             .await
-            .map_err(|_| AppError::Config("Unable to load system TLS roots".into()))?;
+            .map_err(|_| AppError::Config(TlsError::SystemRootsUnavailable.into()))?;
         roots.add_parsable_certificates(native.certs);
     }
     if roots.is_empty() {
-        return Err(AppError::Config(
-            "TLS trust store contains no usable certificates".into(),
-        ));
+        return Err(AppError::Config(TlsError::EmptyTrustStore.into()));
     }
     let config = ClientConfig::builder_with_provider(Arc::new(ring::default_provider()))
         .with_safe_default_protocol_versions()
-        .map_err(|_| AppError::Config("Unable to configure TLS protocol versions".into()))?
+        .map_err(|_| AppError::Config(TlsError::ProtocolConfiguration.into()))?
         .with_root_certificates(roots)
         .with_no_client_auth();
     Ok(TlsConnector::from(Arc::new(config)))

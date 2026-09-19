@@ -3,6 +3,7 @@
 
 use super::common::{parse_u64_field, required_field};
 use crate::metrics::parsers::parse_uptime_to_seconds;
+use crate::mikrotik::SnapshotError;
 use crate::mikrotik::types::SystemResource;
 use crate::prelude::{AppError, Result};
 use std::collections::HashMap;
@@ -10,7 +11,7 @@ use std::collections::HashMap;
 pub(crate) fn parse_system(sentences: &[HashMap<String, String>]) -> Result<SystemResource> {
     let [row] = sentences else {
         return Err(AppError::InvalidSnapshot(
-            "expected one system resource row".into(),
+            SnapshotError::ExpectedSingleSystemRow,
         ));
     };
     let system = SystemResource {
@@ -27,7 +28,7 @@ pub(crate) fn parse_system(sentences: &[HashMap<String, String>]) -> Result<Syst
         || system.total_memory > i64::MAX as u64
     {
         return Err(AppError::InvalidSnapshot(
-            "invalid system resource bounds or uptime".into(),
+            SnapshotError::InvalidSystemResource,
         ));
     }
     Ok(system)

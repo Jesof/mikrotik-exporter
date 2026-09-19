@@ -3,6 +3,7 @@
 
 use super::common::{parse_u64_field, required_field};
 use crate::metrics::parsers::parse_uptime_to_seconds;
+use crate::mikrotik::SnapshotError;
 use crate::mikrotik::types::WireGuardPeerStats;
 use crate::prelude::{AppError, Result};
 use std::collections::HashMap;
@@ -22,7 +23,7 @@ pub(crate) fn parse_wireguard_peers(
             let tx_bytes = parse_u64_field(s, "tx", "wireguard")?;
             if rx_bytes > i64::MAX as u64 || tx_bytes > i64::MAX as u64 {
                 return Err(AppError::InvalidSnapshot(
-                    "wireguard byte count exceeds gauge range".into(),
+                    SnapshotError::WireguardByteCountOutOfRange,
                 ));
             }
             let latest_handshake = s
@@ -57,7 +58,7 @@ fn parse_handshake_to_timestamp(value: &str) -> Result<Option<u64>> {
     if value.is_empty() || value == "never" {
         return Ok(None);
     }
-    let invalid = || AppError::InvalidSnapshot("invalid wireguard handshake duration".into());
+    let invalid = || AppError::InvalidSnapshot(SnapshotError::InvalidWireguardHandshake);
     let elapsed = parse_uptime_to_seconds(value).ok_or_else(invalid)?;
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)

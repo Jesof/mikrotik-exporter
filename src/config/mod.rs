@@ -7,12 +7,14 @@
 
 mod defaults;
 mod env_vars;
+mod error;
 mod loader;
 mod router;
 
 #[cfg(test)]
 mod tests;
 
+pub use self::error::{ConfigError, RouterError, TlsError};
 pub use self::router::{RouterConfig, RouterTlsConfig};
 
 use crate::AppError;
@@ -99,7 +101,9 @@ impl Config {
             Ok(value) => Ok(Some(value)),
             Err(std::env::VarError::NotPresent) => Ok(None),
             Err(std::env::VarError::NotUnicode(_)) => {
-                Err(AppError::Config(format!("Invalid Unicode in {key}")))
+                Err(AppError::Config(ConfigError::InvalidUnicode {
+                    key: key.to_string(),
+                }))
             }
         })
     }
@@ -158,7 +162,7 @@ impl Config {
     pub fn validate(&self) -> crate::Result<()> {
         self.server_addr
             .parse::<std::net::SocketAddr>()
-            .map_err(|_| AppError::Config("SERVER_ADDR must be an IP socket address".into()))?;
+            .map_err(|_| AppError::Config(ConfigError::InvalidServerAddr))?;
         for (key, value, maximum) in [
             (
                 env_vars::COLLECTION_INTERVAL_SECONDS,
@@ -177,29 +181,27 @@ impl Config {
             ),
         ] {
             if !(1..=maximum).contains(&value) {
-                return Err(AppError::Config(format!(
-                    "{key} must be between 1 and {maximum}"
-                )));
+                return Err(AppError::Config(ConfigError::OutOfRange {
+                    key: key.to_string(),
+                    maximum,
+                }));
             }
         }
         if self.strict_startup_mode && !self.startup_connectivity_test {
             return Err(AppError::Config(
-                "STRICT_STARTUP_MODE requires STARTUP_CONNECTIVITY_TEST=true".into(),
+                ConfigError::StrictRequiresConnectivityTest,
             ));
         }
         if self.strict_startup_mode && self.routers.is_empty() {
-            return Err(AppError::Config(
-                "STRICT_STARTUP_MODE requires at least one router".into(),
-            ));
+            return Err(AppError::Config(ConfigError::StrictRequiresRouter));
         }
         let mut names = std::collections::HashSet::new();
         for router in &self.routers {
             router.validate()?;
             if !names.insert(&router.name) {
-                return Err(AppError::Config(format!(
-                    "Duplicate router name '{}'",
-                    router.name
-                )));
+                return Err(AppError::Config(ConfigError::DuplicateRouterName {
+                    name: router.name.clone(),
+                }));
             }
         }
         Ok(())
@@ -223,14 +225,17 @@ impl Config {
     /// ```rust,no_run
     /// # async fn example() -> mikrotik_exporter::Result<()> {
     /// # use mikrotik_exporter::Config;
-    /// # use mikrotik_exporter::AppError;
+    /// # use mikrotik_exporter::{AppError, ConfigError};
     /// let config = Config::from_env()?;
     /// if config.startup_connectivity_test {
     ///     let failed = config.test_router_connectivity(config.startup_connectivity_timeout_secs).await;
     ///     if !failed.is_empty() {
     ///         eprintln!("Failed to connect to routers: {:?}", failed);
     ///         if config.strict_startup_mode {
-    ///             return Err(AppError::Config("Startup connectivity check failed".to_string()));
+    ///             return Err(AppError::Config(ConfigError::StrictUnreachable {
+    ///                 count: failed.len(),
+    ///                 routers: failed,
+    ///             }));
     ///         }
     ///     }
     /// }

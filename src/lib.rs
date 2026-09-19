@@ -125,7 +125,7 @@ mod startup;
 
 // Re-export commonly used types
 /// Application configuration
-pub use config::{Config, RouterConfig, RouterTlsConfig};
+pub use config::{Config, ConfigError, RouterConfig, RouterError, RouterTlsConfig, TlsError};
 
 /// Application error and result type
 pub use error::{AppError, Result};
@@ -145,6 +145,6 @@ pub use metrics::{MetricsRegistry, RouterLabels};
 /// `MikroTik` connection pool and metric input types
 pub use mikrotik::{
     CertificateStats, CollectionStatus, CollectionStatusParts, ConnectionPool,
-    ConnectionTrackingStats, FetchState, FirewallRuleStats, InterfaceStats, RouterMetrics,
-    SystemResource, WireGuardPeerStats,
+    ConnectionTrackingStats, FetchState, FirewallRuleStats, InterfaceStats, ProtocolError,
+    RouterMetrics, SnapshotError, SystemResource, WireGuardPeerStats,
 };

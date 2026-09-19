@@ -11,8 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Container images carry standard OCI labels (`title`, `description`, `source`, `licenses`) for
   registry and tooling metadata.
+- Typed error variants: `ConfigError` (including `RouterError` and `TlsError`), `SnapshotError`,
+  and `ProtocolError` expose structured configuration, snapshot, and wire-protocol failures instead
+  of free-form message strings.
 
 ### Changed
+- **Rust API:** `AppError::Config`, `AppError::InvalidSnapshot`, and `AppError::Protocol` now carry
+  `ConfigError`, `SnapshotError`, and `ProtocolError` payloads respectively. Library callers matching
+  on those variants should match the typed sub-error instead of inspecting a message string; the
+  `Display` output is unchanged where tests relied on message text. New public error types are
+  re-exported from the crate root.
 - Release creation authenticates with a short-lived GitHub App installation token minted from the
   `RELEASE_APP_ID` / `RELEASE_APP_PRIVATE_KEY` secrets instead of a long-lived personal access
   token.

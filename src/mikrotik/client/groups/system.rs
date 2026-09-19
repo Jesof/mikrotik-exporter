@@ -5,6 +5,7 @@
 
 use secrecy::ExposeSecret;
 
+use crate::mikrotik::SnapshotError;
 use crate::mikrotik::client::MikroTikClient;
 use crate::mikrotik::responses::{parse_interfaces, parse_system};
 use crate::prelude::Result;
@@ -53,7 +54,7 @@ pub(crate) async fn collect_group_system_interfaces(
             let interfaces = parse_interfaces(&interfaces_result?)?;
             if empty_interfaces_anomaly {
                 return Err(crate::prelude::AppError::InvalidSnapshot(
-                    "empty interface snapshot".into(),
+                    SnapshotError::EmptyInterfaceSnapshot,
                 ));
             }
             Ok(super::super::SystemInterfacesGroupData { system, interfaces })

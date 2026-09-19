@@ -3,6 +3,7 @@
 
 //! Connection tracking parsing
 
+use crate::mikrotik::SnapshotError;
 use crate::mikrotik::types::ConnectionTrackingStats;
 use crate::prelude::{AppError, Result};
 use std::collections::HashMap;
@@ -46,10 +47,10 @@ fn extract_src_ip(src: &str) -> Result<String> {
         return ip
             .parse::<std::net::Ipv6Addr>()
             .map(|ip| ip.to_string())
-            .map_err(|_| AppError::InvalidSnapshot("invalid conntrack source address".into()));
+            .map_err(|_| AppError::InvalidSnapshot(SnapshotError::InvalidConntrackSourceAddress));
     }
     Err(AppError::InvalidSnapshot(
-        "invalid conntrack source address".into(),
+        SnapshotError::InvalidConntrackSourceAddress,
     ))
 }
 

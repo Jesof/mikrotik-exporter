@@ -9,9 +9,12 @@
 
 mod client;
 mod connection;
+mod error;
 mod pool;
 mod responses;
 pub(crate) mod types;
+
+pub use error::{ProtocolError, SnapshotError};
 
 /// Client for `MikroTik` `RouterOS` API
 pub(crate) use client::MikroTikClient;

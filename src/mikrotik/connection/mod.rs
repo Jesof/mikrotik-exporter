@@ -17,6 +17,8 @@ use tokio::time::timeout;
 
 use crate::prelude::{AppError, Result};
 
+use crate::mikrotik::{ProtocolError, SnapshotError};
+
 use protocol::{encode_length, read_length};
 
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
@@ -108,9 +110,7 @@ impl RouterOsConnection {
 
     async fn raw_command(&mut self, words: Vec<String>) -> Result<CommandResponse> {
         if self.dirty {
-            return Err(AppError::Protocol(
-                "connection has an unfinished command".into(),
-            ));
+            return Err(AppError::Protocol(ProtocolError::UnfinishedCommand));
         }
         self.dirty = true;
         timeout(COMMAND_TIMEOUT, async {
@@ -129,13 +129,15 @@ impl RouterOsConnection {
             .done
             .get("ret")
             .and_then(|value| value.parse().ok())
-            .ok_or_else(|| AppError::InvalidSnapshot("invalid count-only completion".into()))
+            .ok_or(AppError::InvalidSnapshot(
+                SnapshotError::InvalidCountOnlyCompletion,
+            ))
     }
 
     async fn send_words(&mut self, words: &[String]) -> Result<()> {
         for word in words {
             if word.is_empty() || word.len() > MAX_ROUTEROS_WORD_LENGTH {
-                return Err(AppError::Protocol("invalid request word length".into()));
+                return Err(AppError::Protocol(ProtocolError::InvalidRequestWordLength));
             }
             self.stream
                 .write_all(&encode_length(word.len())?)
@@ -174,7 +176,7 @@ impl RouterOsConnection {
                 }
                 "!fatal" => return Err(AppError::RouterOsFatal),
                 "!empty" => {}
-                _ => return Err(AppError::Protocol("unknown response sentence type".into())),
+                _ => return Err(AppError::Protocol(ProtocolError::UnknownSentenceType)),
             }
         }
     }
@@ -185,13 +187,11 @@ impl RouterOsConnection {
     ) -> Result<(String, HashMap<String, String>)> {
         budget.sentences += 1;
         if budget.sentences > MAX_RESPONSE_SENTENCES {
-            return Err(AppError::Protocol(
-                "response sentence limit exceeded".into(),
-            ));
+            return Err(AppError::Protocol(ProtocolError::SentenceLimitExceeded));
         }
         let kind = self.read_word(budget).await?;
         if kind.is_empty() {
-            return Err(AppError::Protocol("empty response sentence".into()));
+            return Err(AppError::Protocol(ProtocolError::EmptySentence));
         }
         let mut attributes = HashMap::new();
         for _ in 0..MAX_SENTENCE_WORDS {
@@ -202,29 +202,27 @@ impl RouterOsConnection {
             let attribute = word.strip_prefix('=').or_else(|| word.strip_prefix('.'));
             let Some((key, value)) = attribute.and_then(|attribute| attribute.split_once('='))
             else {
-                return Err(AppError::Protocol("malformed response attribute".into()));
+                return Err(AppError::Protocol(ProtocolError::MalformedAttribute));
             };
             if key.is_empty() || attributes.insert(key.into(), value.into()).is_some() {
-                return Err(AppError::Protocol(
-                    "empty or duplicate response attribute".into(),
-                ));
+                return Err(AppError::Protocol(ProtocolError::EmptyOrDuplicateAttribute));
             }
         }
-        Err(AppError::Protocol("sentence word limit exceeded".into()))
+        Err(AppError::Protocol(ProtocolError::SentenceWordLimitExceeded))
     }
 
     async fn read_word(&mut self, budget: &mut ResponseBudget) -> Result<String> {
         budget.words += 1;
         if budget.words > MAX_RESPONSE_WORDS {
-            return Err(AppError::Protocol("response word limit exceeded".into()));
+            return Err(AppError::Protocol(ProtocolError::WordLimitExceeded));
         }
         let len = read_length(&mut self.stream).await?;
         if len > MAX_ROUTEROS_WORD_LENGTH {
-            return Err(AppError::Protocol("word length limit exceeded".into()));
+            return Err(AppError::Protocol(ProtocolError::WordLengthLimitExceeded));
         }
         budget.bytes += len + 5;
         if budget.bytes > MAX_RESPONSE_BYTES {
-            return Err(AppError::Protocol("response byte limit exceeded".into()));
+            return Err(AppError::Protocol(ProtocolError::ByteLimitExceeded));
         }
         let mut buf = vec![0u8; len];
         self.stream
@@ -235,7 +233,7 @@ impl RouterOsConnection {
                 source,
             })?;
         tracing::trace!(word_bytes = len, "Received RouterOS word");
-        String::from_utf8(buf).map_err(|_| AppError::Protocol("word is not valid UTF-8".into()))
+        String::from_utf8(buf).map_err(|_| AppError::Protocol(ProtocolError::InvalidUtf8))
     }
 }
 
@@ -253,6 +251,7 @@ mod tests {
         MAX_ROUTEROS_WORD_LENGTH, MAX_SENTENCE_WORDS, ResponseBudget, RouterOsConnection,
         protocol::encode_length,
     };
+    use crate::mikrotik::ProtocolError;
     use crate::mikrotik::pool::ConnectionPool;
     use crate::prelude::{AppError, Result};
     use std::time::Duration;
@@ -760,8 +759,10 @@ mod tests {
                 }
             }
         });
-        assert!(matches!(client.command("/large", &[]).await,
-            Err(AppError::Protocol(message)) if message == "response byte limit exceeded"));
+        assert!(matches!(
+            client.command("/large", &[]).await,
+            Err(AppError::Protocol(ProtocolError::ByteLimitExceeded))
+        ));
         assert!(!client.is_reusable());
         drop(client);
         server.await.unwrap();

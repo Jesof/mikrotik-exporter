@@ -3,14 +3,16 @@
 
 //! Error types for `MikroTik` Exporter application
 
+use crate::config::ConfigError;
+use crate::mikrotik::{ProtocolError, SnapshotError};
 use thiserror::Error;
 
 /// Main application error type
-#[derive(Debug, Error)]
+#[derive(Error)]
 pub enum AppError {
     /// Configuration error
-    #[error("Configuration error: {0}")]
-    Config(String),
+    #[error(transparent)]
+    Config(#[from] ConfigError),
 
     /// Network or IO error
     #[error("IO error")]
@@ -22,11 +24,11 @@ pub enum AppError {
 
     /// Parsed router snapshot is inconsistent or malformed
     #[error("Invalid router snapshot: {0}")]
-    InvalidSnapshot(String),
+    InvalidSnapshot(SnapshotError),
 
     /// `RouterOS` protocol framing or sentence violation
     #[error("RouterOS protocol error: {0}")]
-    Protocol(String),
+    Protocol(ProtocolError),
 
     /// Transport-level failure during a `RouterOS` operation
     #[error("RouterOS transport error during {operation}: {source}")]
@@ -91,6 +93,17 @@ impl From<Box<dyn std::error::Error + Send + Sync>> for AppError {
     }
 }
 
+impl std::fmt::Debug for AppError {
+    /// Delegates to the human-readable `Display` message.
+    ///
+    /// The binary prints `std::result::Result` terminal errors with `Debug`,
+    /// so hiding the structured variants behind the message keeps operator
+    /// output readable.
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self, formatter)
+    }
+}
+
 /// Convenient alias for Result with application error
 pub type Result<T> = std::result::Result<T, AppError>;
 
@@ -100,8 +113,8 @@ mod tests {
 
     #[test]
     fn test_config_error() {
-        let err = AppError::Config("test error".to_string());
-        assert_eq!(err.to_string(), "Configuration error: test error");
+        let err = AppError::Config(ConfigError::InvalidServerAddr);
+        assert_eq!(err.to_string(), "SERVER_ADDR must be an IP socket address");
     }
 
     #[test]
