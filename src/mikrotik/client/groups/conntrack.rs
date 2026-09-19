@@ -65,7 +65,7 @@ pub(crate) async fn collect_group_conntrack(
             .map(|_| super::super::ConntrackGroupData::default());
     }
 
-// Salvage per family: one malformed row in a single family is a query-level
+    // Salvage per family: one malformed row in a single family is a query-level
     // failure that must not discard the healthy other family's data. The group
     // reports partial (complete_ok=false) so the unparsable data stays visible
     // via the completeness gauge instead of silently blanking both families.

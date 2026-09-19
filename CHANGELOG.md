@@ -35,6 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An outer group collection deadline now records a connection failure against the affected group's
   pool state, so a router that consistently exceeds a group timeout applies pool backoff instead of
   churning a fresh connection every cycle.
+- Firewall rule series are bounded by a 4096-series-per-router retained cap. Least-recently-seen
+  records are evicted first, so a chronically partial router whose rules rotate cannot grow the
+  `/metrics` cardinality without bound; the documented partial-snapshot TTL refresh is preserved.
+- **Rust API:** group-level "collection failed" outcomes are now `AppError::CollectionFailed` with a
+  structured `groups` payload instead of the stringly `AppError::RouterOs`. Library callers matching
+  on `RouterOs` for those messages should match `CollectionFailed` instead. Query-level semantics are
+  unchanged (`CollectionFailed` is not connection-level, so it does not trigger pool backoff).
+- **Rust API (removed):** `CollectionStatus::vpn_certs_ok` and `CollectionStatus::firewall_info_complete_ok`
+  (and the internal `firewall-info` completeness bit) were unused and are removed; use `wireguard_ok`/
+  `certificates_ok` and `firewall_complete_ok` respectively.
 - **Rust API:** `AppError::Config`, `AppError::InvalidSnapshot`, and `AppError::Protocol` now carry
   `ConfigError`, `SnapshotError`, and `ProtocolError` payloads respectively. Library callers matching
   on those variants should match the typed sub-error instead of inspecting a message string; the

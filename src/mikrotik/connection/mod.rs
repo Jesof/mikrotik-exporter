@@ -600,7 +600,8 @@ mod tests {
         assert_eq!(snapshot.connection_tracking.len(), 1);
         assert_eq!(snapshot.connection_tracking[0].src_address, "192.0.2.1");
         assert_eq!(snapshot.connection_tracking[0].ip_version, "ipv4");
-        assert!(snapshot.collection_status.vpn_certs_ok());
+        assert!(snapshot.collection_status.certificates_ok());
+        assert!(snapshot.collection_status.wireguard_ok());
         drop(client);
         tokio::time::timeout(Duration::from_secs(5), server)
             .await
