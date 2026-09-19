@@ -266,3 +266,141 @@ fn now_epoch_i64() -> i64 {
         .try_into()
         .unwrap_or(i64::MAX)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::metrics::labels::RouterLabels;
+    use crate::metrics::registry::MetricsRegistry;
+    use crate::metrics::registry::test_support::router_label;
+    use crate::mikrotik::{CollectionStatus, CollectionStatusParts, FetchState};
+
+    #[test]
+    fn test_partial_group_status_does_not_advance_freshness() {
+        let registry = MetricsRegistry::new();
+        let labels = router_label("router1");
+        registry.record_group_status(&labels, &CollectionStatus::default());
+        let group = crate::metrics::labels::GroupLabels {
+            router: labels.router.clone(),
+            group: "conntrack",
+        };
+        registry
+            .scrape
+            .group_last_success_timestamp_seconds
+            .get_or_create(&group)
+            .set(123);
+        let status = CollectionStatus::from_parts(CollectionStatusParts {
+            conntrack: FetchState::Partial,
+            ..Default::default()
+        });
+        registry.record_group_status(&labels, &status);
+        assert_eq!(
+            registry
+                .scrape
+                .group_collection_success
+                .get_or_create(&group)
+                .get(),
+            1
+        );
+        assert_eq!(
+            registry
+                .scrape
+                .group_collection_complete
+                .get_or_create(&group)
+                .get(),
+            0
+        );
+        assert_eq!(
+            registry
+                .scrape
+                .group_last_success_timestamp_seconds
+                .get_or_create(&group)
+                .get(),
+            123
+        );
+        assert!(!status.all_ok());
+        registry.record_scrape_error(&labels);
+        assert_eq!(
+            registry
+                .scrape
+                .group_collection_success
+                .get_or_create(&group)
+                .get(),
+            0
+        );
+        assert_eq!(
+            registry
+                .scrape
+                .group_last_success_timestamp_seconds
+                .get_or_create(&group)
+                .get(),
+            123
+        );
+    }
+
+    #[test]
+    fn test_record_scrape_success_increments() {
+        let registry = MetricsRegistry::new();
+        let labels = router_label("router1");
+
+        assert_eq!(registry.scrape.success.get_or_create(&labels).get(), 0);
+        registry.record_scrape_success(&labels);
+        assert_eq!(registry.scrape.success.get_or_create(&labels).get(), 1);
+        registry.record_scrape_success(&labels);
+        assert_eq!(registry.scrape.success.get_or_create(&labels).get(), 2);
+    }
+
+    #[test]
+    fn test_record_scrape_error_increments() {
+        let registry = MetricsRegistry::new();
+        let labels = router_label("router1");
+
+        assert_eq!(registry.scrape.errors.get_or_create(&labels).get(), 0);
+        registry.record_scrape_error(&labels);
+        assert_eq!(registry.scrape.errors.get_or_create(&labels).get(), 1);
+        registry.record_scrape_error(&labels);
+        assert_eq!(registry.scrape.errors.get_or_create(&labels).get(), 2);
+    }
+
+    #[test]
+    fn test_record_collection_cycle_duration_sets_gauge() {
+        let registry = MetricsRegistry::new();
+
+        registry.record_collection_cycle_duration(0.012);
+        assert!(
+            (registry.scrape.collection_cycle_duration_seconds.get() - 0.012).abs() < f64::EPSILON
+        );
+
+        registry.record_collection_cycle_duration(1.234);
+        assert!(
+            (registry.scrape.collection_cycle_duration_seconds.get() - 1.234).abs() < f64::EPSILON
+        );
+    }
+
+    #[test]
+    fn test_update_connection_errors_sets_gauge() {
+        let registry = MetricsRegistry::new();
+        let labels = RouterLabels {
+            router: "router1".to_string(),
+        };
+
+        registry.update_connection_errors(&labels, 0);
+        assert_eq!(
+            registry
+                .scrape
+                .connection_consecutive_errors
+                .get_or_create(&labels)
+                .get(),
+            0
+        );
+
+        registry.update_connection_errors(&labels, 3);
+        assert_eq!(
+            registry
+                .scrape
+                .connection_consecutive_errors
+                .get_or_create(&labels)
+                .get(),
+            3
+        );
+    }
+}
