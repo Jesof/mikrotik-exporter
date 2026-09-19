@@ -25,6 +25,7 @@ pub(crate) struct FirewallDomain {
         Arc<DashMap<String, HashMap<FirewallRuleLabels, FirewallRuleInfoLabels>>>,
     pub(crate) rule_last_seen: Arc<DashMap<FirewallRuleLabels, Instant>>,
     pub(crate) rule_info_last_seen: Arc<DashMap<FirewallRuleInfoLabels, Instant>>,
+    seeded_routers: Arc<DashMap<String, ()>>,
 }
 
 impl FirewallDomain {
@@ -57,6 +58,7 @@ impl FirewallDomain {
             prev_rule_info: Arc::new(DashMap::new()),
             rule_last_seen: Arc::new(DashMap::new()),
             rule_info_last_seen: Arc::new(DashMap::new()),
+            seeded_routers: Arc::new(DashMap::new()),
         }
     }
 
@@ -68,13 +70,17 @@ impl FirewallDomain {
         firewall_ok: bool,
         firewall_complete_ok: bool,
         apply_counters: bool,
-        seed_cumulative: bool,
     ) {
         if !firewall_ok {
             tracing::debug!(router = %router_name, "Skipping firewall metric update due to partial collection");
             return;
         }
 
+        // Seed cumulative counters on the first usable collection of this
+        // domain, not on the first snapshot of the router: a router whose first
+        // snapshot had the firewall group failed must still seed the cumulative
+        // values when the group first succeeds, instead of starting from zero.
+        let seed_cumulative = apply_counters && !self.seeded_routers.contains_key(router_name);
         let mut current_firewall_rules = HashSet::new();
         let mut current_firewall_info = HashMap::new();
         let now = Instant::now();
@@ -173,6 +179,10 @@ impl FirewallDomain {
             }
         }
         *prev_map = current_firewall_info;
+
+        if apply_counters {
+            self.seeded_routers.insert(router_name.into(), ());
+        }
     }
 
     pub(crate) fn cleanup_expired_rules(&self, now: Instant, ttl: std::time::Duration) {
@@ -245,6 +255,7 @@ impl FirewallDomain {
                 self.rule_info_last_seen.remove(info_label);
             }
         }
+        self.seeded_routers.remove(router_name);
     }
 
     pub(crate) fn retain_active_last_seen(
@@ -318,6 +329,51 @@ mod tests {
                 .get(),
             2000,
             "Stale firewall rule should be preserved during partial firewall snapshot"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_firewall_first_usable_snapshot_seeds_after_failed_start() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+        let mut failed = make_router_metrics("r1", vec![iface.clone()], system.clone());
+        failed.collection_status = make_partial_status(
+            FetchState::Complete,
+            FetchState::Complete,
+            FetchState::Complete,
+            FetchState::Failed,
+        );
+        registry.update_metrics(&failed);
+
+        let mut succeeded = make_router_metrics("r1", vec![iface], system);
+        succeeded.firewall_rules = vec![make_firewall_rule("*f1", 5000, 50)];
+        registry.update_metrics(&succeeded);
+
+        let stale_rule_labels = crate::metrics::labels::FirewallRuleLabels {
+            router: "r1".into(),
+            id: "*f1".into(),
+            chain: "forward".into(),
+            action: "accept".into(),
+            ip_version: "ipv4".into(),
+            section: "filter".into(),
+        };
+        assert_eq!(
+            registry
+                .firewall
+                .rule_bytes
+                .get_or_create(&stale_rule_labels)
+                .get(),
+            5000,
+            "first usable firewall snapshot must seed cumulative values even after a failed start"
+        );
+        registry.cleanup_stale_routers(&std::collections::HashSet::new());
+        assert!(
+            registry
+                .firewall
+                .seeded_routers
+                .iter()
+                .all(|entry| entry.key() != "r1")
         );
     }
 

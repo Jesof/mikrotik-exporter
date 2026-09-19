@@ -37,15 +37,10 @@ impl MetricsRegistry {
         self.record_group_status(&router_label, &metrics.collection_status);
 
         let apply_counters = mode.apply_counters();
-        let seed_cumulative = !self.collected_routers.contains_key(&metrics.router_name);
 
         if metrics.collection_status.system_interfaces_ok() {
-            self.interface.update(
-                &metrics.router_name,
-                &metrics.interfaces,
-                apply_counters,
-                seed_cumulative,
-            );
+            self.interface
+                .update(&metrics.router_name, &metrics.interfaces, apply_counters);
             self.system.update(&metrics.router_name, &metrics.system);
         }
 
@@ -72,10 +67,6 @@ impl MetricsRegistry {
             metrics.collection_status.firewall_ok(),
             metrics.collection_status.firewall_complete_ok(),
             apply_counters,
-            seed_cumulative,
         );
-
-        self.collected_routers
-            .insert(metrics.router_name.clone(), ());
     }
 }

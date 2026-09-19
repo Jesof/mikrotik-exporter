@@ -36,7 +36,6 @@ pub struct MetricsRegistry {
     scrape: ScrapeDomain,
     pool: PoolDomain,
     known_routers: Arc<DashMap<String, ()>>,
-    collected_routers: Arc<DashMap<String, ()>>,
 }
 
 impl Default for MetricsRegistry {

@@ -37,7 +37,6 @@ impl MetricsRegistry {
             scrape,
             pool,
             known_routers: std::sync::Arc::new(dashmap::DashMap::new()),
-            collected_routers: std::sync::Arc::new(dashmap::DashMap::new()),
         }
     }
 }
