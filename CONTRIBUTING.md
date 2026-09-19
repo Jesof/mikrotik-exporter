@@ -93,6 +93,10 @@ cargo test --all-features --locked --test integration_tests test_real_router_con
 That test reads `.env` plus environment overrides and fails when no routers are configured. Do not
 enable ignored tests in ordinary CI.
 
+Criterion benchmarks live in `benches/` and exercise hot metric paths (encoding, snapshot
+application). They run locally via `cargo bench` and are not gated in CI; keep them compiling with
+the regular `cargo check --all-targets --all-features --locked`.
+
 ## Implementation Conventions
 
 - Use `AppError` and `Result<T>`, `?`, and explicit recovery paths for I/O; assertions on controlled

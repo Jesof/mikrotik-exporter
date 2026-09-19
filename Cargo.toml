@@ -89,6 +89,15 @@ tempfile = "3.23.0"
 tower = { version = "0.5.3", features = ["util"] }
 http-body-util = "0.1.5"
 proptest = "1.11.0"
+criterion = "0.8.2"
+
+[[bench]]
+name = "encode_metrics"
+harness = false
+
+[[bench]]
+name = "update_metrics"
+harness = false
 
 [lints.clippy]
 pedantic = "warn"
