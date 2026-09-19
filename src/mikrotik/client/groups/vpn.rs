@@ -93,10 +93,9 @@ pub(crate) async fn collect_group_vpn_certs(
         return certificates_result.map(|_| super::super::VpnCertGroupData::default());
     }
     if !wireguard_ok && !certificates_ok {
-        return Err(crate::prelude::AppError::RouterOs(format!(
-            "Router '{}' VPN/certificate collection failed",
-            client.config.name
-        )));
+        return Err(crate::prelude::AppError::CollectionFailed {
+            groups: &["vpn", "certificates"],
+        });
     }
 
     Ok(super::super::VpnCertGroupData {

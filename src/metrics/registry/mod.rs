@@ -24,6 +24,20 @@ use crate::metrics::registry::domains::{
     wireguard::WireGuardDomain,
 };
 
+/// Counter deltas shared by counter domains.
+///
+/// A router reset (a wrap below the previous snapshot) is treated as a fresh
+/// counter starting at the current value rather than a huge subtraction, so the
+/// exported series dips instead of spiking across device resets.
+#[inline]
+pub(crate) fn counter_delta(current: u64, previous: u64) -> u64 {
+    if current >= previous {
+        current - previous
+    } else {
+        current
+    }
+}
+
 #[derive(Clone)]
 pub struct MetricsRegistry {
     registry: Arc<Mutex<Registry>>,

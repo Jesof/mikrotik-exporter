@@ -69,6 +69,12 @@ pub(crate) async fn collect_group_conntrack(
     // failure that must not discard the healthy other family's data. The group
     // reports partial (complete_ok=false) so the unparsable data stays visible
     // via the completeness gauge instead of silently blanking both families.
+    if !any_success {
+        return Err(crate::prelude::AppError::CollectionFailed {
+            groups: &["conntrack"],
+        });
+    }
+
     let mut entries = Vec::new();
     let mut complete_ok = true;
 
@@ -79,10 +85,9 @@ pub(crate) async fn collect_group_conntrack(
         }
     }
     if entries.is_empty() && !complete_ok {
-        return Err(crate::prelude::AppError::RouterOs(format!(
-            "Router '{}' conntrack collection failed for both IPv4 and IPv6",
-            client.config.name
-        )));
+        return Err(crate::prelude::AppError::CollectionFailed {
+            groups: &["conntrack"],
+        });
     }
 
     Ok(super::super::ConntrackGroupData {
