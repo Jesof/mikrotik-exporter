@@ -5,7 +5,7 @@
 
 use crate::prelude::{AppError, Result};
 
-use super::{RouterConfig, RouterTlsConfig, defaults, env_vars};
+use super::{ConfigError, RouterConfig, RouterTlsConfig, defaults, env_vars};
 
 /// Loads router configurations from `ROUTERS_CONFIG` JSON or legacy env vars.
 pub(crate) fn load_router_configs(
@@ -13,11 +13,11 @@ pub(crate) fn load_router_configs(
 ) -> Result<Vec<RouterConfig>> {
     if let Some(config_json) = lookup(env_vars::ROUTERS_CONFIG)? {
         return serde_json::from_str(&config_json).map_err(|error| {
-            AppError::Config(format!(
-                "Invalid ROUTERS_CONFIG JSON at line {}, column {}",
-                error.line(),
-                error.column()
-            ))
+            AppError::Config(ConfigError::InvalidRoutersJson {
+                key: env_vars::ROUTERS_CONFIG.to_string(),
+                line: error.line(),
+                column: error.column(),
+            })
         });
     }
 
@@ -26,8 +26,11 @@ pub(crate) fn load_router_configs(
     };
     let tls = lookup(env_vars::ROUTEROS_TLS)?
         .map(|json| {
-            serde_json::from_str::<RouterTlsConfig>(&json)
-                .map_err(|_| AppError::Config("Invalid ROUTEROS_TLS JSON".into()))
+            serde_json::from_str::<RouterTlsConfig>(&json).map_err(|_| {
+                AppError::Config(ConfigError::InvalidJson {
+                    key: env_vars::ROUTEROS_TLS.to_string(),
+                })
+            })
         })
         .transpose()?;
     Ok(vec![RouterConfig {
@@ -55,9 +58,11 @@ pub(crate) fn parse_env_or_default<T: std::str::FromStr>(
     default: T,
 ) -> Result<T> {
     match lookup(key)? {
-        Some(value) => value
-            .parse()
-            .map_err(|_| AppError::Config(format!("Invalid {key}"))),
+        Some(value) => value.parse().map_err(|_| {
+            AppError::Config(ConfigError::InvalidValue {
+                key: key.to_string(),
+            })
+        }),
         None => Ok(default),
     }
 }

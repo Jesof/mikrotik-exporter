@@ -3,6 +3,7 @@
 
 //! Startup connectivity policy helpers.
 
+use crate::config::ConfigError;
 use crate::prelude::{AppError, Result};
 
 /// Enforces the strict startup connectivity policy.
@@ -14,18 +15,22 @@ pub(crate) fn enforce_startup_connectivity_policy(
     strict_mode: bool,
 ) -> Result<()> {
     if strict_mode && !failed_routers.is_empty() {
-        return Err(AppError::Config(format_strict_mode_error(failed_routers)));
+        return Err(AppError::Config(ConfigError::StrictUnreachable {
+            count: failed_routers.len(),
+            routers: failed_routers.to_vec(),
+        }));
     }
 
     Ok(())
 }
 
 /// Formats the strict-mode unreachable-router error message.
+#[cfg(test)]
 pub(crate) fn format_strict_mode_error(failed_routers: &[String]) -> String {
     format!(
-        "Strict startup mode: {} router(s) unreachable: {:?}",
-        failed_routers.len(),
-        failed_routers
+        "Strict startup mode: {count} router(s) unreachable: {routers:?}",
+        count = failed_routers.len(),
+        routers = failed_routers
     )
 }
 

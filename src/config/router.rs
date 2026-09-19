@@ -6,6 +6,8 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use tokio_rustls::rustls::pki_types::ServerName;
 
+use super::error::RouterError;
+
 /// TLS settings for a single router (opt-in; insecure options are rejected).
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq, Hash)]
 #[serde(deny_unknown_fields)]
@@ -20,14 +22,14 @@ impl RouterTlsConfig {
         let host = address
             .rsplit_once(':')
             .map(|(host, _)| host)
-            .ok_or_else(|| AppError::Config("Invalid TLS router address".into()))?;
+            .ok_or_else(|| AppError::Config(RouterError::InvalidTlsAddress.into()))?;
         let host = host
             .strip_prefix('[')
             .and_then(|host| host.strip_suffix(']'))
             .unwrap_or(host);
         let name = self.server_name.as_deref().unwrap_or(host);
         ServerName::try_from(name.to_string())
-            .map_err(|_| AppError::Config("Invalid TLS server name".into()))
+            .map_err(|_| AppError::Config(RouterError::InvalidTlsServerName.into()))
     }
 }
 
@@ -93,7 +95,7 @@ impl RouterConfig {
                 .as_ref()
                 .is_some_and(|path| path.as_os_str().is_empty())
             {
-                return Err(AppError::Config("TLS CA file path cannot be empty".into()));
+                return Err(AppError::Config(RouterError::EmptyCaFile.into()));
             }
         }
         self.warn_on_weak_password();
@@ -103,7 +105,7 @@ impl RouterConfig {
 
     fn validate_name(&self) -> Result<()> {
         if self.name.trim().is_empty() {
-            return Err(AppError::Config("Router name cannot be empty".to_string()));
+            return Err(AppError::Config(RouterError::EmptyName.into()));
         }
 
         if !self
@@ -111,53 +113,61 @@ impl RouterConfig {
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
         {
-            return Err(AppError::Config(format!(
-                "Router name '{}' contains invalid characters. Only alphanumeric, underscore, and hyphen are allowed",
-                self.name
-            )));
+            return Err(AppError::Config(
+                RouterError::InvalidNameChars {
+                    name: self.name.clone(),
+                }
+                .into(),
+            ));
         }
 
         if self.name.len() > 128 {
-            return Err(AppError::Config(
-                "Router name is too long: maximum length is 128 characters".into(),
-            ));
+            return Err(AppError::Config(RouterError::NameTooLong.into()));
         }
         Ok(())
     }
 
     fn validate_address(&self) -> Result<()> {
         let Some((host, port_str)) = self.address.rsplit_once(':') else {
-            return Err(AppError::Config(format!(
-                "Invalid address format '{}': expected 'host:port'",
-                self.address
-            )));
+            return Err(AppError::Config(
+                RouterError::InvalidAddressFormat {
+                    address: self.address.clone(),
+                }
+                .into(),
+            ));
         };
 
         if host.is_empty() {
-            return Err(AppError::Config(format!(
-                "Invalid address format '{}': host cannot be empty",
-                self.address
-            )));
+            return Err(AppError::Config(
+                RouterError::EmptyAddressHost {
+                    address: self.address.clone(),
+                }
+                .into(),
+            ));
         }
 
         if host.starts_with('[') {
             if !host.ends_with(']') || host.len() <= 2 {
-                return Err(AppError::Config(format!(
-                    "Invalid IPv6 address format '{}': expected '[addr]:port'",
-                    self.address
-                )));
+                return Err(AppError::Config(
+                    RouterError::InvalidIpv6Format {
+                        address: self.address.clone(),
+                    }
+                    .into(),
+                ));
             }
             if host[1..host.len() - 1]
                 .parse::<std::net::Ipv6Addr>()
                 .is_err()
             {
-                return Err(AppError::Config("Invalid IPv6 address".into()));
+                return Err(AppError::Config(RouterError::InvalidIpv6Address.into()));
             }
         } else if host.contains(':') {
-            return Err(AppError::Config(format!(
-                "Invalid IPv6 address format '{}': wrap IPv6 hosts in brackets",
-                self.address
-            )));
+            return Err(AppError::Config(
+                RouterError::UnbracketedIpv6 {
+                    address: self.address.clone(),
+                }
+                .into(),
+            ));
         } else if !host.trim_end_matches('.').split('.').all(|label| {
             !label.is_empty()
                 && label.len() <= 63
@@ -167,30 +177,36 @@ impl RouterConfig {
                     .bytes()
                     .all(|ch| ch.is_ascii_alphanumeric() || ch == b'-')
         }) {
-            return Err(AppError::Config("Invalid router hostname".into()));
+            return Err(AppError::Config(RouterError::InvalidHostname.into()));
         }
 
         match port_str.parse::<u16>() {
             Ok(0) => {
-                return Err(AppError::Config(format!(
-                    "Invalid port number in address '{}': port cannot be 0",
-                    self.address
-                )));
+                return Err(AppError::Config(
+                    RouterError::ZeroPort {
+                        address: self.address.clone(),
+                    }
+                    .into(),
+                ));
             }
             Err(_) => {
-                return Err(AppError::Config(format!(
-                    "Invalid port number in address '{}': expected numeric value 1-65535",
-                    self.address
-                )));
+                return Err(AppError::Config(
+                    RouterError::InvalidPort {
+                        address: self.address.clone(),
+                    }
+                    .into(),
+                ));
             }
             _ => {}
         }
 
         if self.address.len() > 253 {
-            return Err(AppError::Config(format!(
-                "Address '{}' is too long: maximum length is 253 characters",
-                self.address
-            )));
+            return Err(AppError::Config(
+                RouterError::AddressTooLong {
+                    address: self.address.clone(),
+                }
+                .into(),
+            ));
         }
 
         Ok(())
@@ -198,17 +214,21 @@ impl RouterConfig {
 
     fn validate_username(&self) -> Result<()> {
         if self.username.trim().is_empty() {
-            return Err(AppError::Config(format!(
-                "Username cannot be empty for router '{}'",
-                self.name
-            )));
+            return Err(AppError::Config(
+                RouterError::EmptyUsername {
+                    name: self.name.clone(),
+                }
+                .into(),
+            ));
         }
 
         if self.username.len() > 64 {
-            return Err(AppError::Config(format!(
-                "Username for router '{}' is too long: maximum length is 64 characters",
-                self.name
-            )));
+            return Err(AppError::Config(
+                RouterError::UsernameTooLong {
+                    name: self.name.clone(),
+                }
+                .into(),
+            ));
         }
 
         Ok(())

@@ -131,7 +131,10 @@ fn test_invalid_boolean_and_unicode_fail() {
         assert!(load(&[(key, "yes")]).is_err());
     }
     assert!(
-        Config::from_lookup(|_| Err(crate::AppError::Config("invalid Unicode".into()))).is_err()
+        Config::from_lookup(|_| Err(crate::AppError::Config(
+            crate::ConfigError::InvalidUnicode { key: "TEST".into() }
+        )))
+        .is_err()
     );
 }
 

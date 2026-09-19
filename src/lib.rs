@@ -125,7 +125,7 @@ mod startup;
 
 // Re-export commonly used types
 /// Application configuration
-pub use config::{Config, RouterConfig, RouterTlsConfig};
+pub use config::{Config, ConfigError, RouterConfig, RouterError, RouterTlsConfig, TlsError};
 
 /// Application error and result type
 pub use error::{AppError, Result};

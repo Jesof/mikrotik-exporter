@@ -7,13 +7,34 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use mikrotik_exporter::{
-    AppState, Config, ConnectionPool, InterfaceStats, MetricsRegistry, RouterLabels, RouterMetrics,
-    SystemResource, run_startup_connectivity_tests, start_collection_loop,
+    AppState, Config, ConfigError, ConnectionPool, InterfaceStats, MetricsRegistry, RouterLabels,
+    RouterMetrics, SystemResource, run_startup_connectivity_tests, start_collection_loop,
 };
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::watch;
 use tower::ServiceExt;
+
+/// Extracts the environment variable key from a typed config error, if any.
+fn config_error_key(error: &ConfigError) -> Option<String> {
+    use mikrotik_exporter::ConfigError as E;
+    match error {
+        E::InvalidRoutersJson { key, .. }
+        | E::InvalidJson { key }
+        | E::InvalidValue { key }
+        | E::InvalidUnicode { key }
+        | E::OutOfRange { key, .. } => Some(key.clone()),
+        E::InvalidServerAddr => Some("SERVER_ADDR".into()),
+        E::StrictRequiresConnectivityTest | E::StrictRequiresRouter => {
+            Some("STRICT_STARTUP_MODE".into())
+        }
+        E::DuplicateRouterName { .. }
+        | E::StrictUnreachable { .. }
+        | E::UnsupportedArguments
+        | E::Router(_)
+        | E::Tls(_) => None,
+    }
+}
 
 fn config() -> Config {
     Config::from_lookup(|key| Ok((key == "ROUTEROS_ADDRESS").then(|| "127.0.0.1:8728".into())))
@@ -250,12 +271,17 @@ fn test_local_env_audit() -> Result<(), &'static str> {
             config.routers.iter().filter(|r| r.tls.is_some()).count(),
             config.routers.iter().filter(|r| r.tls.is_none()).count()
         ),
-        Err(mikrotik_exporter::AppError::Config(message)) => {
+        Err(mikrotik_exporter::AppError::Config(error)) => {
+            let error_key = config_error_key(error);
             let fields: Vec<_> = keys
                 .into_iter()
-                .filter(|key| message.contains(key))
+                .filter(|key| {
+                    error_key
+                        .as_ref()
+                        .is_none_or(|error_key| error_key.contains(*key))
+                })
                 .collect();
-            println!("env validation=failed fields={fields:?}");
+            println!("env validation=failed fields={fields:?} {error}");
         }
         Err(_) => println!("env validation=failed"),
     }

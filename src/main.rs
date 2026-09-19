@@ -7,7 +7,7 @@
 //! and graceful handling of `SIGINT`/`SIGTERM`.
 
 use mikrotik_exporter::{
-    AppError, AppState, Config, ConnectionPool, MetricsRegistry, Result,
+    AppError, AppState, Config, ConfigError, ConnectionPool, MetricsRegistry, Result,
     run_startup_connectivity_tests, start_collection_loop,
 };
 use std::env::args_os;
@@ -40,9 +40,7 @@ fn version_requested(args: impl IntoIterator<Item = OsString>) -> Result<bool> {
     match (args.next(), args.next()) {
         (None, None) => Ok(false),
         (Some(arg), None) if arg == "--version" || arg == "-V" => Ok(true),
-        _ => Err(AppError::Config(
-            "Unsupported arguments; use --version or configure via environment variables".into(),
-        )),
+        _ => Err(AppError::Config(ConfigError::UnsupportedArguments)),
     }
 }
 
