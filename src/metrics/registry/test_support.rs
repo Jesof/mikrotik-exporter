@@ -123,3 +123,22 @@ pub(crate) fn router_label(router: &str) -> RouterLabels {
         router: router.to_string(),
     }
 }
+
+pub(crate) fn make_wireguard_peer(
+    id: &str,
+    rx_bytes: u64,
+    tx_bytes: u64,
+    latest_handshake: Option<u64>,
+) -> crate::mikrotik::WireGuardPeerStats {
+    crate::mikrotik::WireGuardPeerStats {
+        id: id.to_string(),
+        interface: "wg1".to_string(),
+        name: "peer1".to_string(),
+        comment: String::new(),
+        allowed_address: "10.0.0.2/32".to_string(),
+        endpoint: Some("1.1.1.1:51820".to_string()),
+        rx_bytes,
+        tx_bytes,
+        latest_handshake,
+    }
+}

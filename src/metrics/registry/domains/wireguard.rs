@@ -249,3 +249,46 @@ impl WireGuardDomain {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::metrics::registry::MetricsRegistry;
+    use crate::metrics::registry::test_support::*;
+
+    #[tokio::test]
+    async fn test_wireguard_dedup_prefers_larger_traffic_on_equal_handshake() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        let mut metrics = make_router_metrics("router1", vec![iface], system);
+        metrics.wireguard_peers = vec![
+            make_wireguard_peer("*wg1", 100, 200, Some(5000)),
+            make_wireguard_peer("*wg1", 400, 700, Some(5000)),
+        ];
+
+        registry.update_metrics(&metrics);
+
+        let labels = crate::metrics::labels::WireGuardPeerLabels {
+            router: "router1".to_string(),
+            id: "*wg1".to_string(),
+        };
+
+        assert_eq!(
+            registry
+                .wireguard
+                .peer_rx_bytes
+                .get_or_create(&labels)
+                .get(),
+            400
+        );
+        assert_eq!(
+            registry
+                .wireguard
+                .peer_tx_bytes
+                .get_or_create(&labels)
+                .get(),
+            700
+        );
+    }
+}

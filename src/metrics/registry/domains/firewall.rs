@@ -270,3 +270,115 @@ fn counter_delta(current: u64, previous: u64) -> u64 {
         current
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::metrics::registry::MetricsRegistry;
+    use crate::metrics::registry::test_support::*;
+    use crate::mikrotik::FetchState;
+    use tokio::time::Instant;
+
+    #[tokio::test]
+    async fn test_firewall_partial_snapshot_preserves_previous_rules() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        let mut metrics_full = make_router_metrics("router1", vec![iface.clone()], system.clone());
+        metrics_full.firewall_rules = vec![
+            make_firewall_rule("*f1", 1000, 10),
+            make_firewall_rule("*f2", 2000, 20),
+        ];
+        registry.update_metrics(&metrics_full);
+
+        let mut metrics_partial = make_router_metrics("router1", vec![iface], system);
+        metrics_partial.collection_status = make_partial_status(
+            FetchState::Failed,
+            FetchState::Failed,
+            FetchState::Failed,
+            FetchState::Partial,
+        );
+        metrics_partial.firewall_rules = vec![make_firewall_rule("*f1", 1500, 15)];
+        registry.update_metrics(&metrics_partial);
+
+        let stale_rule_labels = crate::metrics::labels::FirewallRuleLabels {
+            router: "router1".to_string(),
+            id: "*f2".to_string(),
+            chain: "forward".to_string(),
+            action: "accept".to_string(),
+            ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
+        };
+
+        assert_eq!(
+            registry
+                .firewall
+                .rule_bytes
+                .get_or_create(&stale_rule_labels)
+                .get(),
+            2000,
+            "Stale firewall rule should be preserved during partial firewall snapshot"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_firewall_partial_refreshes_retained_rule_ttl() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        let mut full = make_router_metrics("router1", vec![iface.clone()], system.clone());
+        full.firewall_rules = vec![make_firewall_rule("*f1", 1000, 10)];
+        registry.update_metrics(&full);
+
+        let rule_labels = crate::metrics::labels::FirewallRuleLabels {
+            router: "router1".to_string(),
+            id: "*f1".to_string(),
+            chain: "forward".to_string(),
+            action: "accept".to_string(),
+            ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
+        };
+        registry.firewall.rule_last_seen.insert(
+            rule_labels.clone(),
+            Instant::now() - std::time::Duration::from_secs(100),
+        );
+
+        let mut partial = make_router_metrics("router1", vec![iface], system);
+        partial.collection_status = make_partial_status(
+            FetchState::Failed,
+            FetchState::Failed,
+            FetchState::Failed,
+            FetchState::Partial,
+        );
+        partial.firewall_rules = Vec::new();
+        registry.update_metrics(&partial);
+        registry.cleanup_expired_dynamic_labels(std::time::Duration::from_secs(60));
+
+        assert!(
+            registry.firewall.prev_rules.contains_key(&rule_labels),
+            "retained firewall rule must survive TTL cleanup"
+        );
+        assert_eq!(
+            registry
+                .firewall
+                .rule_bytes
+                .get_or_create(&rule_labels)
+                .get(),
+            1000
+        );
+
+        let mut recovered =
+            make_router_metrics("router1", Vec::new(), make_system("7.10", "RB750Gr3", "1d"));
+        recovered.firewall_rules = vec![make_firewall_rule("*f1", 1500, 15)];
+        registry.update_metrics(&recovered);
+        assert_eq!(
+            registry
+                .firewall
+                .rule_bytes
+                .get_or_create(&rule_labels)
+                .get(),
+            1500
+        );
+    }
+}
