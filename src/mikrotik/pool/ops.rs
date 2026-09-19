@@ -133,6 +133,31 @@ impl ConnectionPool {
         })
     }
 
+    /// Record a connection-level timeout/failure for a group from outside a guard.
+    ///
+    /// Used when an outer group deadline fires and the in-flight guarded future
+    /// is cancelled before it can report its own result, so the failed attempt
+    /// still drives pool backoff for that group.
+    pub(in crate::mikrotik) async fn record_connection_error(
+        &self,
+        addr: &str,
+        username: &str,
+        password: &str,
+        tls: Option<&crate::config::RouterTlsConfig>,
+        group: Option<&str>,
+    ) {
+        let key = super::types::ConnectionKey {
+            address: addr.into(),
+            username: username.into(),
+            credential: password.into(),
+            group: group.map(str::to_string),
+            tls: tls.cloned(),
+        };
+        let mut states = self.connection_states.lock().await;
+        let state = states.entry(key).or_insert_with(ConnectionState::new);
+        state.record_error();
+    }
+
     /// Record successful operation.
     #[cfg(test)]
     pub(in crate::mikrotik) async fn record_success(
