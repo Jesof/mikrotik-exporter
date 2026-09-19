@@ -34,6 +34,26 @@ impl Credential {
     }
 }
 
+impl ConnectionKey {
+    /// Whether the key matches a router's full connection identity
+    /// (address, username, password, and TLS settings), ignoring the group.
+    ///
+    /// Used for state cleanup so entries keyed by a stale credential or TLS
+    /// profile are not retained when only the address and username match.
+    pub(super) fn matches_identity(
+        &self,
+        address: &str,
+        username: &str,
+        password: &str,
+        tls: Option<&crate::config::RouterTlsConfig>,
+    ) -> bool {
+        self.address == address
+            && self.username == username
+            && self.credential.matches(password)
+            && self.tls.as_ref() == tls
+    }
+}
+
 impl PartialEq for Credential {
     fn eq(&self, other: &Self) -> bool {
         use secrecy::ExposeSecret;

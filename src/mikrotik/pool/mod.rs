@@ -76,8 +76,6 @@ impl ConnectionPool {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use super::*;
 
     fn fixture_password() -> String {
@@ -253,7 +251,13 @@ mod tests {
         pool.record_error("192.168.1.1:8728", "admin", Some("firewall"))
             .await;
 
-        let active = HashSet::from(["192.168.1.1:8728:admin".to_string()]);
+        let active = vec![crate::config::RouterConfig {
+            name: "router-a".to_string(),
+            address: "192.168.1.1:8728".to_string(),
+            username: "admin".to_string(),
+            password: fixture_credential().into(),
+            tls: None,
+        }];
         pool.cleanup_states(&active).await;
 
         let system_state = pool
@@ -277,6 +281,33 @@ mod tests {
 
         assert!(system_state.is_some());
         assert!(firewall_state.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_states_retains_only_full_identity() {
+        let pool = ConnectionPool::new();
+        pool.record_error("192.168.1.1:8728", "admin", Some("system"))
+            .await;
+
+        let active = vec![crate::config::RouterConfig {
+            name: "router-b".to_string(),
+            address: "192.168.1.1:8728".to_string(),
+            username: "admin".to_string(),
+            password: fixture_password().into(),
+            tls: Some(crate::config::RouterTlsConfig::default()),
+        }];
+        pool.cleanup_states(&active).await;
+
+        let stale = pool
+            .get_connection_state(
+                "192.168.1.1:8728",
+                "admin",
+                &fixture_credential(),
+                None,
+                Some("system"),
+            )
+            .await;
+        assert!(stale.is_none());
     }
 
     #[tokio::test]
