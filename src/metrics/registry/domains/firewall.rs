@@ -432,7 +432,10 @@ mod tests {
             ip_version: "ipv4".into(),
             section: "filter".into(),
         };
-        assert_eq!(registry.firewall.rule_bytes.get_or_create(&labels).get(), 5000);
+        assert_eq!(
+            registry.firewall.rule_bytes.get_or_create(&labels).get(),
+            5000
+        );
     }
 
     #[tokio::test]
