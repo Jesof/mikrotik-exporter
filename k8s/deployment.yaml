@@ -25,7 +25,7 @@ spec:
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
-        automountServiceAccountToken: false
+      automountServiceAccountToken: false
       containers:
       - name: mikrotik-exporter
         image: ghcr.io/jesof/mikrotik-exporter:0.5.0

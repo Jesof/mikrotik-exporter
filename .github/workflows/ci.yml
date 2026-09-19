@@ -267,7 +267,7 @@ jobs:
           if [[ -d k8s ]]; then
             docker run --rm -v "$GITHUB_WORKSPACE/k8s:/src:ro" -w /src \
               ghcr.io/yannh/kubeconform@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e \
-              -strict -summary /src
+              -strict -skip Kustomization,ServiceMonitor -summary /src
           fi
       - name: Validate Grafana dashboard JSON
         run: |
