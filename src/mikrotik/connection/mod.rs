@@ -628,10 +628,7 @@ mod tests {
                         dirty: false,
                     };
                     loop {
-                        match peer
-                            .read_sentence(&mut ResponseBudget::default())
-                            .await
-                        {
+                        match peer.read_sentence(&mut ResponseBudget::default()).await {
                             Ok((kind, _)) if kind == "/login" => {
                                 send(&mut peer, &["!done"]).await;
                                 let _ = peer_tx.send(()).await;
