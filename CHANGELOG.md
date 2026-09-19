@@ -14,8 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Typed error variants: `ConfigError` (including `RouterError` and `TlsError`), `SnapshotError`,
   and `ProtocolError` expose structured configuration, snapshot, and wire-protocol failures instead
   of free-form message strings.
+- Connection tracking accepts `RouterOS` IPv6 zone-scoped source addresses (for example
+  `fe80::1%br1`), normalizing the series label to the bare address.
 
 ### Changed
+- Conntrack retained-series selection is family-fair: with the 1024-series-per-router cap a large
+  IPv4 table no longer evicts the whole IPv6 family. Selection round-robins across families, so
+  IPv6 series survive an IPv4-saturated router while the total cap is preserved.
+- A malformed conntrack row in one family no longer discards the healthy other family's data; the
+  group reports partial (`complete` 0) instead of blanking both families.
 - **Rust API:** `AppError::Config`, `AppError::InvalidSnapshot`, and `AppError::Protocol` now carry
   `ConfigError`, `SnapshotError`, and `ProtocolError` payloads respectively. Library callers matching
   on those variants should match the typed sub-error instead of inspecting a message string; the
