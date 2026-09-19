@@ -68,8 +68,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI additionally syntax-checks non-Rust deployment/config artifacts: `k8s/` manifests via
   `kubeconform`, Grafana dashboard JSON, helper scripts in `scripts/`, and `.github/dependabot.yml`.
   These paths previously merged with no validation at all.
-- CodeQL Rust analysis now uses `build-mode: default` so a database is actually built instead of
-  reporting an empty result set for Rust-only changes.
 - Docker runtime packages are pinned to exact `apk` versions (including the OpenSSL CVE fix)
   instead of an unpinned `apk upgrade`; builds are reproducible from the pinned base image.
 

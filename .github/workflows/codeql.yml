@@ -47,7 +47,9 @@ jobs:
       - uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           languages: rust
-          build-mode: autobuild
+          # Rust is the only language CodeQL supports exclusively with
+          # build-mode `none`; autobuild/manual are rejected at init time.
+          build-mode: none
           config-file: ./.github/codeql/codeql-config.yml
       - uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
