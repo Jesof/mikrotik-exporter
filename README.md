@@ -147,8 +147,11 @@ rather than converted to plausible zeroes. Previously collected values can remai
 so always assess freshness alongside data.
 
 A critical system/interfaces failure or an invalid numeric snapshot rejects the overall production
-collection, marking all groups failed for that attempt. The public registry update methods expect
-already validated input; library callers must uphold that contract when supplying snapshots directly.
+collection, marking all groups failed for that attempt. An empty `/interface/print` response is
+treated as such an anomaly: unlike optional tables (firewall, WireGuard, conntrack, certificates)
+an empty interfaces result fails the whole router rather than counting as a valid empty success.
+The public registry update methods expect already validated input; library callers must uphold that
+contract when supplying snapshots directly.
 
 Interface and firewall counters accumulate router deltas and handle router resets. The first
 sample after startup seeds the counter with the router's cumulative value; a label that appears
