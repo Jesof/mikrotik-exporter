@@ -130,13 +130,11 @@ impl Default for CollectionStatus {
 impl CollectionStatus {
     const SYSTEM_INTERFACES_OK: u16 = 1 << 0;
     const CONNTRACK_OK: u16 = 1 << 1;
-    const VPN_CERTS_OK: u16 = 1 << 2;
     const FIREWALL_OK: u16 = 1 << 3;
     const CONNTRACK_COMPLETE_OK: u16 = 1 << 4;
     const WIREGUARD_OK: u16 = 1 << 5;
     const CERTIFICATES_OK: u16 = 1 << 6;
     const FIREWALL_COMPLETE_OK: u16 = 1 << 7;
-    const FIREWALL_INFO_COMPLETE_OK: u16 = 1 << 8;
     const SYSTEM_COMPLETE_OK: u16 = 1 << 9;
     const WIREGUARD_COMPLETE_OK: u16 = 1 << 10;
     const CERTIFICATES_COMPLETE_OK: u16 = 1 << 11;
@@ -183,9 +181,6 @@ impl CollectionStatus {
         if parts.conntrack.any_ok() {
             bits |= Self::CONNTRACK_OK;
         }
-        if parts.wireguard.any_ok() || parts.certificates.any_ok() {
-            bits |= Self::VPN_CERTS_OK;
-        }
         if parts.firewall.any_ok() {
             bits |= Self::FIREWALL_OK;
         }
@@ -200,7 +195,6 @@ impl CollectionStatus {
         }
         if parts.firewall.complete() {
             bits |= Self::FIREWALL_COMPLETE_OK;
-            bits |= Self::FIREWALL_INFO_COMPLETE_OK;
         }
         Self { bits }
     }
@@ -213,11 +207,6 @@ impl CollectionStatus {
     #[must_use]
     pub fn conntrack_ok(&self) -> bool {
         self.bits & Self::CONNTRACK_OK != 0
-    }
-
-    #[must_use]
-    pub fn vpn_certs_ok(&self) -> bool {
-        self.bits & Self::VPN_CERTS_OK != 0
     }
 
     #[must_use]
@@ -243,11 +232,6 @@ impl CollectionStatus {
     #[must_use]
     pub fn firewall_complete_ok(&self) -> bool {
         self.bits & Self::FIREWALL_COMPLETE_OK != 0
-    }
-
-    #[must_use]
-    pub fn firewall_info_complete_ok(&self) -> bool {
-        self.bits & Self::FIREWALL_INFO_COMPLETE_OK != 0
     }
 
     #[must_use]

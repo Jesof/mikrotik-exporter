@@ -168,10 +168,9 @@ impl MikroTikClient {
 
             // If system group failed, it is a critical error.
             if !system_ok {
-                return Err(AppError::RouterOs(format!(
-                    "Router '{}' critical collection failure - system/interfaces group failed",
-                    self.config.name
-                )));
+                return Err(AppError::CollectionFailed {
+                    groups: &["system_interfaces"],
+                });
             }
         }
 

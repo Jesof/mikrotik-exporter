@@ -94,10 +94,9 @@ pub(crate) async fn collect_group_firewall(
     }
 
     if section_results.iter().all(Result::is_err) {
-        return Err(crate::prelude::AppError::RouterOs(format!(
-            "Router '{}' firewall collection failed",
-            client.config.name
-        )));
+        return Err(crate::prelude::AppError::CollectionFailed {
+            groups: &["firewall"],
+        });
     }
 
     let mut firewall_rules = Vec::new();

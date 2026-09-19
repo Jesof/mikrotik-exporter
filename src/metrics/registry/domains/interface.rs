@@ -175,7 +175,10 @@ impl InterfaceDomain {
                 continue;
             }
             if let Some(previous_value) = previous_value {
-                counter.inc_by(counter_delta(current, previous_value));
+                counter.inc_by(crate::metrics::registry::counter_delta(
+                    current,
+                    previous_value,
+                ));
             } else if previous.is_none() && seed_cumulative {
                 counter.inc_by(current);
             }
@@ -217,7 +220,7 @@ impl InterfaceDomain {
         }
         match previous {
             Some(previous) => {
-                counter.inc_by(counter_delta(current, previous));
+                counter.inc_by(crate::metrics::registry::counter_delta(current, previous));
             }
             // The field was previously unreported (`None`) for an existing
             // label: seed the lifetime count so a counter that appears later is
@@ -348,15 +351,6 @@ impl InterfaceDomain {
                 false
             }
         });
-    }
-}
-
-#[inline]
-fn counter_delta(current: u64, previous: u64) -> u64 {
-    if current >= previous {
-        current - previous
-    } else {
-        current
     }
 }
 

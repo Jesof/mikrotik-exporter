@@ -22,6 +22,16 @@ pub enum AppError {
     #[error("RouterOS error: {0}")]
     RouterOs(String),
 
+    /// A metric collection group produced no usable data this cycle.
+    ///
+    /// Query-level outcome: the connection itself is still protocol-clean and
+    /// reusable, so this must not drive pool backoff.
+    #[error("RouterOS collection failed for group(s): {groups:?}")]
+    CollectionFailed {
+        /// Affected metric groups.
+        groups: &'static [&'static str],
+    },
+
     /// Parsed router snapshot is inconsistent or malformed
     #[error("Invalid router snapshot: {0}")]
     InvalidSnapshot(SnapshotError),
@@ -150,5 +160,17 @@ mod tests {
             Box::new(std::io::Error::other("test"));
         let app_err: AppError = boxed_err.into();
         assert!(matches!(app_err, AppError::RouterOs(_)));
+    }
+
+    #[test]
+    fn test_collection_failed_is_query_level() {
+        let err = AppError::CollectionFailed {
+            groups: &["conntrack"],
+        };
+        assert_eq!(
+            err.to_string(),
+            "RouterOS collection failed for group(s): [\"conntrack\"]"
+        );
+        assert!(!err.is_connection_level());
     }
 }

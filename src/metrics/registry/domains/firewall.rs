@@ -14,6 +14,15 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::time::Instant;
 
+/// Upper bound on retained firewall rule series per router.
+///
+/// Partial snapshots deliberately keep previously-seen rules alive (their TTL
+/// is refreshed so counters do not dip to zero mid-outage). Without a cap that
+/// live-set can grow without bound while a router is chronically partial and its
+/// rules rotate. The cap discards the least-recently-seen records first, mirroring
+/// the conntrack retained-series limit.
+pub(crate) const MAX_RETAINED_RULES_PER_ROUTER: usize = 4096;
+
 #[derive(Clone)]
 pub(crate) struct FirewallDomain {
     pub(crate) rule_bytes: Family<FirewallRuleLabels, Counter>,
@@ -118,13 +127,13 @@ impl FirewallDomain {
                 } else if let Some(prev_entry) = self.prev_rules.get(&labels) {
                     let (prev_bytes, prev_packets) = *prev_entry.value();
 
-                    self.rule_bytes
-                        .get_or_create(&labels)
-                        .inc_by(counter_delta(rule.bytes, prev_bytes));
+                    self.rule_bytes.get_or_create(&labels).inc_by(
+                        crate::metrics::registry::counter_delta(rule.bytes, prev_bytes),
+                    );
 
-                    self.rule_packets
-                        .get_or_create(&labels)
-                        .inc_by(counter_delta(rule.packets, prev_packets));
+                    self.rule_packets.get_or_create(&labels).inc_by(
+                        crate::metrics::registry::counter_delta(rule.packets, prev_packets),
+                    );
                 }
             } else {
                 let _ = self.rule_bytes.get_or_create(&labels);
@@ -155,6 +164,37 @@ impl FirewallDomain {
             self.rule_packets.remove(stale);
             self.rule_last_seen.remove(stale);
             self.prev_rules.remove(stale);
+        }
+        if current_firewall_rules.len() > MAX_RETAINED_RULES_PER_ROUTER {
+            let excess = current_firewall_rules.len() - MAX_RETAINED_RULES_PER_ROUTER;
+            let mut removed = None;
+            for _ in 0..excess {
+                // Drop the least-recently-seen records first. Common-case sizes
+                // stay far below the cap, so a full scan per removal is fine.
+                let evict = current_firewall_rules
+                    .iter()
+                    .min_by_key(|labels| {
+                        self.rule_last_seen
+                            .get(labels)
+                            .map_or(now, |seen| *seen.value())
+                    })
+                    .cloned();
+                let Some(evict) = evict else { break };
+                current_firewall_rules.remove(&evict);
+                current_firewall_info.remove(&evict);
+                self.prev_rules.remove(&evict);
+                self.rule_bytes.remove(&evict);
+                self.rule_packets.remove(&evict);
+                self.rule_last_seen.remove(&evict);
+                removed = Some(evict);
+            }
+            if removed.is_some() {
+                tracing::warn!(
+                    router = %router_name,
+                    cap = MAX_RETAINED_RULES_PER_ROUTER,
+                    "Firewall rule series exceeded the retained cap; evicted least-recent records"
+                );
+            }
         }
         *prev_labels = current_firewall_rules;
 
@@ -273,18 +313,10 @@ impl FirewallDomain {
     }
 }
 
-#[inline]
-fn counter_delta(current: u64, previous: u64) -> u64 {
-    if current >= previous {
-        current - previous
-    } else {
-        current
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::metrics::registry::MetricsRegistry;
+    use crate::metrics::registry::domains::firewall::MAX_RETAINED_RULES_PER_ROUTER;
     use crate::metrics::registry::test_support::*;
     use crate::mikrotik::FetchState;
     use tokio::time::Instant;
@@ -435,6 +467,62 @@ mod tests {
                 .get_or_create(&rule_labels)
                 .get(),
             1500
+        );
+    }
+
+    #[tokio::test]
+    async fn test_firewall_retained_series_bounded_by_cap() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        // Full collection with more rules than the retained cap. The OLD rules
+        // (f1..f{k}) are chronologically older but configurable, so the cap
+        // evicts least-recently-seen first.
+        let cap = MAX_RETAINED_RULES_PER_ROUTER;
+        let mut full = make_router_metrics("router1", vec![iface.clone()], system.clone());
+        full.firewall_rules = (0..cap + 8)
+            .map(|i| make_firewall_rule(&format!("*f{i}"), i as u64 * 100, i as u64 * 10))
+            .collect();
+        for (index, rule) in full.firewall_rules.iter_mut().enumerate() {
+            let _ = index;
+            let labels = crate::metrics::labels::FirewallRuleLabels {
+                router: "router1".into(),
+                id: rule.id.clone(),
+                chain: rule.chain.clone(),
+                action: rule.action.clone(),
+                ip_version: rule.ip_version.clone(),
+                section: rule.section.clone(),
+            };
+            registry.firewall.rule_last_seen.insert(
+                labels,
+                tokio::time::Instant::now()
+                    - std::time::Duration::from_secs(u64::try_from(cap + 8 - index).unwrap()),
+            );
+        }
+        registry.update_metrics(&full);
+
+        // Partial snapshot re-introduces the previously-seen series; without a
+        // cap the retained set would keep growing past limit.
+        let mut partial = make_router_metrics("router1", vec![iface], system);
+        partial.collection_status = make_partial_status(
+            FetchState::Failed,
+            FetchState::Failed,
+            FetchState::Failed,
+            FetchState::Partial,
+        );
+        partial.firewall_rules = vec![make_firewall_rule("*new", 1, 1)];
+        registry.update_metrics(&partial);
+
+        let retained = registry
+            .firewall
+            .prev_rules_by_router
+            .get("router1")
+            .unwrap();
+        assert!(
+            retained.len() <= cap,
+            "retained firewall series must respect the cap, got {}",
+            retained.len()
         );
     }
 }
