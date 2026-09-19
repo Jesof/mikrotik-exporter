@@ -278,9 +278,11 @@ jobs:
       - name: Validate helper scripts
         run: |
           set -euo pipefail
-          for f in scripts/*.py; do
-            [[ -f "$f" ]] && python3 -m py_compile "$f"
-          done
+          if compgen -G 'scripts/*.py' > /dev/null; then
+            for f in scripts/*.py; do
+              python3 -m py_compile "$f"
+            done
+          fi
       - name: Validate dependabot configuration
         run: |
           set -euo pipefail
