@@ -8,9 +8,8 @@
 
 use crate::mikrotik::{
     CollectionStatus, CollectionStatusParts, ConnectionTrackingStats, FetchState,
-    FirewallRuleStats, InterfaceStats, RouterMetrics, SystemResource, WireGuardPeerStats,
+    FirewallRuleStats, InterfaceStats, RouterMetrics, SystemResource,
 };
-use crate::metrics::RouterLabels;
 
 pub(crate) fn make_router_metrics(
     router_name: &str,
@@ -115,30 +114,5 @@ pub(crate) fn make_firewall_rule(id: &str, bytes: u64, packets: u64) -> Firewall
         packets,
         ip_version: "ipv4".to_string(),
         section: "filter".to_string(),
-    }
-}
-
-pub(crate) fn make_wireguard_peer(
-    id: &str,
-    rx_bytes: u64,
-    tx_bytes: u64,
-    latest_handshake: Option<u64>,
-) -> WireGuardPeerStats {
-    WireGuardPeerStats {
-        id: id.to_string(),
-        interface: "wg1".to_string(),
-        name: "peer1".to_string(),
-        comment: String::new(),
-        allowed_address: "10.0.0.2/32".to_string(),
-        endpoint: Some("1.1.1.1:51820".to_string()),
-        rx_bytes,
-        tx_bytes,
-        latest_handshake,
-    }
-}
-
-pub(crate) fn router_label(router: &str) -> RouterLabels {
-    RouterLabels {
-        router: router.to_string(),
     }
 }

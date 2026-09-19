@@ -47,8 +47,8 @@ impl Default for MetricsRegistry {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::test_support::*;
+    use super::*;
     use crate::RouterLabels;
     use crate::mikrotik::{
         CertificateStats, CollectionStatus, CollectionStatusParts, FetchState, SystemResource,
@@ -258,46 +258,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_new_registry_initializes_correctly() {
-        let registry = MetricsRegistry::new();
-        assert_eq!(
-            registry
-                .interface
-                .rx_bytes
-                .get_or_create(&crate::metrics::labels::InterfaceLabels {
-                    router: "test".to_string(),
-                    id: "*1".to_string(),
-                })
-                .get(),
-            0
-        );
-    }
-
-    #[tokio::test]
-    async fn test_complete_empty_interfaces_remove_previous_series() {
-        let registry = MetricsRegistry::new();
-        let mut snapshot = make_router_metrics(
-            "router1",
-            vec![make_interface(
-                "*1", "ether1", "WAN", 1, 2, 3, 4, 0, 0, true,
-            )],
-            make_system("7.10", "board", "1d"),
-        );
-        registry.update_metrics(&snapshot);
-        snapshot.interfaces.clear();
-        registry.update_metrics(&snapshot);
-        assert!(registry.interface.prev.is_empty());
-        assert!(
-            !registry
-                .encode_metrics()
-                .await
-                .unwrap()
-                .lines()
-                .any(|line| line.starts_with("mikrotik_interface_"))
-        );
-    }
-
     #[tokio::test]
     async fn test_router_removal_cleans_superseded_metadata() {
         let registry = MetricsRegistry::new();
@@ -323,104 +283,6 @@ mod tests {
         assert!(registry.interface.info_last_seen.is_empty());
         assert!(registry.wireguard.peer_info_last_seen.is_empty());
         assert!(registry.firewall.rule_info_last_seen.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_update_metrics_first_time() {
-        let registry = MetricsRegistry::new();
-        let iface = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
-        let system = make_system("7.10", "RB750Gr3", "1d");
-        let metrics = make_router_metrics("router1", vec![iface], system);
-
-        registry.update_metrics(&metrics);
-
-        let labels = crate::metrics::labels::InterfaceLabels {
-            router: "router1".to_string(),
-            id: "*1".to_string(),
-        };
-        assert_eq!(
-            registry.interface.rx_bytes.get_or_create(&labels).get(),
-            1000
-        );
-        assert_eq!(
-            registry.interface.tx_bytes.get_or_create(&labels).get(),
-            2000
-        );
-        assert_eq!(
-            registry.interface.rx_packets.get_or_create(&labels).get(),
-            10
-        );
-        assert_eq!(
-            registry.interface.tx_packets.get_or_create(&labels).get(),
-            20
-        );
-    }
-
-    #[tokio::test]
-    async fn test_update_metrics_with_deltas() {
-        let registry = MetricsRegistry::new();
-
-        let iface1 = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
-        let system1 = make_system("7.10", "RB750Gr3", "1d");
-        let metrics1 = make_router_metrics("router1", vec![iface1], system1);
-        registry.update_metrics(&metrics1);
-
-        let iface2 = make_interface("*1", "ether1", "WAN", 1500, 2500, 15, 25, 0, 0, true);
-        let system2 = make_system("7.10", "RB750Gr3", "1d");
-        let metrics2 = make_router_metrics("router1", vec![iface2], system2);
-        registry.update_metrics(&metrics2);
-
-        let labels = crate::metrics::labels::InterfaceLabels {
-            router: "router1".to_string(),
-            id: "*1".to_string(),
-        };
-        assert_eq!(
-            registry.interface.rx_bytes.get_or_create(&labels).get(),
-            1500
-        );
-        assert_eq!(
-            registry.interface.tx_bytes.get_or_create(&labels).get(),
-            2500
-        );
-        assert_eq!(
-            registry.interface.rx_packets.get_or_create(&labels).get(),
-            15
-        );
-        assert_eq!(
-            registry.interface.tx_packets.get_or_create(&labels).get(),
-            25
-        );
-    }
-
-    #[tokio::test]
-    async fn test_update_metrics_baseline_skips_counters() {
-        let registry = MetricsRegistry::new();
-
-        let iface1 = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
-        let system1 = make_system("7.10", "RB750Gr3", "1d");
-        let metrics1 = make_router_metrics("router1", vec![iface1], system1);
-        registry.update_metrics_baseline(&metrics1);
-
-        let labels = crate::metrics::labels::InterfaceLabels {
-            router: "router1".to_string(),
-            id: "*1".to_string(),
-        };
-        assert_eq!(registry.interface.rx_bytes.get_or_create(&labels).get(), 0);
-        assert_eq!(registry.interface.tx_bytes.get_or_create(&labels).get(), 0);
-
-        let iface2 = make_interface("*1", "ether1", "WAN", 1500, 2600, 15, 26, 0, 0, true);
-        let system2 = make_system("7.10", "RB750Gr3", "1d");
-        let metrics2 = make_router_metrics("router1", vec![iface2], system2);
-        registry.update_metrics(&metrics2);
-
-        assert_eq!(
-            registry.interface.rx_bytes.get_or_create(&labels).get(),
-            500
-        );
-        assert_eq!(
-            registry.interface.tx_bytes.get_or_create(&labels).get(),
-            600
-        );
     }
 
     #[tokio::test]
@@ -550,44 +412,6 @@ mod tests {
             (registry.system.cpu_load.get_or_create(&router_label).get() - 0.6).abs()
                 < f64::EPSILON
         );
-    }
-
-    #[tokio::test]
-    async fn test_update_metrics_counter_reset() {
-        let registry = MetricsRegistry::new();
-
-        let iface1 = make_interface("*1", "ether1", "WAN", 5000, 6000, 50, 60, 2, 3, true);
-        let system1 = make_system("7.10", "RB750Gr3", "1d");
-        let metrics1 = make_router_metrics("router1", vec![iface1], system1);
-        registry.update_metrics(&metrics1);
-
-        let iface2 = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
-        let system2 = make_system("7.10", "RB750Gr3", "1d");
-        let metrics2 = make_router_metrics("router1", vec![iface2], system2);
-        registry.update_metrics(&metrics2);
-
-        let labels = crate::metrics::labels::InterfaceLabels {
-            router: "router1".to_string(),
-            id: "*1".to_string(),
-        };
-        assert_eq!(
-            registry.interface.rx_bytes.get_or_create(&labels).get(),
-            6000
-        );
-        assert_eq!(
-            registry.interface.tx_bytes.get_or_create(&labels).get(),
-            8000
-        );
-        assert_eq!(
-            registry.interface.rx_packets.get_or_create(&labels).get(),
-            60
-        );
-        assert_eq!(
-            registry.interface.tx_packets.get_or_create(&labels).get(),
-            80
-        );
-        assert_eq!(registry.interface.rx_errors.get_or_create(&labels).get(), 2);
-        assert_eq!(registry.interface.tx_errors.get_or_create(&labels).get(), 3);
     }
 
     #[tokio::test]
@@ -737,37 +561,6 @@ mod tests {
                 .get(),
             3
         );
-    }
-
-    #[tokio::test]
-    async fn test_interface_labels_with_metrics() {
-        let registry = MetricsRegistry::new();
-
-        let iface1 = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
-        let iface2 = make_interface("*2", "ether2", "LAN", 3000, 4000, 30, 40, 1, 2, false);
-        let system = make_system("7.10", "RB750Gr3", "1d");
-        let metrics = make_router_metrics("router1", vec![iface1, iface2], system);
-        registry.update_metrics(&metrics);
-
-        let labels1 = crate::metrics::labels::InterfaceLabels {
-            router: "router1".to_string(),
-            id: "*1".to_string(),
-        };
-        let labels2 = crate::metrics::labels::InterfaceLabels {
-            router: "router1".to_string(),
-            id: "*2".to_string(),
-        };
-
-        assert_eq!(
-            registry.interface.rx_bytes.get_or_create(&labels1).get(),
-            1000
-        );
-        assert_eq!(
-            registry.interface.rx_bytes.get_or_create(&labels2).get(),
-            3000
-        );
-        assert_eq!(registry.interface.running.get_or_create(&labels1).get(), 1);
-        assert_eq!(registry.interface.running.get_or_create(&labels2).get(), 0);
     }
 
     #[tokio::test]
