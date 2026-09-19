@@ -88,7 +88,6 @@ impl MetricsRegistry {
             self.conntrack.active_series.remove(&labels);
             self.conntrack.update_duration_seconds.remove(&labels);
             self.known_routers.remove(router);
-            self.collected_routers.remove(router);
         }
     }
 }

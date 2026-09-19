@@ -37,6 +37,7 @@ pub(crate) struct InterfaceDomain {
     pub(crate) prev: Arc<DashMap<InterfaceLabels, InterfaceSnapshot>>,
     pub(crate) prev_info: Arc<DashMap<String, HashMap<InterfaceLabels, InterfaceInfoLabels>>>,
     pub(crate) info_last_seen: Arc<DashMap<InterfaceInfoLabels, Instant>>,
+    seeded_routers: Arc<DashMap<String, ()>>,
 }
 
 impl InterfaceDomain {
@@ -102,6 +103,7 @@ impl InterfaceDomain {
             prev: Arc::new(DashMap::new()),
             prev_info: Arc::new(DashMap::new()),
             info_last_seen: Arc::new(DashMap::new()),
+            seeded_routers: Arc::new(DashMap::new()),
         }
     }
 
@@ -110,8 +112,13 @@ impl InterfaceDomain {
         router_name: &str,
         interfaces: &[InterfaceStats],
         apply_counters: bool,
-        seed_cumulative: bool,
     ) {
+        // Seed cumulative counters on the first counters-applying update for
+        // this domain. Interfaces share the system/interfaces group, which
+        // fails the whole router, so in practice this is the first snapshot,
+        // but keeping the decision per-domain keeps the two counter domains
+        // consistent and future-proof.
+        let seed_cumulative = apply_counters && !self.seeded_routers.contains_key(router_name);
         let mut current_interface_info = HashMap::new();
 
         for iface in interfaces {
@@ -134,6 +141,10 @@ impl InterfaceDomain {
         }
 
         self.cleanup_stale(router_name, &current_interface_info);
+
+        if apply_counters {
+            self.seeded_routers.insert(router_name.into(), ());
+        }
     }
 
     fn process_counters(
@@ -208,7 +219,13 @@ impl InterfaceDomain {
             Some(previous) => {
                 counter.inc_by(counter_delta(current, previous));
             }
-            None if seed_cumulative && !self.prev.contains_key(labels) => {
+            // The field was previously unreported (`None`) for an existing
+            // label: seed the lifetime count so a counter that appears later is
+            // not silently lost as zero.
+            None if self.prev.contains_key(labels) => {
+                counter.inc_by(current);
+            }
+            None if seed_cumulative => {
                 counter.inc_by(current);
             }
             None => {}
@@ -316,6 +333,7 @@ impl InterfaceDomain {
                 self.info_last_seen.remove(info_label);
             }
         }
+        self.seeded_routers.remove(router_name);
     }
 
     pub(crate) fn retain_active_last_seen(
@@ -344,6 +362,7 @@ fn counter_delta(current: u64, previous: u64) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use crate::InterfaceStats;
     use crate::metrics::registry::MetricsRegistry;
     use crate::metrics::registry::test_support::*;
 
@@ -521,6 +540,123 @@ mod tests {
         );
         assert_eq!(registry.interface.rx_errors.get_or_create(&labels).get(), 2);
         assert_eq!(registry.interface.tx_errors.get_or_create(&labels).get(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_interface_optional_counter_none_to_some_seeds_lifetime() {
+        let registry = MetricsRegistry::new();
+        let labels = crate::metrics::labels::InterfaceLabels {
+            router: "router1".to_string(),
+            id: "*1".to_string(),
+        };
+
+        let first = make_router_metrics(
+            "router1",
+            vec![InterfaceStats {
+                id: "*1".into(),
+                name: "ether1".into(),
+                comment: "WAN".into(),
+                rx_bytes: 1000,
+                tx_bytes: 2000,
+                rx_packets: 10,
+                tx_packets: 20,
+                rx_errors: None,
+                tx_errors: None,
+                running: true,
+            }],
+            make_system("7.10", "board", "1d"),
+        );
+        registry.update_metrics(&first);
+        assert_eq!(registry.interface.rx_errors.get_or_create(&labels).get(), 0);
+
+        let second = make_router_metrics(
+            "router1",
+            vec![InterfaceStats {
+                id: "*1".into(),
+                name: "ether1".into(),
+                comment: "WAN".into(),
+                rx_bytes: 1500,
+                tx_bytes: 2600,
+                rx_packets: 15,
+                tx_packets: 26,
+                rx_errors: Some(42),
+                tx_errors: Some(17),
+                running: true,
+            }],
+            make_system("7.10", "board", "1d"),
+        );
+        registry.update_metrics(&second);
+        assert_eq!(
+            registry.interface.rx_errors.get_or_create(&labels).get(),
+            42,
+            "a counter that appears after None seeds the lifetime count"
+        );
+        assert_eq!(
+            registry.interface.tx_errors.get_or_create(&labels).get(),
+            17
+        );
+
+        let third = make_router_metrics(
+            "router1",
+            vec![InterfaceStats {
+                id: "*1".into(),
+                name: "ether1".into(),
+                comment: "WAN".into(),
+                rx_bytes: 1600,
+                tx_bytes: 2700,
+                rx_packets: 16,
+                tx_packets: 27,
+                rx_errors: Some(45),
+                tx_errors: Some(19),
+                running: true,
+            }],
+            make_system("7.10", "board", "1d"),
+        );
+        registry.update_metrics(&third);
+        assert_eq!(
+            registry.interface.rx_errors.get_or_create(&labels).get(),
+            45,
+            "subsequent reports continue delta accumulation from the seeded value"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_interface_optional_counter_fresh_label_on_seeded_router_stays_zero() {
+        let registry = MetricsRegistry::new();
+        let first = make_router_metrics(
+            "router1",
+            vec![make_interface(
+                "*1", "ether1", "", 1000, 2000, 10, 20, 5, 6, true,
+            )],
+            make_system("7.10", "board", "1d"),
+        );
+        registry.update_metrics(&first);
+
+        let labels = crate::metrics::labels::InterfaceLabels {
+            router: "router1".to_string(),
+            id: "*2".to_string(),
+        };
+        let second = make_router_metrics(
+            "router1",
+            vec![
+                make_interface("*1", "ether1", "", 1500, 2500, 15, 25, 6, 7, true),
+                InterfaceStats {
+                    id: "*2".into(),
+                    name: "ether2".into(),
+                    comment: String::new(),
+                    rx_bytes: 3000,
+                    tx_bytes: 4000,
+                    rx_packets: 30,
+                    tx_packets: 40,
+                    rx_errors: Some(8),
+                    tx_errors: Some(9),
+                    running: false,
+                },
+            ],
+            make_system("7.10", "board", "1d"),
+        );
+        registry.update_metrics(&second);
+        assert_eq!(registry.interface.rx_errors.get_or_create(&labels).get(), 0);
     }
 
     #[tokio::test]
