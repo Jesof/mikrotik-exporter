@@ -146,8 +146,10 @@ Pull requests, scheduled runs, manual runs, and pushes to `main` run the quality
 path-aware job selection. A reusable `Detect Changes` workflow classifies the diff once and every
 workflow consumes its outputs: when no Rust-related path changed, the heavy Rust steps are skipped
 while the required jobs still report success; docs linting runs only for Markdown changes, workflow
-validation only for `.github/` and build-script changes, and Docker validation only for container or
-crate changes. Pull requests validate a single `amd64` image; `main` and schedules validate
+validation only for `.github/` and build-script changes, Docker validation only for container or
+crate changes, and a `config-lint` job syntax-checks non-Rust deployment/config artifacts (`k8s/`
+manifests via `kubeconform`, `grafana/` dashboard JSON, `scripts/` Python, and `.github/dependabot.yml`).
+Pull requests validate a single `amd64` image; `main` and schedules validate
 `amd64`/`arm64`. Coverage runs on `main` and schedules, not on pull requests. Schedules and manual
 runs always execute the full suite. Feature-branch pushes are intentionally covered by the
 pull-request run instead of repeating the same suite before a PR exists.

@@ -20,6 +20,9 @@ on:
       docs:
         description: Markdown or documentation changes
         value: ${{ jobs.changes.outputs.docs }}
+      config:
+        description: Non-Rust configuration artifacts (k8s, grafana, scripts, dependabot)
+        value: ${{ jobs.changes.outputs.config }}
 
 permissions:
   contents: read
@@ -34,6 +37,7 @@ jobs:
       workflows: ${{ steps.classify.outputs.workflows }}
       docker: ${{ steps.classify.outputs.docker }}
       docs: ${{ steps.classify.outputs.docs }}
+      config: ${{ steps.classify.outputs.config }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -67,7 +71,7 @@ jobs:
           non_rust='(\.md$|^docs/|^grafana/|^k8s/|^scripts/|^\.github/|^LICENSE$|^NOTICE$|^\.gitignore$|^\.gitmessage$|^\.env\.example$|^\.dockerignore$|^\.cursorrules$|^Dockerfile$|^build-docker\.sh$|^\.markdownlint-cli2\.jsonc$|^lychee\.toml$)'
           if [[ -z "$files" ]]; then
             # Schedule, manual dispatch, or an undeterminable diff: full validation.
-            rust=true; workflows=true; docker=true; docs=true
+            rust=true; workflows=true; docker=true; docs=true; config=true
           else
             rust=false
             if grep -vE "$non_rust" <<<"$files" | grep -q .; then rust=true; fi
@@ -77,13 +81,19 @@ jobs:
             if [[ "$rust" == "true" ]] || grep -qE '^(Dockerfile|build-docker\.sh|\.dockerignore)$|^\.github/workflows/docker-build\.yml$' <<<"$files"; then docker=true; fi
             docs=false
             if grep -qE '(\.md$|^docs/|^\.markdownlint-cli2\.jsonc$|^lychee\.toml$)' <<<"$files"; then docs=true; fi
+            # Non-Rust deployment/config artifacts that previously merged with
+            # no validation at all: validate their syntax (YAML/JSON/Python)
+            # and Repo config instead of silently skipping every check.
+            config=false
+            if grep -qE '^(grafana/|k8s/|scripts/)|^\.github/(dependabot\.yml|CODEOWNERS)$' <<<"$files"; then config=true; fi
           fi
           echo "Changed paths:"
           printf '%s\n' "$files"
-          echo "rust=$rust workflows=$workflows docker=$docker docs=$docs"
+          echo "rust=$rust workflows=$workflows docker=$docker docs=$docs config=$config"
           {
             echo "rust=$rust"
             echo "workflows=$workflows"
             echo "docker=$docker"
             echo "docs=$docs"
+            echo "config=$config"
           } >> "$GITHUB_OUTPUT"
