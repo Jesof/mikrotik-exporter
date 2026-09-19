@@ -45,6 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rust API (removed):** `CollectionStatus::vpn_certs_ok` and `CollectionStatus::firewall_info_complete_ok`
   (and the internal `firewall-info` completeness bit) were unused and are removed; use `wireguard_ok`/
   `certificates_ok` and `firewall_complete_ok` respectively.
+- The empty `/interface/print` anomaly is now documented and pinned by an integration test: unlike
+  optional tables, an empty interfaces result fails the whole router rather than counting as a valid
+  empty success.
 - **Rust API:** `AppError::Config`, `AppError::InvalidSnapshot`, and `AppError::Protocol` now carry
   `ConfigError`, `SnapshotError`, and `ProtocolError` payloads respectively. Library callers matching
   on those variants should match the typed sub-error instead of inspecting a message string; the
