@@ -196,16 +196,16 @@ impl FirewallDomain {
                 );
             }
         }
-        *prev_labels = current_firewall_rules;
-
         let mut prev_info_entry = self.prev_rule_info.entry(router_name.into()).or_default();
         let prev_map = prev_info_entry.value_mut();
         if !firewall_complete_ok {
             for (labels, info_labels) in prev_map.iter() {
-                current_firewall_info
-                    .entry(labels.clone())
-                    .or_insert_with(|| info_labels.clone());
-                self.rule_info_last_seen.insert(info_labels.clone(), now);
+                if current_firewall_rules.contains(labels) {
+                    current_firewall_info
+                        .entry(labels.clone())
+                        .or_insert_with(|| info_labels.clone());
+                    self.rule_info_last_seen.insert(info_labels.clone(), now);
+                }
             }
         }
         for (labels, info_labels) in prev_map.iter() {
@@ -219,8 +219,9 @@ impl FirewallDomain {
             }
         }
         *prev_map = current_firewall_info;
+        *prev_labels = current_firewall_rules;
 
-        if apply_counters {
+        if apply_counters && !firewall_rules.is_empty() {
             self.seeded_routers.insert(router_name.into(), ());
         }
     }
@@ -410,6 +411,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_firewall_empty_snapshot_does_not_seed_future_rules() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "WAN", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        let mut empty = make_router_metrics("r1", vec![iface.clone()], system.clone());
+        empty.firewall_rules.clear();
+        registry.update_metrics(&empty);
+
+        let mut populated = make_router_metrics("r1", vec![iface], system);
+        populated.firewall_rules = vec![make_firewall_rule("*f1", 5000, 50)];
+        registry.update_metrics(&populated);
+
+        let labels = crate::metrics::labels::FirewallRuleLabels {
+            router: "r1".into(),
+            id: "*f1".into(),
+            chain: "forward".into(),
+            action: "accept".into(),
+            ip_version: "ipv4".into(),
+            section: "filter".into(),
+        };
+        assert_eq!(registry.firewall.rule_bytes.get_or_create(&labels).get(), 5000);
+    }
+
+    #[tokio::test]
     async fn test_firewall_partial_refreshes_retained_rule_ttl() {
         let registry = MetricsRegistry::new();
         let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
@@ -523,6 +549,14 @@ mod tests {
             retained.len() <= cap,
             "retained firewall series must respect the cap, got {}",
             retained.len()
+        );
+        assert!(
+            registry
+                .firewall
+                .prev_rule_info
+                .get("router1")
+                .is_none_or(|info| info.len() <= cap),
+            "firewall info series must respect the retained cap"
         );
     }
 }
