@@ -224,6 +224,10 @@ impl CollectionStatus {
         self.bits & Self::CERTIFICATES_OK != 0
     }
 
+    pub(crate) fn certificates_complete_ok(&self) -> bool {
+        self.bits & Self::CERTIFICATES_COMPLETE_OK != 0
+    }
+
     #[must_use]
     pub fn firewall_ok(&self) -> bool {
         self.bits & Self::FIREWALL_OK != 0

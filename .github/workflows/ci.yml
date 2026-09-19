@@ -267,7 +267,7 @@ jobs:
           if [[ -d k8s ]]; then
             docker run --rm -v "$GITHUB_WORKSPACE/k8s:/src:ro" -w /src \
               ghcr.io/yannh/kubeconform@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e \
-              -strict -summary /src
+              -strict -skip Kustomization,ServiceMonitor -summary /src
           fi
       - name: Validate Grafana dashboard JSON
         run: |
@@ -278,14 +278,16 @@ jobs:
       - name: Validate helper scripts
         run: |
           set -euo pipefail
-          for f in scripts/*.py; do
-            [[ -f "$f" ]] && python3 -m py_compile "$f"
-          done
+          if compgen -G 'scripts/*.py' > /dev/null; then
+            for f in scripts/*.py; do
+              python3 -m py_compile "$f"
+            done
+          fi
       - name: Validate dependabot configuration
         run: |
           set -euo pipefail
           if [[ -f .github/dependabot.yml ]]; then
-            python3 -m pip install --quiet pyyaml
+            python3 -m pip install --quiet 'pyyaml==6.0.2'
             python3 -c 'import pathlib,yaml; d=yaml.safe_load(pathlib.Path(".github/dependabot.yml").read_text()); assert isinstance(d, dict) and d.get("version") == 2'
           fi
 

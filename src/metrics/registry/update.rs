@@ -57,8 +57,11 @@ impl MetricsRegistry {
         }
 
         if metrics.collection_status.certificates_ok() {
-            self.certificate
-                .update(&metrics.router_name, &metrics.certificate_stats);
+            self.certificate.update(
+                &metrics.router_name,
+                &metrics.certificate_stats,
+                metrics.collection_status.certificates_complete_ok(),
+            );
         }
 
         self.firewall.update(

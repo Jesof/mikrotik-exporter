@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `fe80::1%br1`), normalizing the series label to the bare address.
 
 ### Changed
+- Partial certificate snapshots preserve previously observed certificate series; complete snapshots
+  continue to remove certificates that are no longer reported.
+- Firewall counter baselines are not seeded by an empty first snapshot, and firewall metadata
+  eviction now respects the per-router retained-series cap.
+- Grafana conntrack panels use valid instant-vector PromQL and WireGuard panels use the exported
+  `endpoint` label.
+- The Kubernetes example pins the image, excludes the example Secret from the default bundle, and
+  enables additional pod hardening defaults.
 - Conntrack retained-series selection is family-fair: with the 1024-series-per-router cap a large
   IPv4 table no longer evicts the whole IPv6 family. Selection round-robins across families, so
   IPv6 series survive an IPv4-saturated router while the total cap is preserved.

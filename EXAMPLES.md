@@ -24,20 +24,19 @@ version: "3.8"
 
 services:
   mikrotik-exporter:
-    image: ghcr.io/jesof/mikrotik-exporter:0.5
+    image: ghcr.io/jesof/mikrotik-exporter:0.5.0
     container_name: mikrotik-exporter
     restart: unless-stopped
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     environment:
-      - SERVER_ADDR=0.0.0.0:9090
-      - COLLECTION_INTERVAL_SECONDS=30
-      - RUST_LOG=info
-      - ROUTERS_CONFIG=[
-        {"name":"office-main","address":"192.168.88.1:8728","username":"prometheus","password":"secure-pass-1"},
-        {"name":"office-backup","address":"192.168.88.2:8728","username":"prometheus","password":"secure-pass-2"},
-        {"name":"warehouse","address":"192.168.89.1:8728","username":"prometheus","password":"secure-pass-3"}
-        ]
+      SERVER_ADDR: 0.0.0.0:9090
+      COLLECTION_INTERVAL_SECONDS: "30"
+      RUST_LOG: info
+      ROUTERS_CONFIG: >-
+        [{"name":"office-main","address":"192.168.88.1:8728","username":"prometheus","password":"${OFFICE_MAIN_PASSWORD:?set OFFICE_MAIN_PASSWORD}"},
+        {"name":"office-backup","address":"192.168.88.2:8728","username":"prometheus","password":"${OFFICE_BACKUP_PASSWORD:?set OFFICE_BACKUP_PASSWORD}"},
+        {"name":"warehouse","address":"192.168.89.1:8728","username":"prometheus","password":"${WAREHOUSE_PASSWORD:?set WAREHOUSE_PASSWORD}"}]
     networks:
       - monitoring
     healthcheck:
@@ -56,11 +55,11 @@ services:
       start_period: 10s
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.5.0
     container_name: prometheus
     restart: unless-stopped
     ports:
-      - "9091:9090"
+      - "127.0.0.1:9091:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -78,18 +77,18 @@ services:
       - mikrotik-exporter
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:12.3.0
     container_name: grafana
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboard.json:/var/lib/grafana/dashboards/mikrotik.json:ro
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_INSTALL_PLUGINS=
     networks:
@@ -98,11 +97,11 @@ services:
       - prometheus
 
   alertmanager:
-    image: prom/alertmanager:latest
+    image: prom/alertmanager:v0.28.1
     container_name: alertmanager
     restart: unless-stopped
     ports:
-      - "9093:9093"
+      - "127.0.0.1:9093:9093"
     volumes:
       - ./alertmanager/config.yml:/etc/alertmanager/config.yml:ro
       - alertmanager-data:/alertmanager

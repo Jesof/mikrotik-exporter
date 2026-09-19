@@ -1476,8 +1476,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (router, id) group_left(comment, interface, name, exported_endpoint) (mikrotik_wireguard_peer_info == 1)",
-          "legendFormat": "{{comment}} - {{interface}} - {{name}} - {{exported_endpoint}}",
+          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (router, id) group_left(comment, interface, name, endpoint) (mikrotik_wireguard_peer_info == 1)",
+          "legendFormat": "{{comment}} - {{interface}} - {{name}} - {{endpoint}}",
           "range": true,
           "refId": "A"
         }
@@ -1578,8 +1578,8 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (router, id) group_left(comment, interface, name, exported_endpoint) (mikrotik_wireguard_peer_info == 1)",
-          "legendFormat": "{{comment}} - {{interface}} - {{name}} - {{exported_endpoint}}",
+          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (router, id) group_left(comment, interface, name, endpoint) (mikrotik_wireguard_peer_info == 1)",
+          "legendFormat": "{{comment}} - {{interface}} - {{name}} - {{endpoint}}",
           "range": true,
           "refId": "A"
         }
@@ -1675,7 +1675,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "(mikrotik_wireguard_peer_latest_handshake_timestamp_seconds{router=\"$router\"} * 1000) * on (router, id) group_left(comment, interface, name, exported_endpoint) (mikrotik_wireguard_peer_info == 1)",
+          "expr": "(mikrotik_wireguard_peer_latest_handshake_timestamp_seconds{router=\"$router\"} * 1000) * on (router, id) group_left(comment, interface, name, endpoint) (mikrotik_wireguard_peer_info == 1)",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -1709,7 +1709,7 @@
               "comment": 0,
               "container": 7,
               "endpoint": 8,
-              "exported_endpoint": 4,
+              "endpoint": 4,
               "instance": 9,
               "interface": 1,
               "job": 10,
@@ -1726,7 +1726,7 @@
               "Value": "Last Handshake",
               "allowed_address": "Allowed Address",
               "comment": "Comment",
-              "exported_endpoint": "Endpoint",
+              "endpoint": "Endpoint",
               "interface": "Interface",
               "name": "Peer"
             }
@@ -1813,7 +1813,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "sum(mikrotik_connection_tracking_count{router=\"$router\"}[$__rate_interval])",
+          "expr": "sum(mikrotik_connection_tracking_count{router=\"$router\"})",
           "legendFormat": "Total Connections",
           "range": true,
           "refId": "A"
@@ -1917,7 +1917,7 @@
             "uid": "${DS_VICTORIAMETRICS}"
           },
           "editorMode": "code",
-          "expr": "sum by (protocol) (mikrotik_connection_tracking_count{router=\"$router\"}[$__rate_interval])",
+          "expr": "sum by (protocol) (mikrotik_connection_tracking_count{router=\"$router\"})",
           "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A"
@@ -2034,7 +2034,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "topk(20, sum by (src_address) (mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv4\"}[$__rate_interval]))",
+          "expr": "topk(20, sum by (src_address) (mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv4\"}))",
           "instant": true,
           "interval": "",
           "legendFormat": "{{src_address}}",
@@ -2153,7 +2153,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "topk(20, sum by (src_address) (mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv6\"}[$__rate_interval]))",
+          "expr": "topk(20, sum by (src_address) (mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv6\"}))",
           "instant": true,
           "interval": "",
           "legendFormat": "{{src_address}}",
@@ -2246,7 +2246,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "topk(20, mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv4\"}[$__rate_interval])",
+          "expr": "topk(20, mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv4\"})",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -2383,7 +2383,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "topk(20, mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv6\"}[$__rate_interval])",
+          "expr": "topk(20, mikrotik_connection_tracking_count{router=\"$router\",ip_version=\"ipv6\"})",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",

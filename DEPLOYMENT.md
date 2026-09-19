@@ -54,9 +54,10 @@ the container runtime as well as the files.
 ### Deploy the Manifests
 
 The repository provides plain manifests in `k8s/`, not a Helm chart. The Kustomize bundle includes
-a ServiceMonitor and therefore requires the Prometheus Operator CRD. Before using the full bundle,
-replace its example router credentials/configuration and pin the image in a private overlay.
-Do not commit a populated `k8s/secret.yaml`: base64 is not encryption.
+a ServiceMonitor and therefore requires the Prometheus Operator CRD. The base bundle intentionally
+does not include a Secret; create it from a private secret manager or with `kubectl create secret`.
+The image is pinned to the current release and should be overridden with an exact release or digest
+in a private overlay when required.
 
 For a deployment without the sample secret, create a private `routers.json` containing the JSON
 array documented in the README, then:
