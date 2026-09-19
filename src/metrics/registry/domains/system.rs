@@ -155,3 +155,74 @@ impl SystemDomain {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::metrics::labels::RouterLabels;
+    use crate::metrics::registry::MetricsRegistry;
+    use crate::metrics::registry::test_support::*;
+    use tokio::time::Instant;
+
+    #[tokio::test]
+    async fn test_system_info_ttl_removes_obsolete_metadata_only() {
+        let registry = MetricsRegistry::new();
+        let mut snapshot =
+            make_router_metrics("router1", Vec::new(), make_system("7.10", "board", "1d"));
+        registry.update_metrics(&snapshot);
+        let old = registry.system.prev_info.get("router1").unwrap().clone();
+        registry.system.info_last_seen.insert(
+            old.clone(),
+            Instant::now() - std::time::Duration::from_secs(100),
+        );
+        snapshot.system.version = "7.11".into();
+        registry.update_metrics(&snapshot);
+        registry.cleanup_expired_dynamic_labels(std::time::Duration::from_secs(60));
+        assert!(!registry.system.info_last_seen.contains_key(&old));
+        let encoded = registry.encode_metrics().await.unwrap();
+        assert!(!encoded.contains("version=\"7.10\""));
+        assert!(encoded.contains("version=\"7.11\""));
+        registry.cleanup_stale_routers(&std::collections::HashSet::new());
+        assert!(!registry.encode_metrics().await.unwrap().contains("router1"));
+    }
+
+    #[tokio::test]
+    async fn test_system_metrics_gauge_values() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = crate::mikrotik::SystemResource {
+            uptime: "1d2h3m4s".to_string(),
+            cpu_load: 50,
+            free_memory: 512 * 1024 * 1024,
+            total_memory: 1024 * 1024 * 1024,
+            version: "7.10".to_string(),
+            board_name: "RB750Gr3".to_string(),
+        };
+        let metrics = make_router_metrics("router1", vec![iface], system);
+        registry.update_metrics(&metrics);
+
+        let router_label = RouterLabels {
+            router: "router1".to_string(),
+        };
+
+        assert!(
+            (registry.system.cpu_load.get_or_create(&router_label).get() - 0.5).abs()
+                < f64::EPSILON
+        );
+        assert_eq!(
+            registry
+                .system
+                .free_memory
+                .get_or_create(&router_label)
+                .get(),
+            512 * 1024 * 1024
+        );
+        assert_eq!(
+            registry
+                .system
+                .total_memory
+                .get_or_create(&router_label)
+                .get(),
+            1024 * 1024 * 1024
+        );
+    }
+}
