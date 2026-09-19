@@ -164,7 +164,7 @@ jobs:
       - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
         with:
           tool: cargo-tarpaulin@0.37.2
-      - run: cargo tarpaulin --all-features --locked --out Xml --out Html --output-dir coverage
+      - run: cargo tarpaulin --all-features --locked --fail-under 80 --out Xml --out Html --output-dir coverage
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage-report
