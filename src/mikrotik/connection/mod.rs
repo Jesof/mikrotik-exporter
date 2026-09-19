@@ -355,6 +355,113 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_empty_interface_snapshot_is_a_whole_router_failure() {
+        use crate::config::RouterConfig;
+        use crate::mikrotik::client::MikroTikClient;
+        use std::sync::Arc;
+
+        // RouterOS returns zero interface rows: per the 0.5.0 contract this is
+        // treated as an anomaly, not an empty success, so the whole router
+        // collection fails with `EmptyInterfaceSnapshot`.
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let server = tokio::spawn(async move {
+            let mut peers = tokio::task::JoinSet::new();
+            for _ in 0..4 {
+                let stream = listener.accept().await.unwrap().0;
+                peers.spawn(async move {
+                    let mut peer = RouterOsConnection {
+                        stream: Box::new(stream),
+                        dirty: false,
+                    };
+                    loop {
+                        let (path, attributes) =
+                            match peer.read_sentence(&mut ResponseBudget::default()).await {
+                                Ok(sentence) => sentence,
+                                Err(AppError::Transport { source, .. })
+                                    if source.kind() == std::io::ErrorKind::UnexpectedEof =>
+                                {
+                                    break;
+                                }
+                                Err(error) => panic!("invalid production request: {error}"),
+                            };
+                        if attributes.contains_key("count-only") {
+                            send(&mut peer, &["!done", "=ret=0"]).await;
+                            continue;
+                        }
+                        match path.as_str() {
+                            "/login" => assert_eq!(attributes["name"], "test-user"),
+                            "/system/resource/print" => {
+                                assert!(attributes.contains_key(".proplist"));
+                                send(
+                                    &mut peer,
+                                    &[
+                                        "!re",
+                                        "=uptime=1d",
+                                        "=cpu-load=25",
+                                        "=free-memory=512",
+                                        "=total-memory=1024",
+                                        "=version=7.10",
+                                        "=board-name=test",
+                                    ],
+                                )
+                                .await;
+                            }
+                            // Intentionally empty: the contract treats this as
+                            // a whole-router anomaly, not an empty success.
+                            "/interface/print" => {
+                                assert!(attributes.contains_key(".proplist"));
+                            }
+                            "/certificate/print" => {
+                                assert_eq!(
+                                    attributes[".proplist"],
+                                    ".id,name,invalid-after,expiration"
+                                );
+                            }
+                            "/interface/wireguard/peers/print"
+                            | "/ip/firewall/connection/print"
+                            | "/ipv6/firewall/connection/print" => {}
+                            _ => assert!(attributes.contains_key(".proplist"), "{path}"),
+                        }
+                        send(&mut peer, &["!done"]).await;
+                    }
+                });
+            }
+            while let Some(result) = peers.join_next().await {
+                result.unwrap();
+            }
+        });
+
+        let client = MikroTikClient::with_pool(
+            RouterConfig {
+                name: "loopback".into(),
+                address,
+                username: "test-user".into(),
+                password: fixture_password().into(),
+                tls: None,
+            },
+            Arc::new(ConnectionPool::new()),
+        );
+        let result = tokio::time::timeout(Duration::from_secs(5), client.collect_metrics())
+            .await
+            .unwrap();
+        assert!(
+            matches!(
+                result,
+                Err(crate::prelude::AppError::InvalidSnapshot(
+                    crate::mikrotik::SnapshotError::EmptyInterfaceSnapshot
+                ))
+            ),
+            "empty /interface/print must fail the whole router: {result:?}"
+        );
+        drop(client);
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
     async fn test_production_collection_accepts_empty_optional_tables() {
         use crate::config::RouterConfig;
         use crate::mikrotik::client::MikroTikClient;

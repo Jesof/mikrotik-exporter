@@ -155,7 +155,7 @@ async fn test_metrics_are_retrievable_through_public_http_api() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn test_collector_shutdown_cancels_inflight_router_io() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap().to_string();
@@ -171,7 +171,10 @@ async fn test_collector_shutdown_cancels_inflight_router_io() {
     );
     let (_socket, _) = listener.accept().await.unwrap();
     tx.send_replace(true);
-    tokio::time::timeout(Duration::from_secs(1), handle)
+    // Pause + advance past the schedule geometry so shutdown and the abort
+    // drain resolve deterministically regardless of runner load.
+    tokio::time::advance(Duration::from_secs(5)).await;
+    tokio::time::timeout(Duration::from_secs(5), handle)
         .await
         .unwrap()
         .unwrap()

@@ -279,6 +279,116 @@ async fn metrics_correctly_calculates_interface_counters() {
     assert!(body.contains("mikrotik_interface_tx_errors_total{router=\"router1\",id=\"*1\"} 4"));
 }
 
+#[tokio::test]
+async fn metrics_pins_firewall_conntrack_cert_and_wireguard_wire_contracts() {
+    use mikrotik_exporter::{
+        CertificateStats, ConnectionTrackingStats, FirewallRuleStats, WireGuardPeerStats,
+    };
+
+    let state = make_state(vec![test_router("r1")]);
+
+    // 1024 + 7 entries exercise the conntrack retained-series cap.
+    let tracking = (0..(1024 + 7))
+        .map(|i| ConnectionTrackingStats {
+            src_address: format!("10.0.{}.{}", i / 256, i % 256),
+            protocol: "tcp".to_string(),
+            connection_count: 1,
+            ip_version: "ipv4".to_string(),
+        })
+        .collect();
+    let metrics = RouterMetrics {
+        router_name: "r1".to_string(),
+        collection_status: CollectionStatus::default(),
+        interfaces: vec![InterfaceStats {
+            id: "*1".to_string(),
+            name: "ether1".to_string(),
+            comment: "WAN".to_string(),
+            rx_bytes: 1000,
+            tx_bytes: 2000,
+            rx_packets: 10,
+            tx_packets: 20,
+            rx_errors: Some(1),
+            tx_errors: Some(2),
+            running: true,
+        }],
+        system: SystemResource {
+            uptime: "1d".to_string(),
+            cpu_load: 10,
+            free_memory: 512_000_000,
+            total_memory: 1_024_000_000,
+            version: "7.10".to_string(),
+            board_name: "RB750Gr3".to_string(),
+        },
+        connection_tracking: tracking,
+        wireguard_peers: vec![WireGuardPeerStats {
+            id: "*wg1".to_string(),
+            interface: "wg1".to_string(),
+            name: "peer1".to_string(),
+            comment: "office".to_string(),
+            allowed_address: "10.9.0.2/32".to_string(),
+            endpoint: Some("203.0.113.1:51820".to_string()),
+            rx_bytes: 7000,
+            tx_bytes: 8000,
+            latest_handshake: Some(1_800_000_000),
+        }],
+        certificate_stats: vec![CertificateStats {
+            id: "*c1".to_string(),
+            name: "router-cert".to_string(),
+            days_until_expiry: 30,
+        }],
+        firewall_rules: vec![FirewallRuleStats {
+            id: "*f1".to_string(),
+            comment: "drop".to_string(),
+            chain: "forward".to_string(),
+            action: "drop".to_string(),
+            bytes: 1000,
+            packets: 10,
+            ip_version: "ipv4".to_string(),
+            section: "filter".to_string(),
+        }],
+    };
+    state.metrics.update_metrics(&metrics);
+
+    let app = create_router(state);
+    let resp = app
+        .oneshot(Request::get("/metrics").body(String::new()).unwrap())
+        .await
+        .unwrap();
+
+    let body = String::from_utf8(
+        resp.into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .to_vec(),
+    )
+    .unwrap();
+
+    // Firewall: seeded cumulative totals carry the `_total` suffix.
+    assert!(body.contains(
+        "mikrotik_firewall_rule_bytes_total{router=\"r1\",id=\"*f1\",chain=\"forward\",action=\"drop\",ip_version=\"ipv4\",section=\"filter\"} 1000"
+    ));
+    assert!(body.contains(
+        "mikrotik_firewall_rule_packets_total{router=\"r1\",id=\"*f1\",chain=\"forward\",action=\"drop\",ip_version=\"ipv4\",section=\"filter\"} 10"
+    ));
+    assert!(body.contains(
+        "mikrotik_firewall_rule_info{router=\"r1\",id=\"*f1\",ip_version=\"ipv4\",section=\"filter\",comment=\"drop\"} 1"
+    ));
+    // Conntrack: dropped-series observability reports the 7 series cut by the cap.
+    assert!(body.contains("mikrotik_conntrack_dropped_series{router=\"r1\"} 7"));
+    // Certificates: days-until-expiry gauge.
+    assert!(body.contains(
+        "mikrotik_certificate_days_until_expiry{router=\"r1\",id=\"*c1\",name=\"router-cert\"} 30"
+    ));
+    // WireGuard: byte gauges and handshake timestamp.
+    assert!(body.contains("mikrotik_wireguard_peer_rx_bytes{router=\"r1\",id=\"*wg1\"} 7000"));
+    assert!(body.contains("mikrotik_wireguard_peer_tx_bytes{router=\"r1\",id=\"*wg1\"} 8000"));
+    assert!(body.contains(
+        "mikrotik_wireguard_peer_latest_handshake_timestamp_seconds{router=\"r1\",id=\"*wg1\"} 1800000000"
+    ));
+}
+
 // --- /health endpoint ---
 
 #[tokio::test]
