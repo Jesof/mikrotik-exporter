@@ -65,6 +65,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   run locally with `cargo bench` and are not part of the CI gate.
 - CI now fails the coverage job when line coverage drops below 80%, enforced via
   `cargo-tarpaulin --fail-under 80` on `main` and scheduled runs.
+- CI additionally syntax-checks non-Rust deployment/config artifacts: `k8s/` manifests via
+  `kubeconform`, Grafana dashboard JSON, helper scripts in `scripts/`, and `.github/dependabot.yml`.
+  These paths previously merged with no validation at all.
+- CodeQL Rust analysis now uses `build-mode: default` so a database is actually built instead of
+  reporting an empty result set for Rust-only changes.
+- Docker runtime packages are pinned to exact `apk` versions (including the OpenSSL CVE fix)
+  instead of an unpinned `apk upgrade`; builds are reproducible from the pinned base image.
 
 ## [0.5.0] - 2026-09-17
 
