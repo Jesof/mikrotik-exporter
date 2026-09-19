@@ -70,7 +70,8 @@ test in the same PR; a bug fix needs a regression test that fails before the fix
 For workflow/build-script changes also run `actionlint` and `shellcheck build-docker.sh`; validate
 container changes with a local build. For documentation changes run `markdownlint-cli2` and the link
 checker (`lychee`) locally if available. CI additionally runs docs linting for Markdown changes,
-coverage on `main` and schedules, and native Docker validation: a single-architecture (`amd64`)
+coverage on `main` and schedules (enforced at a minimum 80% line coverage via
+`cargo-tarpaulin --fail-under 80`), and native Docker validation: a single-architecture (`amd64`)
 build on pull requests and `amd64`/`arm64` on `main` and schedules. Report unrun checks explicitly.
 When changing `Cargo.toml`, use Cargo to update `Cargo.lock` (`cargo check`); never edit the lockfile
 by hand. Do not weaken license, advisory, or duplicate-dependency checks to make an update pass;

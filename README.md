@@ -254,6 +254,10 @@ cargo test --all-features --locked
 cargo test --doc --all-features --locked
 ```
 
+CI enforces at least 80% line coverage on `main` and schedules (see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the full gate). Run a local coverage report with
+`cargo tarpaulin --all-features --locked --out Html --output-dir coverage`.
+
 Only with explicit permission and a configured test router:
 
 ```bash
