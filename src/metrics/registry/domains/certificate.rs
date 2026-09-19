@@ -36,7 +36,12 @@ impl CertificateDomain {
         }
     }
 
-    pub(crate) fn update(&self, router_name: &str, certificate_stats: &[CertificateStats]) {
+    pub(crate) fn update(
+        &self,
+        router_name: &str,
+        certificate_stats: &[CertificateStats],
+        complete: bool,
+    ) {
         let mut current_certificates = HashSet::new();
         let now = Instant::now();
 
@@ -56,11 +61,15 @@ impl CertificateDomain {
 
         let mut prev_certs_entry = self.prev.entry(router_name.into()).or_default();
         let prev_labels = prev_certs_entry.value_mut();
-        for stale in prev_labels.difference(&current_certificates) {
-            self.days_until_expiry.remove(stale);
-            self.last_seen.remove(stale);
+        if complete {
+            for stale in prev_labels.difference(&current_certificates) {
+                self.days_until_expiry.remove(stale);
+                self.last_seen.remove(stale);
+            }
+            *prev_labels = current_certificates;
+        } else {
+            prev_labels.extend(current_certificates);
         }
-        *prev_labels = current_certificates;
     }
 
     pub(crate) fn cleanup_expired(&self, now: Instant, ttl: std::time::Duration) {
@@ -143,6 +152,46 @@ mod tests {
                 .get(),
             30,
             "Certificate metric should not be removed when certificate fetch failed"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_certificates_preserved_during_partial_snapshot() {
+        let registry = MetricsRegistry::new();
+        let iface = make_interface("*1", "ether1", "", 1000, 2000, 10, 20, 0, 0, true);
+        let system = make_system("7.10", "RB750Gr3", "1d");
+
+        let mut full = make_router_metrics("router1", vec![iface.clone()], system.clone());
+        full.certificate_stats = vec![CertificateStats {
+            id: "*cert1".to_string(),
+            name: "cert1".to_string(),
+            days_until_expiry: 30,
+        }];
+        registry.update_metrics(&full);
+
+        let mut partial = make_router_metrics("router1", vec![iface], system);
+        partial.collection_status = make_partial_status(
+            FetchState::Complete,
+            FetchState::Complete,
+            FetchState::Partial,
+            FetchState::Complete,
+        );
+        partial.certificate_stats.clear();
+        registry.update_metrics(&partial);
+
+        let cert_labels = crate::metrics::labels::CertificateLabels {
+            router: "router1".to_string(),
+            id: "*cert1".to_string(),
+            name: "cert1".to_string(),
+        };
+        assert_eq!(
+            registry
+                .certificate
+                .days_until_expiry
+                .get_or_create(&cert_labels)
+                .get(),
+            30,
+            "partial certificate snapshots must not remove previously observed certificates"
         );
     }
 }
