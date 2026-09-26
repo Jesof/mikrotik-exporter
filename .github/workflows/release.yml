@@ -71,8 +71,8 @@ jobs:
           manifest = tomllib.loads(pathlib.Path("Cargo.toml").read_text())
           toolchain = tomllib.loads(pathlib.Path("rust-toolchain.toml").read_text())
           assert manifest["package"]["version"] == sys.argv[1][1:], "Tag/Cargo version mismatch"
-          assert manifest["package"]["rust-version"] == "1.98.0", "MSRV mismatch"
-          assert toolchain["toolchain"]["channel"] == "1.98.0", "Toolchain mismatch"
+          assert manifest["package"]["rust-version"] == "1.98.1", "MSRV mismatch"
+          assert toolchain["toolchain"]["channel"] == "1.98.1", "Toolchain mismatch"
           PY
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
@@ -140,7 +140,7 @@ jobs:
           set -euo pipefail
           git fetch --no-tags --depth=1 origin "$SOURCE_SHA"
           git checkout --detach "$SOURCE_SHA"
-      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.1
         with:
           targets: ${{ matrix.target }}
       - name: Build release binary

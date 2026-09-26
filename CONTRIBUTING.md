@@ -27,7 +27,7 @@ These apply to human contributors and AI agents alike:
 1. Install the pinned toolchain (rustup will pick it up automatically):
 
    ```bash
-   rustup show          # confirms the 1.98.0 toolchain from rust-toolchain.toml
+   rustup show          # confirms the 1.98.1 toolchain from rust-toolchain.toml
    ```
 
 2. Build and test:
@@ -48,7 +48,7 @@ These apply to human contributors and AI agents alike:
 Branches are typed and lowercase — `fix/`, `feat/`, `refactor/`, `chore/`, `docs/` — and branch from
 an up-to-date `main`. `main` is protected; direct pushes are rejected.
 
-Rust 1.98.0 is both the compiler pin and MSRV (edition 2024). Keep `rust-toolchain.toml`,
+Rust 1.98.1 is both the compiler pin and MSRV (edition 2024). Keep `rust-toolchain.toml`,
 `Cargo.toml` `rust-version`, `clippy.toml`, the Docker builder, and CI's SHA-pinned toolchain
 action synchronized. The action revision selects the toolchain; it does not automatically read
 the local pin.

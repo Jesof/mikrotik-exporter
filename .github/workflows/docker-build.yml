@@ -81,8 +81,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           load: true
           tags: mikrotik-exporter:validation
-          cache-from: type=gha,scope=${{ inputs.cache_scope || 'manual-v2' }}-${{ matrix.arch }}-rust-1.98.0
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope || 'manual-v2' }}-${{ matrix.arch }}-rust-1.98.0
+          cache-from: type=gha,scope=${{ inputs.cache_scope || 'manual-v2' }}-${{ matrix.arch }}-rust-1.98.1
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope || 'manual-v2' }}-${{ matrix.arch }}-rust-1.98.1
       - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
         with:
           version: v0.74.0
@@ -109,8 +109,8 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           outputs: type=image,name=${{ needs.prepare.outputs.image }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=${{ inputs.cache_scope || 'manual-v2' }}-${{ matrix.arch }}-rust-1.98.0
-          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope || 'manual-v2' }}-${{ matrix.arch }}-rust-1.98.0
+          cache-from: type=gha,scope=${{ inputs.cache_scope || 'manual-v2' }}-${{ matrix.arch }}-rust-1.98.1
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope || 'manual-v2' }}-${{ matrix.arch }}-rust-1.98.1
           provenance: mode=max
       - name: Scan published image by digest
         if: inputs.push
