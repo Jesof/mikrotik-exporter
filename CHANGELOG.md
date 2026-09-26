@@ -91,6 +91,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   These paths previously merged with no validation at all.
 - Docker runtime packages are pinned to exact `apk` versions (including the OpenSSL CVE fix)
   instead of an unpinned `apk upgrade`; builds are reproducible from the pinned base image.
+- Rust 1.98.1 is now the MSRV and pinned compiler (was 1.98.0, edition 2024), synchronized across
+  `rust-toolchain.toml`, `Cargo.toml` `rust-version`, `clippy.toml`, the Docker builder, and the
+  SHA-pinned CI toolchain action. Update local toolchains with `rustup update`.
 
 ## [0.5.0] - 2026-09-17
 

@@ -13,7 +13,7 @@ in the [changelog](CHANGELOG.md); packages older than the current release do not
 
 ## Quick Start
 
-Build the current source with the pinned Rust **1.98.0** toolchain (also the MSRV; edition 2024):
+Build the current source with the pinned Rust **1.98.1** toolchain (also the MSRV; edition 2024):
 
 ```bash
 cargo build --release --locked
