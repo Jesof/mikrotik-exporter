@@ -6,97 +6,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [Unreleased]
+## [0.6.0] - 2026-10-13
 
 ### Added
-- Container images carry standard OCI labels (`title`, `description`, `source`, `licenses`) for
-  registry and tooling metadata.
-- Typed error variants: `ConfigError` (including `RouterError` and `TlsError`), `SnapshotError`,
-  and `ProtocolError` expose structured configuration, snapshot, and wire-protocol failures instead
-  of free-form message strings.
-- Connection tracking accepts `RouterOS` IPv6 zone-scoped source addresses (for example
-  `fe80::1%br1`), normalizing the series label to the bare address.
+- Connection tracking accepts IPv6 zone-scoped source addresses (for example `fe80::1%br1`) and
+  normalizes the exported address label by removing the local interface zone.
+- Container images include standard OCI metadata labels for registry and tooling integrations.
+
+### Fixed
+- Partial certificate snapshots preserve previously observed series; complete snapshots still remove
+  certificates that are no longer reported.
+- Conntrack series selection is family-fair under the per-router cap, and a malformed row in one IP
+  family no longer discards valid data from the other family.
+- Counter families seed cumulative values on the first usable collection of their domain, including
+  when an earlier collection of that group failed.
+- Group collection deadlines now update pool failure state and apply backoff instead of repeatedly
+  churning new connections.
+- Firewall rule series now have a 4096-series-per-router cap, with least-recently-seen series evicted
+  first.
+- Empty firewall snapshots no longer seed counter baselines, and firewall metadata eviction respects
+  the retained-series cap.
 
 ### Changed
-- Partial certificate snapshots preserve previously observed certificate series; complete snapshots
-  continue to remove certificates that are no longer reported.
-- Firewall counter baselines are not seeded by an empty first snapshot, and firewall metadata
-  eviction now respects the per-router retained-series cap.
 - Grafana conntrack panels use valid instant-vector PromQL and WireGuard panels use the exported
   `endpoint` label.
-- The Kubernetes example pins the image, excludes the example Secret from the default bundle, and
-  enables additional pod hardening defaults.
-- Conntrack retained-series selection is family-fair: with the 1024-series-per-router cap a large
-  IPv4 table no longer evicts the whole IPv6 family. Selection round-robins across families, so
-  IPv6 series survive an IPv4-saturated router while the total cap is preserved.
-- A malformed conntrack row in one family no longer discards the healthy other family's data; the
-  group reports partial (`complete` 0) instead of blanking both families.
-- Counter families seed their cumulative values on the first **usable** collection of that domain
-  instead of the first snapshot of the router: a router whose first snapshot had the firewall group
-  failed still seeds firewall counters when the group first succeeds, instead of starting from zero.
-- **Breaking (`InterfaceStats` optional counters):** when `rx_errors`/`tx_errors` transition from
-  `None` (router did not report) to `Some`, the exporter now seeds the reported lifetime count
-  instead of leaving the series at a zero baseline. The 0.5.0 behavior "a counter that appears later
-  establishes a baseline" is replaced by "the first observed value is counted"; single-label alerting
-  on `mikrotik_interface_rx_errors_total`/`tx_errors_total` should re-check expected values after
-  this transition. Interface counters in this case appear once and then accumulate deltas normally.
-- An outer group collection deadline now records a connection failure against the affected group's
-  pool state, so a router that consistently exceeds a group timeout applies pool backoff instead of
-  churning a fresh connection every cycle.
-- Firewall rule series are bounded by a 4096-series-per-router retained cap. Least-recently-seen
-  records are evicted first, so a chronically partial router whose rules rotate cannot grow the
-  `/metrics` cardinality without bound; the documented partial-snapshot TTL refresh is preserved.
-- **Rust API:** group-level "collection failed" outcomes are now `AppError::CollectionFailed` with a
-  structured `groups` payload instead of the stringly `AppError::RouterOs`. Library callers matching
-  on `RouterOs` for those messages should match `CollectionFailed` instead. Query-level semantics are
-  unchanged (`CollectionFailed` is not connection-level, so it does not trigger pool backoff).
-- **Rust API (removed):** `CollectionStatus::vpn_certs_ok` and `CollectionStatus::firewall_info_complete_ok`
-  (and the internal `firewall-info` completeness bit) were unused and are removed; use `wireguard_ok`/
-  `certificates_ok` and `firewall_complete_ok` respectively.
-- The empty `/interface/print` anomaly is now documented and pinned by an integration test: unlike
-  optional tables, an empty interfaces result fails the whole router rather than counting as a valid
-  empty success.
-- **Rust API:** `AppError::Config`, `AppError::InvalidSnapshot`, and `AppError::Protocol` now carry
-  `ConfigError`, `SnapshotError`, and `ProtocolError` payloads respectively. Library callers matching
-  on those variants should match the typed sub-error instead of inspecting a message string; the
-  `Display` output is unchanged where tests relied on message text. New public error types are
-  re-exported from the crate root.
-- Release creation authenticates with a short-lived GitHub App installation token minted from the
-  `RELEASE_APP_ID` / `RELEASE_APP_PRIVATE_KEY` secrets instead of a long-lived personal access
-  token.
-- Published image tags: `latest` now moves only on a release and always points at the newest stable
-  release, while `main` remains the rolling `main` build. The pre-1.0 major-line `:0` tag and the
-  duplicate `vX.Y.Z` tag are no longer published; release images are promoted from the verified
-  `main` digest as `X.Y.Z` and `X.Y` and are never rebuilt.
-- CI selects jobs from a single reusable `Detect Changes` workflow: documentation changes run docs
-  lint (markdownlint and link checking), workflow changes run actionlint and shellcheck, container
-  or crate changes run Docker validation, and coverage runs on `main` and schedules only. CodeQL runs
-  per language (Rust only for Rust changes, Actions only for workflow changes) with queries
-  configured in `.github/codeql/codeql-config.yml`. Main image publication runs only for
-  container-affecting changes.
-- `RouterConfig::validate` and `RouterTlsConfig::server_name_for_address` now return `AppError`
-  instead of plain `String`, so configuration errors are uniformly typed across the crate.
-- Log statements were switched to structured fields (for example `router = %name`) for uniform,
-  queryable tracing output.
-- Large `MetricsRegistry` cleanup routines were split into single-responsibility helpers.
-- `MetricsRegistry` internals were split into per-domain sub-registries (`interface`, `system`,
-  `conntrack`, `wireguard`, `certificate`, `firewall`, `scrape`, `pool`), removing a monolithic
-  structure. The public API is unchanged.
-- Added Criterion benchmarks for the hot metric paths (`encode_metrics`, `update_metrics`). They
-  run locally with `cargo bench` and are not part of the CI gate.
-- CI now fails the coverage job when line coverage drops below 80%, enforced via
-  `cargo-tarpaulin --fail-under 80` on `main` and scheduled runs.
-- CI additionally syntax-checks non-Rust deployment/config artifacts: `k8s/` manifests via
-  `kubeconform`, Grafana dashboard JSON, helper scripts in `scripts/`, and `.github/dependabot.yml`.
-  These paths previously merged with no validation at all.
-- Docker runtime packages are pinned to exact `apk` versions (including the OpenSSL CVE fix)
-  instead of an unpinned `apk upgrade`; builds are reproducible from the pinned base image.
-- Rust 1.98.1 is now the MSRV and pinned compiler (was 1.98.0, edition 2024), synchronized across
-  `rust-toolchain.toml`, `Cargo.toml` `rust-version`, `clippy.toml`, the Docker builder, and the
-  SHA-pinned CI toolchain action. Update local toolchains with `rustup update`.
-- Rust 1.99.0 is now the MSRV and pinned compiler (was 1.98.1, edition 2024), synchronized across
-  `rust-toolchain.toml`, `Cargo.toml` `rust-version`, `clippy.toml`, the Docker builder, and the
-  SHA-pinned CI toolchain action. Update local toolchains with `rustup update`.
+- The Kubernetes example uses a pinned image, excludes its example Secret from the default bundle,
+  and applies additional pod-hardening defaults. Create the Secret separately or through a secret
+  manager.
+- The Docker image pins runtime package versions, including the OpenSSL security fix.
+- Rust 1.99.0 is now the MSRV and pinned compiler (was 1.98.1).
+- Release image tags are `X.Y.Z` and `X.Y`; the old pre-1.0 `:0` and `vX.Y.Z` aliases are removed.
+  `:latest` now moves only on a release, while `:main` remains the rolling main build.
+
+### Breaking Migration
+
+- **Rust API:** `AppError::Config`, `InvalidSnapshot`, and `Protocol` now carry typed errors;
+  `RouterConfig::validate` and `RouterTlsConfig::server_name_for_address` return `AppError`;
+  collection-group failures use `AppError::CollectionFailed` instead of `RouterOs`. Match the typed
+  payloads and new variant rather than parsing error strings. `CollectionStatus::vpn_certs_ok` and
+  `firewall_info_complete_ok` were removed; use the individual group status methods.
+- **Interface error counters:** when `rx_errors` or `tx_errors` first changes from unreported (`None`)
+  to reported, the exporter now counts the current lifetime value instead of starting at zero. Review
+  alerts or recording rules for a one-time increase in `mikrotik_interface_*_errors_total`.
+- **Image tags:** replace `:0` and `:vX.Y.Z` with `:X.Y` or `:X.Y.Z`. `:latest` no longer follows
+  unreleased main builds; use `:main` for development.
+- **MSRV:** building from source now requires Rust 1.99.0.
 
 ## [0.5.0] - 2026-09-17
 
