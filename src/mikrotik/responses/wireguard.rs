@@ -108,8 +108,14 @@ mod tests {
         let mut disabled = row;
         disabled.insert("disabled".into(), "true".into());
         disabled.remove("rx");
-        assert!(parse_wireguard_peers(&[disabled]).unwrap().is_empty());
-        assert!(parse_wireguard_peers(&[]).unwrap().is_empty());
+        assert_eq!(
+            parse_wireguard_peers(&[disabled]).unwrap(),
+            Vec::<WireGuardPeerStats>::new()
+        );
+        assert_eq!(
+            parse_wireguard_peers(&[]).unwrap(),
+            Vec::<WireGuardPeerStats>::new()
+        );
     }
 
     #[test]

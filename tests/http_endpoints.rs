@@ -414,7 +414,10 @@ async fn health_returns_degraded_for_empty_config() {
 
     let health: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(health["status"], "degraded");
-    assert!(health["routers"].as_array().unwrap().is_empty());
+    assert_eq!(
+        health["routers"].as_array().unwrap(),
+        &Vec::<serde_json::Value>::new()
+    );
 }
 
 #[tokio::test]

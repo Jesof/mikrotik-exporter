@@ -78,7 +78,10 @@ async fn test_tls_trusted_dns_and_ip_startup_authenticated_success() {
             ..Config::default()
         };
         let server = tokio::spawn(serve_router(listener, acceptor));
-        assert!(config.test_router_connectivity(5).await.is_empty());
+        assert_eq!(
+            config.test_router_connectivity(5).await,
+            Vec::<String>::new()
+        );
         server.await.unwrap();
     }
 }
