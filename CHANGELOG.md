@@ -94,6 +94,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rust 1.98.1 is now the MSRV and pinned compiler (was 1.98.0, edition 2024), synchronized across
   `rust-toolchain.toml`, `Cargo.toml` `rust-version`, `clippy.toml`, the Docker builder, and the
   SHA-pinned CI toolchain action. Update local toolchains with `rustup update`.
+- Rust 1.99.0 is now the MSRV and pinned compiler (was 1.98.1, edition 2024), synchronized across
+  `rust-toolchain.toml`, `Cargo.toml` `rust-version`, `clippy.toml`, the Docker builder, and the
+  SHA-pinned CI toolchain action. Update local toolchains with `rustup update`.
 
 ## [0.5.0] - 2026-09-17
 

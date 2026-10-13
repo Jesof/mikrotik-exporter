@@ -254,6 +254,7 @@ mod tests {
     use crate::mikrotik::ProtocolError;
     use crate::mikrotik::pool::ConnectionPool;
     use crate::prelude::{AppError, Result};
+    use std::collections::HashMap;
     use std::time::Duration;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
@@ -571,7 +572,10 @@ mod tests {
         assert!(snapshot.collection_status.all_ok());
         assert_eq!(snapshot.interfaces[0].rx_bytes, 1000);
         assert!(snapshot.firewall_rules.is_empty());
-        assert!(snapshot.wireguard_peers.is_empty());
+        assert_eq!(
+            snapshot.wireguard_peers,
+            Vec::<crate::mikrotik::types::WireGuardPeerStats>::new()
+        );
         drop(client);
         tokio::time::timeout(Duration::from_secs(5), server)
             .await
@@ -994,7 +998,10 @@ mod tests {
             send(&mut peer, &["!empty"]).await;
             send(&mut peer, &["!done", "=ret=empty"]).await;
         });
-        assert!(client.command("/empty", &[]).await.unwrap().is_empty());
+        assert_eq!(
+            client.command("/empty", &[]).await.unwrap(),
+            Vec::<HashMap<String, String>>::new()
+        );
         assert!(client.is_reusable());
         server.await.unwrap();
     }
@@ -1178,7 +1185,10 @@ mod tests {
             send(&mut peer, &["!done"]).await;
         });
         client.login("admin", &fixture_password()).await.unwrap();
-        assert!(client.command("/next", &[]).await.unwrap().is_empty());
+        assert_eq!(
+            client.command("/next", &[]).await.unwrap(),
+            Vec::<HashMap<String, String>>::new()
+        );
         server.await.unwrap();
     }
 
@@ -1366,13 +1376,9 @@ mod tests {
             .get_connection(&address, "admin", &fixture_password(), None, None)
             .await
             .unwrap();
-        assert!(
-            guard
-                .get_mut()
-                .command("/reused", &[])
-                .await
-                .unwrap()
-                .is_empty()
+        assert_eq!(
+            guard.get_mut().command("/reused", &[]).await.unwrap(),
+            Vec::<HashMap<String, String>>::new()
         );
         drop(guard);
         assert_eq!(pool.get_pool_stats().await, (1, 0));
