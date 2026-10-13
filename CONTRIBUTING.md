@@ -202,15 +202,23 @@ Choose the project version from user-visible impact and compatibility. Adding me
 changing units/types is breaking. `1.0.0` requires explicit maintainer approval. Release only when
 `[Unreleased]` contains meaningful user-facing changes; avoid empty/docs-only releases.
 
-Releases are tag-driven and automated: a release PR (`release/vX.Y.Z`) updates `Cargo.toml`,
-`Cargo.lock`, and `CHANGELOG.md` as `chore: release vX.Y.Z`; after it squash-merges, a signed
-`vX.Y.Z` tag is pushed on the merge commit, which builds cross-platform binaries, GitHub Release
-assets, and multi-arch GHCR images. The release commit touches only those three files; run Cargo
-to synchronize the lockfile and complete the local gate before the release PR.
+Releases are tag-driven and automated. Before opening the release PR, merge any release-associated
+consumer documentation, examples, dashboards, deployment manifests, or image-pin changes to `main`.
+Then branch `release/vX.Y.Z` from that updated `main` and update only `Cargo.toml`, `Cargo.lock`, and
+`CHANGELOG.md` as `chore: release vX.Y.Z`. This keeps the release commit focused while ensuring the
+tagged source contains the documentation for that release. Run Cargo to synchronize the lockfile
+and complete the local gate before opening the release PR.
+
+After the release PR squash-merges, push the signed `vX.Y.Z` tag on that exact merge commit. The
+tagged SHA must contain all release-associated documentation and must have the successful main CI
+run and published immutable image digest required by the release workflow. The tag builds
+cross-platform binaries, GitHub Release assets, and promotes the multi-arch GHCR image.
 
 Before tagging, require green checks on the exact squash-merge commit on `main`, then obtain
-explicit approval to create and push the signed tag. Never tag the branch head or delete/move an
-already-published tag. A bad release is corrected by a new version.
+explicit approval to create and push the signed tag. Do not defer release-associated documentation
+or image-pin PRs until after tagging: a follow-up can update `main`, but cannot change the immutable
+source tree for the release. Never tag the branch head or delete/move an already-published tag. A bad
+release is corrected by a new version.
 
 The workflow resolves an existing exact annotated, signed `vX.Y.Z` tag, checks Cargo version and
 `main` ancestry, requires a successful main push CI run and the required check names on that SHA.
