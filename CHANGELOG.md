@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+
+### Added
+- Grafana exporter internals panels for collection-group success, collection-cycle duration, and
+  conntrack retained-series and update-duration metrics.
+
+### Fixed
+- Grafana dashboard derives WireGuard throughput from exported gauge totals, applies interface
+  selection consistently, and joins current interface/firewall metadata using exporter labels.
+- Grafana memory history queries use instant vectors rather than range vectors.
+- Grafana dashboard import now requests a generic Prometheus datasource instead of a
+  VictoriaMetrics-specific input name.
+- Grafana charts use metric-appropriate units; connection-pool
+  panels explain that their gauges are exporter-wide and sampled at router collection boundaries.
+- The WireGuard Last Handshake table displays its configured Endpoint column.
+
 ## [0.6.0] - 2026-10-13
 
 ### Added

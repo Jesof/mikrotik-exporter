@@ -1,8 +1,8 @@
 {
   "__inputs": [
     {
-      "name": "DS_VICTORIAMETRICS",
-      "label": "VictoriaMetrics",
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
       "description": "",
       "type": "datasource",
       "pluginId": "prometheus",
@@ -91,7 +91,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Системная информация о роутере",
       "fieldConfig": {
@@ -141,7 +141,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_system_info{router=\"$router\"}",
@@ -156,7 +156,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Загрузка CPU роутера в процентах",
       "fieldConfig": {
@@ -215,7 +215,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "100 * mikrotik_system_cpu_load_ratio{router=\"$router\"}",
@@ -230,7 +230,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Использование памяти роутера",
       "fieldConfig": {
@@ -289,7 +289,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "(1 - (mikrotik_system_free_memory_bytes{router=\"$router\"} / mikrotik_system_total_memory_bytes{router=\"$router\"})) * 100",
@@ -304,7 +304,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Время работы роутера",
       "fieldConfig": {
@@ -355,7 +355,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_system_uptime_seconds{router=\"$router\"}",
@@ -370,7 +370,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Текущий статус сбора метрик (на основе последовательных ошибок подключения)",
       "fieldConfig": {
@@ -449,7 +449,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_connection_consecutive_errors{router=\"$router\"}",
@@ -464,7 +464,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "История загрузки CPU",
       "fieldConfig": {
@@ -478,6 +478,8 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "axisSoftMax": 100,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -493,8 +495,7 @@
             "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": {
-              "log": 2,
-              "type": "symlog"
+              "type": "linear"
             },
             "showPoints": "never",
             "showValues": false,
@@ -557,7 +558,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "100 * mikrotik_system_cpu_load_ratio{router=\"$router\"}",
@@ -572,7 +573,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "История использования памяти",
       "fieldConfig": {
@@ -586,6 +587,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -693,10 +695,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_system_free_memory_bytes{router=\"$router\"}[$__rate_interval]",
+          "expr": "mikrotik_system_free_memory_bytes{router=\"$router\"}",
           "legendFormat": "Free",
           "range": true,
           "refId": "A"
@@ -704,10 +706,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "mikrotik_system_total_memory_bytes{router=\"$router\"}[$__rate_interval] - mikrotik_system_free_memory_bytes{router=\"$router\"}[$__rate_interval]",
+          "expr": "mikrotik_system_total_memory_bytes{router=\"$router\"} - mikrotik_system_free_memory_bytes{router=\"$router\"}",
           "legendFormat": "Used",
           "range": true,
           "refId": "B"
@@ -732,7 +734,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Статус интерфейсов (1 = работает, 0 = не работает)",
       "fieldConfig": {
@@ -801,11 +803,11 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "mikrotik_interface_running{router=\"$router\"} * on(router, id) group_left(name, comment) mikrotik_interface_info{router=\"$router\", name=~\"$interface\"}",
+          "expr": "mikrotik_interface_running{router=\"$router\"} * on(router, id) group_left(name, comment) (mikrotik_interface_info{router=\"$router\", name=~\"$interface\"} == 1)",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -850,7 +852,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Трафик по всем интерфейсам (получено)",
       "fieldConfig": {
@@ -864,6 +866,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -937,10 +940,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_bytes_total{router=\"$router\"}[$__rate_interval]) * 8 * on(router, id) group_left(name, comment) (mikrotik_interface_info == 1)",
+          "expr": "rate(mikrotik_interface_rx_bytes_total{router=\"$router\"}[$__rate_interval]) * 8 * on(router, id) group_left(name, comment) (mikrotik_interface_info{router=\"$router\",name=~\"$interface\"} == 1)",
           "legendFormat": "{{name}} RX",
           "range": true,
           "refId": "A"
@@ -952,7 +955,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Трафик по всем интерфейсам (отправлено)",
       "fieldConfig": {
@@ -966,6 +969,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -1039,10 +1043,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_bytes_total{router=\"$router\"}[$__rate_interval]) * 8 * on(router, id) group_left(name, comment) (mikrotik_interface_info == 1)",
+          "expr": "rate(mikrotik_interface_tx_bytes_total{router=\"$router\"}[$__rate_interval]) * 8 * on(router, id) group_left(name, comment) (mikrotik_interface_info{router=\"$router\",name=~\"$interface\"} == 1)",
           "legendFormat": "{{name}} TX",
           "range": true,
           "refId": "A"
@@ -1054,7 +1058,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Пакеты полученные по интерфейсам",
       "fieldConfig": {
@@ -1068,6 +1072,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -1106,7 +1111,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "pps"
         },
         "overrides": []
       },
@@ -1141,10 +1146,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_packets_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) (mikrotik_interface_info == 1)",
+          "expr": "rate(mikrotik_interface_rx_packets_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) (mikrotik_interface_info{router=\"$router\",name=~\"$interface\"} == 1)",
           "legendFormat": "{{name}} RX",
           "range": true,
           "refId": "A"
@@ -1156,7 +1161,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Пакеты отправленные по интерфейсам",
       "fieldConfig": {
@@ -1170,6 +1175,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -1208,7 +1214,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "pps"
         },
         "overrides": []
       },
@@ -1243,10 +1249,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_packets_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) (mikrotik_interface_info == 1)",
+          "expr": "rate(mikrotik_interface_tx_packets_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) (mikrotik_interface_info{router=\"$router\",name=~\"$interface\"} == 1)",
           "legendFormat": "{{name}} TX",
           "range": true,
           "refId": "A"
@@ -1258,7 +1264,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Ошибки на интерфейсах",
       "fieldConfig": {
@@ -1272,6 +1278,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -1314,7 +1321,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -1347,10 +1354,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_rx_errors_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) (mikrotik_interface_info == 1)",
+          "expr": "rate(mikrotik_interface_rx_errors_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) (mikrotik_interface_info{router=\"$router\",name=~\"$interface\"} == 1)",
           "legendFormat": "{{name}} RX Errors",
           "range": true,
           "refId": "A"
@@ -1358,10 +1365,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_interface_tx_errors_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) (mikrotik_interface_info == 1)",
+          "expr": "rate(mikrotik_interface_tx_errors_total{router=\"$router\"}[$__rate_interval]) * on(router, id) group_left(name, comment) (mikrotik_interface_info{router=\"$router\",name=~\"$interface\"} == 1)",
           "legendFormat": "{{name}} TX Errors",
           "range": true,
           "refId": "B"
@@ -1386,7 +1393,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Трафик WireGuard пиров (получено)",
       "fieldConfig": {
@@ -1400,6 +1407,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -1473,10 +1481,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (router, id) group_left(comment, interface, name, endpoint) (mikrotik_wireguard_peer_info == 1)",
+          "expr": "clamp_min(deriv(mikrotik_wireguard_peer_rx_bytes{router=\"$router\"}[$__rate_interval]), 0) * 8 * on (router, id) group_left(comment, interface, name, endpoint) (mikrotik_wireguard_peer_info == 1)",
           "legendFormat": "{{comment}} - {{interface}} - {{name}} - {{endpoint}}",
           "range": true,
           "refId": "A"
@@ -1488,7 +1496,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Трафик WireGuard пиров (отправлено)",
       "fieldConfig": {
@@ -1502,6 +1510,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -1575,10 +1584,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]) * 8 * on (router, id) group_left(comment, interface, name, endpoint) (mikrotik_wireguard_peer_info == 1)",
+          "expr": "clamp_min(deriv(mikrotik_wireguard_peer_tx_bytes{router=\"$router\"}[$__rate_interval]), 0) * 8 * on (router, id) group_left(comment, interface, name, endpoint) (mikrotik_wireguard_peer_info == 1)",
           "legendFormat": "{{comment}} - {{interface}} - {{name}} - {{endpoint}}",
           "range": true,
           "refId": "A"
@@ -1590,7 +1599,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Время последнего WireGuard handshake для каждого пира (значение показывает, как давно был последний handshake)",
       "fieldConfig": {
@@ -1671,7 +1680,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1691,7 +1700,6 @@
             "excludeByName": {
               "Time": true,
               "container": true,
-              "endpoint": true,
               "id": true,
               "instance": true,
               "job": true,
@@ -1708,7 +1716,6 @@
               "allowed_address": 3,
               "comment": 0,
               "container": 7,
-              "endpoint": 8,
               "endpoint": 4,
               "instance": 9,
               "interface": 1,
@@ -1751,7 +1758,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Общее количество отслеживаемых соединений",
       "fieldConfig": {
@@ -1810,7 +1817,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "sum(mikrotik_connection_tracking_count{router=\"$router\"})",
@@ -1825,7 +1832,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Распределение соединений по протоколам",
       "fieldConfig": {
@@ -1839,6 +1846,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -1914,7 +1922,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "sum by (protocol) (mikrotik_connection_tracking_count{router=\"$router\"})",
@@ -1929,7 +1937,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Current open IPv4 connections by source",
       "fieldConfig": {
@@ -1943,6 +1951,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "fillOpacity": 80,
             "gradientMode": "none",
             "hideFrom": {
@@ -1985,7 +1994,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -2030,7 +2039,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -2048,7 +2057,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Current open IPv6 connections by source",
       "fieldConfig": {
@@ -2062,6 +2071,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "fillOpacity": 80,
             "gradientMode": "none",
             "hideFrom": {
@@ -2104,7 +2114,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -2149,7 +2159,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -2167,7 +2177,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Количество соединений по протоколам и IP-адресам источников",
       "fieldConfig": {
@@ -2242,7 +2252,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -2304,7 +2314,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Количество соединений по протоколам и IP-адресам источников (IPv6)",
       "fieldConfig": {
@@ -2379,7 +2389,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -2454,7 +2464,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Накопленный трафик по правилам фаервола (байты)",
       "fieldConfig": {
@@ -2468,6 +2478,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -2506,7 +2517,7 @@
               }
             ]
           },
-          "unit": "sishort"
+          "unit": "decbytes"
         },
         "overrides": []
       },
@@ -2541,7 +2552,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_firewall_rule_bytes_total{router=\"$router\",section=~\"$section\"} * on (router, id, ip_version, section) group_left(comment) (mikrotik_firewall_rule_info == 1)",
@@ -2556,7 +2567,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Накопленное количество пакетов по правилам фаервола",
       "fieldConfig": {
@@ -2570,6 +2581,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -2608,7 +2620,7 @@
               }
             ]
           },
-          "unit": "sishort"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -2643,7 +2655,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_firewall_rule_packets_total{router=\"$router\",section=~\"$section\"} * on (router, id, ip_version, section) group_left(comment) (mikrotik_firewall_rule_info == 1)",
@@ -2658,7 +2670,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Скорость обработки трафика правилами фаервола (байты/сек)",
       "fieldConfig": {
@@ -2672,6 +2684,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -2746,7 +2759,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "rate(mikrotik_firewall_rule_bytes_total{router=\"$router\",section=~\"$section\"}[$__rate_interval]) * 8 * on (router, id, ip_version, section) group_left(comment) (mikrotik_firewall_rule_info == 1)",
@@ -2761,7 +2774,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Скорость обработки пакетов правилами фаервола (пакеты/сек)",
       "fieldConfig": {
@@ -2775,6 +2788,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -2849,7 +2863,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "rate(mikrotik_firewall_rule_packets_total{router=\"$router\",section=~\"$section\"}[$__rate_interval]) * on (router, id, ip_version, section) group_left(comment) (mikrotik_firewall_rule_info == 1)",
@@ -2864,7 +2878,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Детальная информация по правилам фаервола",
       "fieldConfig": {
@@ -2955,7 +2969,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -2969,11 +2983,11 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "mikrotik_firewall_rule_packets_total{router=\"$router\",section=~\"$section\"}",
+          "expr": "mikrotik_firewall_rule_packets_total{router=\"$router\",section=~\"$section\"} * on (router, id, ip_version, section) group_left(comment) (mikrotik_firewall_rule_info == 1)",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -3083,7 +3097,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Подробная информация о сертификатах",
       "fieldConfig": {
@@ -3105,6 +3119,7 @@
             "wrapText": false
           },
           "mappings": [],
+          "unit": "d",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -3179,7 +3194,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_certificate_days_until_expiry{router=\"$router\"}",
@@ -3236,7 +3251,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Длительность сбора метрик в миллисекундах",
       "fieldConfig": {
@@ -3250,6 +3265,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -3330,7 +3346,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "1000 * mikrotik_scrape_duration_seconds{router=\"$router\"}",
@@ -3345,7 +3361,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Процент успешных сборов метрик за последние 5 минут",
       "fieldConfig": {
@@ -3408,7 +3424,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "100 * increase(mikrotik_scrape_success_total{router=\"$router\"}[$__rate_interval]) / clamp_min(increase(mikrotik_scrape_success_total{router=\"$router\"}[$__rate_interval]) + increase(mikrotik_scrape_errors_total{router=\"$router\"}[$__rate_interval]), 1)",
@@ -3423,9 +3439,9 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Статистика использования пула соединений",
+      "description": "Exporter-wide pool metrics; these are not filtered by the selected router. Pool size counts idle reusable connections. In-use connections are sampled when any router collection finishes, so zero is expected with one router and the gauge is not a peak measurement.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3437,6 +3453,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -3475,7 +3492,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -3508,33 +3525,33 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_connection_pool_size",
-          "legendFormat": "Total connections",
+          "legendFormat": "Idle pooled connections",
           "range": true,
           "refId": "A"
         },
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_connection_pool_active",
-          "legendFormat": "Active connections",
+          "legendFormat": "In-use connections (sampled)",
           "range": true,
           "refId": "B"
         }
       ],
-      "title": "Connection Pool Statistics",
+      "title": "Connection Pool (all routers)",
       "type": "timeseries"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Время последнего успешного сбора метрик",
       "fieldConfig": {
@@ -3593,7 +3610,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_scrape_last_success_timestamp_seconds{router=\"$router\"} * 1000",
@@ -3608,7 +3625,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_VICTORIAMETRICS}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "Количество последовательных ошибок подключения",
       "fieldConfig": {
@@ -3671,7 +3688,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_VICTORIAMETRICS}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "expr": "mikrotik_connection_consecutive_errors{router=\"$router\"}",
@@ -3688,9 +3705,9 @@
       "title": "Collection Group Completeness",
       "description": "1 means the latest group snapshot is complete; 0 means failed or partial.",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 156 },
-      "fieldConfig": { "defaults": { "min": 0, "max": 1, "unit": "none" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "min": 0, "max": 1, "unit": "none", "custom": { "axisSoftMin": 0, "axisSoftMax": 1 } }, "overrides": [] },
       "targets": [{ "expr": "mikrotik_group_collection_complete{router=\"$router\"}", "legendFormat": "{{group}}", "refId": "A", "range": true }]
     },
     {
@@ -3698,9 +3715,9 @@
       "title": "Collection Group Data Age",
       "description": "Age since the last complete group snapshot. Groups without a successful snapshot are absent.",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 156 },
-      "fieldConfig": { "defaults": { "min": 0, "unit": "s" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "min": 0, "unit": "s", "custom": { "axisSoftMin": 0 } }, "overrides": [] },
       "targets": [{ "expr": "time() - (mikrotik_group_last_success_timestamp_seconds{router=\"$router\"} > 0)", "legendFormat": "{{group}}", "refId": "A", "range": true }]
     },
     {
@@ -3708,10 +3725,50 @@
       "title": "Conntrack Omitted Series",
       "description": "At most 1024 conntrack series are retained per router, ordered lexicographically by IP version, source address, and protocol. Omitted series are not included in connection totals.",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 164 },
-      "fieldConfig": { "defaults": { "min": 0, "unit": "short" }, "overrides": [] },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 164 },
+      "fieldConfig": { "defaults": { "min": 0, "unit": "short", "custom": { "axisSoftMin": 0 } }, "overrides": [] },
       "targets": [{ "expr": "mikrotik_conntrack_dropped_series{router=\"$router\"}", "legendFormat": "{{router}}", "refId": "A", "range": true }]
+    },
+    {
+      "id": 162,
+      "title": "Conntrack Active Series",
+      "description": "Number of conntrack label series currently retained for the selected router.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 172 },
+      "fieldConfig": { "defaults": { "min": 0, "unit": "short", "custom": { "axisSoftMin": 0 } }, "overrides": [] },
+      "targets": [{ "expr": "mikrotik_conntrack_active_series{router=\"$router\"}", "legendFormat": "{{router}}", "refId": "A", "range": true }]
+    },
+    {
+      "id": 163,
+      "title": "Conntrack Update Duration",
+      "description": "Time spent applying the latest conntrack snapshot to the metrics registry.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 172 },
+      "fieldConfig": { "defaults": { "min": 0, "unit": "s", "custom": { "axisSoftMin": 0 } }, "overrides": [] },
+      "targets": [{ "expr": "mikrotik_conntrack_update_duration_seconds{router=\"$router\"}", "legendFormat": "{{router}}", "refId": "A", "range": true }]
+    },
+    {
+      "id": 164,
+      "title": "Collection Cycle Duration",
+      "description": "Time for every configured router to finish at least one collection since the previous aggregate cycle.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 180 },
+      "fieldConfig": { "defaults": { "min": 0, "unit": "s", "custom": { "axisSoftMin": 0 } }, "overrides": [] },
+      "targets": [{ "expr": "mikrotik_collection_cycle_duration_seconds", "legendFormat": "Collection cycle", "refId": "A", "range": true }]
+    },
+    {
+      "id": 165,
+      "title": "Collection Group Success",
+      "description": "1 means the latest group fetch returned usable data; 0 means it did not.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 164 },
+      "fieldConfig": { "defaults": { "min": 0, "max": 1, "unit": "none", "custom": { "axisSoftMin": 0, "axisSoftMax": 1 } }, "overrides": [] },
+      "targets": [{ "expr": "mikrotik_group_collection_success{router=\"$router\"}", "legendFormat": "{{group}}", "refId": "A", "range": true }]
     }
   ],
   "preload": true,
@@ -3726,20 +3783,9 @@
     "list": [
       {
         "current": {},
-        "includeAll": false,
-        "label": "Datasource",
-        "name": "DS_PROMETHEUS",
-        "options": [],
-        "query": "prometheus",
-        "refresh": 1,
-        "regex": "",
-        "type": "datasource"
-      },
-      {
-        "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_VICTORIAMETRICS}"
+          "uid": "${DS_PROMETHEUS}"
         },
         "definition": "label_values(mikrotik_system_info, router)",
         "includeAll": false,
@@ -3760,7 +3806,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_VICTORIAMETRICS}"
+          "uid": "${DS_PROMETHEUS}"
         },
         "definition": "label_values(mikrotik_interface_info{router=\"$router\"}, name)",
         "includeAll": true,
@@ -3782,7 +3828,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_VICTORIAMETRICS}"
+          "uid": "${DS_PROMETHEUS}"
         },
         "definition": "label_values(mikrotik_firewall_rule_bytes_total, section)",
         "includeAll": true,
