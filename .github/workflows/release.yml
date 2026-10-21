@@ -205,7 +205,9 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
+          # `client-id` replaced the deprecated `app-id` input; the action forwards
+          # either value to the same JWT issuer slot, so the App ID secret is unchanged.
+          client-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
       - name: Create release for the verified existing tag
         shell: bash
