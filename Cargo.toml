@@ -35,7 +35,7 @@ panic = "abort"
 [dependencies]
 # HTTP server
 axum = "0.8.9"
-tokio = { version = "1.53.1", features = [
+tokio = { version = "1.54.0", features = [
     "macros",
     "rt-multi-thread",
     "net",
@@ -59,7 +59,7 @@ tracing-subscriber = { version = "0.3.23", features = [
 ] }
 
 # Error handling
-thiserror = "2.0.20"
+thiserror = "2.0.21"
 
 # Environment variables
 dotenvy = "0.15.7"
@@ -67,7 +67,7 @@ dotenvy = "0.15.7"
 # Cryptography for RouterOS API
 md5 = "0.8.1"
 hex = "0.4"
-tokio-rustls = { version = "0.26.5", default-features = false, features = ["ring", "tls12"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
 rustls-native-certs = "0.8.5"
 
 # Prometheus metrics
@@ -83,9 +83,9 @@ chrono = { version = "0.4.45", features = ["serde"] }
 dashmap = "6.2.1"
 
 [dev-dependencies]
-tokio = { version = "1.53.1", features = ["test-util"] }
+tokio = { version = "1.54.0", features = ["test-util"] }
 rcgen = { version = "0.14.10", default-features = false, features = ["ring", "pem"] }
-tempfile = "3.23.0"
+tempfile = "3.27.0"
 tower = { version = "0.5.3", features = ["util"] }
 http-body-util = "0.1.5"
 proptest = "1.12.0"
