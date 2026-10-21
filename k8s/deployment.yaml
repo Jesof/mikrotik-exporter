@@ -28,7 +28,7 @@ spec:
       automountServiceAccountToken: false
       containers:
       - name: mikrotik-exporter
-        image: ghcr.io/jesof/mikrotik-exporter:0.6.0
+        image: ghcr.io/jesof/mikrotik-exporter:0.6.1
         imagePullPolicy: IfNotPresent
         ports:
         - name: metrics

@@ -24,7 +24,7 @@ version: "3.8"
 
 services:
   mikrotik-exporter:
-    image: ghcr.io/jesof/mikrotik-exporter:0.6.0
+    image: ghcr.io/jesof/mikrotik-exporter:0.6.1
     container_name: mikrotik-exporter
     restart: unless-stopped
     ports:

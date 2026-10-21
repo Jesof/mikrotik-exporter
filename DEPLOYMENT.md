@@ -20,14 +20,14 @@ Published GHCR tags have different stability guarantees:
 
 | Tag | Meaning | Recommended use |
 | --- | --- | --- |
-| `:0.6.0` | Exact release | Reproducible deployments without a digest |
+| `:0.6.1` | Exact release | Reproducible deployments without a digest |
 | `:0.6` | Newest patch in the 0.6 line | Recommended default for routine updates |
 | `:latest` | Newest stable release (moved only by a release) | Local evaluation, not production |
 | `@sha256:...` | Exact published image manifest | Highest reproducibility and rollback safety |
 | `sha-<full-sha>` | Immutable validated `main` commit image | Pinning a specific verified build |
 | `:main` | Current checked `main` build | Development only |
 
-Release tags (`:0.6.0`, `:0.6`) and `:latest` are promoted from the verified `main` image; they are
+Release tags (`:0.6.1`, `:0.6`) and `:latest` are promoted from the verified `main` image; they are
 never rebuilt during a release. `:latest` is re-pointed only when a stable release is published, so
 it never tracks an unreleased `main` commit.
 

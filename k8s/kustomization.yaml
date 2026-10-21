@@ -20,4 +20,4 @@ commonLabels:
 # Настройка образа (можно переопределить)
 images:
   - name: ghcr.io/jesof/mikrotik-exporter
-    newTag: 0.6.0
+    newTag: 0.6.1
