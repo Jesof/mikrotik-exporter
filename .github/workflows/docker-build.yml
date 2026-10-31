@@ -95,7 +95,7 @@ jobs:
         run: |
           test "$(docker inspect --format '{{.Config.User}}' mikrotik-exporter:validation)" = '1000:1000'
           docker run --rm --entrypoint /bin/sh mikrotik-exporter:validation -c 'test -x /app/mikrotik-exporter'
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
         if: inputs.push
         with:
           registry: ghcr.io
@@ -169,7 +169,7 @@ jobs:
           pattern: docker-digest-*
           path: ${{ runner.temp }}/digests
           merge-multiple: true
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
