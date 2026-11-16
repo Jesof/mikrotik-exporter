@@ -161,7 +161,7 @@ jobs:
         with:
           key: coverage-1.99.0-tarpaulin-0.37.2
           save-if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
-      - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
         with:
           tool: cargo-tarpaulin@0.37.2
       - run: cargo tarpaulin --all-features --locked --fail-under 80 --out Xml --out Html --output-dir coverage
@@ -185,7 +185,7 @@ jobs:
       - if: needs.changes.outputs.rust == 'true'
         uses: dtolnay/rust-toolchain@fb523f40495206854c36b250850817ae0f83e3d1 # 1.99.0
       - if: needs.changes.outputs.rust == 'true'
-        uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
         with:
           tool: cargo-deny@0.20.2
       - if: needs.changes.outputs.rust == 'true'
@@ -204,7 +204,7 @@ jobs:
         with:
           persist-credentials: false
       - if: needs.changes.outputs.rust == 'true'
-        uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
         with:
           tool: cargo-audit@0.22.2
       - if: needs.changes.outputs.rust == 'true'
