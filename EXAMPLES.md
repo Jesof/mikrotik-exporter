@@ -44,6 +44,8 @@ services:
         [
           "CMD",
           "wget",
+          "-Y",
+          "off",
           "--quiet",
           "--tries=1",
           "--spider",
@@ -357,7 +359,7 @@ docker run -d \
   --restart=unless-stopped \
   -p 9090:9090 \
   -e ROUTERS_CONFIG='[{"name":"router1","address":"192.168.88.1:8728","username":"admin","password":"pass"}]' \
-  --health-cmd='wget --quiet --tries=1 --spider http://localhost:9090/live || exit 1' \
+  --health-cmd='wget -Y off --quiet --tries=1 --spider http://localhost:9090/live || exit 1' \
   --health-interval=30s \
   --health-timeout=10s \
   --health-retries=3 \
@@ -613,7 +615,7 @@ docker stats mikrotik-exporter
 docker exec -it mikrotik-exporter sh
 
 # Inspect cached router diagnostics (not a process probe)
-docker exec mikrotik-exporter wget -qO- http://localhost:9090/health
+docker exec mikrotik-exporter wget -Y off -qO- http://localhost:9090/health
 
 # Restart
 docker restart mikrotik-exporter
@@ -627,7 +629,7 @@ kubectl logs -n monitoring -l app=mikrotik-exporter -f
 
 # Check metrics from pod
 kubectl exec -n monitoring deployment/mikrotik-exporter -- \
-  wget -qO- http://localhost:9090/metrics | grep mikrotik_system_info
+  wget -Y off -qO- http://localhost:9090/metrics | grep mikrotik_system_info
 
 # Port-forward for local access
 kubectl port-forward -n monitoring svc/mikrotik-exporter 9090:9090
