@@ -5,8 +5,10 @@ use super::common::required_field;
 use crate::mikrotik::SnapshotError;
 use crate::mikrotik::types::CertificateStats;
 use crate::prelude::{AppError, Result};
-use chrono::{NaiveDate, Utc};
 use std::collections::HashMap;
+use time::format_description::BorrowedFormatItem;
+use time::macros::format_description;
+use time::{Date, OffsetDateTime};
 
 pub(crate) fn parse_certificates(
     sentences: &[HashMap<String, String>],
@@ -28,18 +30,21 @@ pub(crate) fn parse_certificates(
         certificates.push(CertificateStats {
             id: id.into(),
             name: name.into(),
-            days_until_expiry: date
-                .signed_duration_since(Utc::now().date_naive())
-                .num_days(),
+            days_until_expiry: (date - OffsetDateTime::now_utc().date()).whole_days(),
         });
     }
     Ok(certificates)
 }
 
-fn parse_expiry_date(value: &str) -> Option<NaiveDate> {
+fn parse_expiry_date(value: &str) -> Option<Date> {
+    // RouterOS reports either ISO `2030-01-01` or `jan/01/2030`; both are followed
+    // by an optional time component that is irrelevant to day-level expiry math.
+    const ISO_DATE: &[BorrowedFormatItem<'_>] = format_description!("[year]-[month]-[day]");
+    const ROUTEROS_DATE: &[BorrowedFormatItem<'_>] =
+        format_description!("[month repr:short case_sensitive:false]/[day]/[year]");
     let date = value.split_whitespace().next()?;
-    NaiveDate::parse_from_str(date, "%Y-%m-%d")
-        .or_else(|_| NaiveDate::parse_from_str(date, "%b/%d/%Y"))
+    Date::parse(date, ISO_DATE)
+        .or_else(|_| Date::parse(date, ROUTEROS_DATE))
         .ok()
 }
 
@@ -62,7 +67,10 @@ mod tests {
         .map(|(k, v)| (k.into(), v.into()))
         .collect();
         assert!(parse_certificates(std::slice::from_ref(&row)).unwrap()[0].days_until_expiry < 0);
-        row.insert("invalid-after".into(), Utc::now().date_naive().to_string());
+        row.insert(
+            "invalid-after".into(),
+            OffsetDateTime::now_utc().date().to_string(),
+        );
         assert_eq!(
             parse_certificates(std::slice::from_ref(&row)).unwrap()[0].days_until_expiry,
             0

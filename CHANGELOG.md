@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Replace the unmaintained `chrono` crate with `time` for certificate expiry parsing, resolving
+  RUSTSEC-2026-0543.
+
 ### Changed
 - Rust 1.100.0 is now the MSRV and pinned compiler (was 1.99.0).
 
