@@ -37,10 +37,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@fb523f40495206854c36b250850817ae0f83e3d1 # 1.99.0
+      - uses: dtolnay/rust-toolchain@d5e4d57b030548f435d0befec15ff413a2c60eff # 1.100.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          key: check-1.99.0
+          key: check-1.100.0
           save-if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
       - run: cargo check --all-targets --all-features --locked
 
@@ -67,7 +67,7 @@ jobs:
           def load(path):
               return tomllib.loads(pathlib.Path(path).read_text())
           version = load("rust-toolchain.toml")["toolchain"]["channel"]
-          assert version == "1.99.0", "Update the CI action pins with the toolchain"
+          assert version == "1.100.0", "Update the CI action pins with the toolchain"
           assert load("Cargo.toml")["package"]["rust-version"] == version
           assert load("clippy.toml")["msrv"] == version
           builder = re.search(r"^FROM rust:([0-9.]+)-", pathlib.Path("Dockerfile").read_text(), re.M)
@@ -88,11 +88,11 @@ jobs:
         with:
           persist-credentials: false
       - if: needs.changes.outputs.rust == 'true'
-        uses: dtolnay/rust-toolchain@fb523f40495206854c36b250850817ae0f83e3d1 # 1.99.0
+        uses: dtolnay/rust-toolchain@d5e4d57b030548f435d0befec15ff413a2c60eff # 1.100.0
       - if: needs.changes.outputs.rust == 'true'
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          key: test-1.99.0
+          key: test-1.100.0
           save-if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
       - if: needs.changes.outputs.rust == 'true'
         run: cargo test --all-features --locked
@@ -110,7 +110,7 @@ jobs:
         with:
           persist-credentials: false
       - if: needs.changes.outputs.rust == 'true'
-        uses: dtolnay/rust-toolchain@fb523f40495206854c36b250850817ae0f83e3d1 # 1.99.0
+        uses: dtolnay/rust-toolchain@d5e4d57b030548f435d0befec15ff413a2c60eff # 1.100.0
         with:
           components: rustfmt
       - if: needs.changes.outputs.rust == 'true'
@@ -129,13 +129,13 @@ jobs:
         with:
           persist-credentials: false
       - if: needs.changes.outputs.rust == 'true'
-        uses: dtolnay/rust-toolchain@fb523f40495206854c36b250850817ae0f83e3d1 # 1.99.0
+        uses: dtolnay/rust-toolchain@d5e4d57b030548f435d0befec15ff413a2c60eff # 1.100.0
         with:
           components: clippy
       - if: needs.changes.outputs.rust == 'true'
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          key: clippy-1.99.0
+          key: clippy-1.100.0
           save-if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
       - if: needs.changes.outputs.rust == 'true'
         run: cargo clippy --all-targets --all-features --locked -- -D warnings
@@ -156,10 +156,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@fb523f40495206854c36b250850817ae0f83e3d1 # 1.99.0
+      - uses: dtolnay/rust-toolchain@d5e4d57b030548f435d0befec15ff413a2c60eff # 1.100.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          key: coverage-1.99.0-tarpaulin-0.37.2
+          key: coverage-1.100.0-tarpaulin-0.37.2
           save-if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
         with:
@@ -183,7 +183,7 @@ jobs:
         with:
           persist-credentials: false
       - if: needs.changes.outputs.rust == 'true'
-        uses: dtolnay/rust-toolchain@fb523f40495206854c36b250850817ae0f83e3d1 # 1.99.0
+        uses: dtolnay/rust-toolchain@d5e4d57b030548f435d0befec15ff413a2c60eff # 1.100.0
       - if: needs.changes.outputs.rust == 'true'
         uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
         with:

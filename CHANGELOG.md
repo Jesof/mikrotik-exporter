@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Rust 1.100.0 is now the MSRV and pinned compiler (was 1.99.0).
+
+### Breaking Migration
+- **MSRV:** building from source now requires Rust 1.100.0.
+
 ## [0.6.1] - 2026-10-21
 
 ### Security
