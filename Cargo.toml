@@ -2,7 +2,7 @@
 name = "mikrotik-exporter"
 version = "0.6.1"
 edition = "2024"
-rust-version = "1.99.0"
+rust-version = "1.100.0"
 authors = ["Jesof <jesof@me.com>"]
 license = "MIT"
 description = "Prometheus exporter for MikroTik RouterOS devices"
@@ -77,7 +77,7 @@ prometheus-client = "0.25.1"
 secrecy = { version = "0.10.3", features = ["serde"] }
 
 # Date/time parsing for certificate expiration
-chrono = { version = "0.4.45", features = ["serde"] }
+time = { version = "0.3.55", features = ["macros", "parsing"] }
 
 # Concurrent hash maps for metrics optimization
 dashmap = "6.2.1"
