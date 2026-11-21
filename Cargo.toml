@@ -71,7 +71,7 @@ tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring
 rustls-native-certs = "0.8.5"
 
 # Prometheus metrics
-prometheus-client = "0.25.1"
+prometheus-client = "0.26.0"
 
 # Secure credential handling
 secrecy = { version = "0.10.3", features = ["serde"] }
